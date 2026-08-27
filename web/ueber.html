@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Über Heute Schule</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body class="textseite">
+<main>
+  <div class="page-nav">
+    <a class="back" href="index.html">← Zurück</a>
+    <a class="uebersicht-btn" href="index.html">Übersicht</a>
+  </div>
+  <h1>👋 Über Heute Schule</h1>
+
+  <p>
+    Jeden Morgen gibt es in mehr oder weniger routinierten Schritten vom
+    Aufstehen bis zum Start zur Schule vieles zu erledigen. Wir hatten als
+    Eltern von zwei Kindern unter anderem jeden Morgen dieselbe Frage:
+  </p>
+  <ul>
+    <li>Wie sieht der Vertretungsplan der Kinder heute aus?</li>
+    <li>Wann kommen sie nach Hause?</li>
+    <li>Essen sie etwas? Was essen sie?</li>
+  </ul>
+  <p>
+    Da galt es drüber zu sprechen — oder im Zweifel auch einmal nachzusehen.
+    Das Nachsehen hatte dann immer mit mehreren Ein- und Ausloggvorgängen zu
+    tun und war einfach sperrig. So kam die Idee auf, das alles auf einen
+    Blick zu bündeln. Nachdem wir eine Lösung hatten, die gut für uns
+    funktioniert, wollten wir das auch mit befreundeten Eltern teilen. So hat
+    Claude diese Seite für uns gebaut.
+  </p>
+
+  <p>
+    Sie zeigt den täglichen Stundenplan &amp; Schulessen-Status Deiner Kinder
+    an einer Stelle an, ohne dass Du Dich überall einzeln einloggen musst.
+  </p>
+  <p>
+    Dazu musst Du die Zugangsdaten einmalig eingeben. Sie werden dann lokal
+    auf Deinem Gerät (localStorage) gespeichert. Um den Stundenplan und die
+    gebuchten Essen anzeigen zu können, werden die Login-Daten direkt oder über
+    unseren Proxy an die Seiten der Anbieter geschickt — jeweils über eine
+    verschlüsselte HTTPS-Verbindung — und deren Antworten für Dich hier
+    dargestellt.
+  </p>
+  <p>
+    Das Design ist so mit einem Fokus auf Sicherheit aufgebaut und
+    serverschonend umgesetzt. Der Code ist unter Open-Source-Lizenz
+    <a href="https://de.wikipedia.org/wiki/MIT-Lizenz" target="_blank" rel="noopener">MIT</a>
+    und hier bald verlinkt. So kann bei Bedarf jeder nachvollziehen, was hier
+    passiert.
+  </p>
+
+  <p class="demo-hinweis">
+    ⚠ Dies ist aktuell eine Demo-Website. Sie kann jederzeit geändert oder
+    abgeschaltet werden.
+  </p>
+
+  <p class="version" id="version"></p>
+</main>
+<footer class="legal">
+  <a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a>
+</footer>
+<script>
+  var VERSION = '0.2.0'; // Beta — an einer Stelle ändern, überall aktuell
+  document.getElementById('version').textContent = 'Version ' + VERSION + ' (Beta)';
+</script>
+</body>
+</html>

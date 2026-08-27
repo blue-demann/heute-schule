@@ -1,0 +1,10 @@
+# Bewusst keine Suchmaschinen-Indexierung: Der Dienst richtet sich an einen
+# kleinen, bekannten Nutzerkreis, nicht an Suchende. Ohne diese Regel würde
+# u. a. das Impressum mit der privaten Anschrift des Betreibers in Suchtreffern
+# landen. Kein sitemap.xml, weil eine Sitemap ohne Indexierungswunsch keinen
+# Zweck hätte.
+#
+# Soll die Seite später doch gefunden werden: "Disallow: /" entfernen.
+
+User-agent: *
+Disallow: /

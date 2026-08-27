@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Heute Schule</title>
+<meta name="description" content="Stundenplan &amp; Schulessen-Status auf einen Blick">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f6f4f">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Design-Tokens (Farben, Schrift, Fokus-Ring) kommen aus theme.css und
+     werden von allen Seiten geteilt. Hier stehen nur noch die Regeln, die
+     ausschließlich diese App-Ansicht braucht. */
+  body{ padding-bottom:3rem; }
+  header{
+    position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between;
+    padding:.9rem 1rem; background:var(--bg); border-bottom:1px solid var(--border);
+  }
+  header h1{font-size:1.1rem; margin:0;}
+  .title-btn{
+    font:inherit; font-size:1.1rem; margin:0; padding:0; border:none; background:none; color:inherit;
+    display:flex; align-items:center; gap:.5rem; cursor:pointer;
+  }
+  .title-btn:active{opacity:.7;}
+  header .datum{font-size:.8rem; color:var(--muted); margin-top:.15rem;}
+  .iconbtn{
+    background:none; border:1px solid var(--border); color:var(--text); border-radius:999px;
+    width:2.4rem; height:2.4rem; display:flex; align-items:center; justify-content:center;
+    font-size:1.1rem; cursor:pointer;
+  }
+  .iconbtn:active{transform:scale(.94);}
+  main{max-width:640px; margin:0 auto; padding:1rem;}
+  .hidden{display:none !important;}
+
+  /* ── Dashboard ── */
+  .child-card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:1rem 1.1rem; margin-bottom:1rem;
+  }
+  .child-head{display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:.4rem .8rem; margin-bottom:.6rem;}
+  .child-head h2{font-size:1.05rem; margin:0; overflow-wrap:anywhere;}
+  .child-head a{font-size:.78rem; color:var(--accent-dark); text-decoration:none; white-space:nowrap; margin-top:.15rem;}
+  .child-sub{font-size:.75rem; color:var(--muted); margin-top:.1rem; overflow-wrap:anywhere;}
+
+  .tag-toggle{display:flex; gap:.5rem; margin-bottom:1rem;}
+  .tag-btn{
+    flex:1; padding:.55rem; border-radius:10px; border:1px solid var(--border); background:var(--card);
+    color:var(--muted); font-size:.88rem; cursor:pointer;
+  }
+  .tag-btn.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
+  .tag-btn:active{transform:scale(.98);}
+  .lunch{
+    display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem; border-radius:10px;
+    background:var(--ok-bg); font-size:.9rem; margin-bottom:.7rem;
+  }
+  .lunch.warn{background:var(--warn-bg); color:var(--warn);}
+  .lunch.err{background:var(--danger-bg); color:var(--danger);}
+  table.stunden{width:100%; border-collapse:collapse; font-size:.88rem;}
+  table.stunden td{padding:.35rem .2rem; border-top:1px solid var(--border); vertical-align:top;}
+  table.stunden tr:first-child td{border-top:none;}
+  table.stunden td.zeit{color:var(--muted); white-space:nowrap; width:5.2rem;}
+  table.stunden td.aktion{width:auto; white-space:nowrap; text-align:right;}
+  /* opacity war .35 — zurückhaltend gemeint, aber für eingeschränktes
+     Sehvermögen kaum auffindbar (WCAG 2.2 SC 1.4.11 verlangt 3:1 für
+     Bedienelemente). .6 bleibt dezent, ist aber sichtbar; bei Hover/Fokus
+     voll deckend. */
+  .hide-fach{
+    background:none; border:none; cursor:pointer; font-size:.85rem; opacity:.6;
+    min-width:24px; min-height:24px; padding:.1rem .2rem;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .hide-fach:hover, .hide-fach:focus-visible{opacity:1;}
+  .hide-fach:active{opacity:.9;}
+  .badge-vertretung{
+    display:inline-block; font-size:.68rem; background:var(--warn-bg); color:var(--warn);
+    padding:.05rem .4rem; border-radius:999px; margin-left:.4rem;
+  }
+  .empty-hint{color:var(--muted); font-size:.88rem; overflow-wrap:anywhere;}
+  .fehler-hint{color:var(--danger); font-size:.85rem; margin-top:.4rem; overflow-wrap:anywhere;}
+  .fetching{opacity:.55;}
+  .hidden-hint{
+    margin-top:.7rem; padding-top:.6rem; border-top:1px dashed var(--border);
+    display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; font-size:.82rem;
+  }
+  .hidden-hint-label{color:var(--muted); white-space:nowrap;}
+  .chip-restore{background:var(--warn-bg); border-color:transparent;}
+  .legend{
+    color:var(--muted); font-size:.78rem; line-height:1.5; text-align:center;
+    padding:1rem .5rem 0; margin-top:.4rem; overflow-wrap:anywhere;
+  }
+  footer.legal{
+    text-align:center; padding:1.2rem 1rem; font-size:.78rem; color:var(--muted);
+  }
+  footer.legal a{color:var(--muted); text-decoration:underline;}
+
+  .fab{
+    position:fixed; right:1.1rem; bottom:1.1rem; width:3.4rem; height:3.4rem; border-radius:999px;
+    background:var(--accent); color:var(--accent-text); border:none; font-size:1.4rem; box-shadow:0 4px 14px rgba(0,0,0,.25);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .fab:active{transform:scale(.94);}
+  .fab.spin{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ── Setup ── */
+  .setup-intro{color:var(--muted); font-size:.88rem; margin-bottom:1.2rem; line-height:1.5;}
+  .demo-hinweis{
+    background:var(--warn-bg); color:var(--warn); border-radius:10px; padding:.7rem .9rem;
+    font-size:.85rem; line-height:1.5; margin:0 0 1.2rem;
+  }
+  .settings-bottom{
+    display:block; width:100%; margin:1.5rem 0 0; padding:.8rem 1rem;
+    background:none; border:1px dashed var(--border); border-radius:10px;
+    color:var(--muted); font-size:.85rem; cursor:pointer; text-align:center;
+  }
+  .settings-bottom span{display:block; font-size:.78rem; margin-top:.2rem;}
+  .settings-bottom:active{transform:scale(.99);}
+  fieldset{border:1px solid var(--border); border-radius:14px; padding:1rem; margin-bottom:1rem;}
+  fieldset legend{font-size:.75rem; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); padding:0 .3rem;}
+  label{display:block; font-size:.8rem; color:var(--muted); margin:.6rem 0 .2rem;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], input[type=password], input[type=url], select{
+    width:100%; padding:.6rem .7rem; border-radius:9px; border:1px solid var(--border);
+    background:var(--card); color:var(--text); font-size:.95rem;
+  }
+  input:focus, select:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  .child-setup{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:1rem 1.1rem; margin-bottom:1rem;}
+  .child-setup-head{display:flex; align-items:center; justify-content:space-between;}
+  .child-setup-head h2{margin:0; font-size:.95rem;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:.6rem;}
+  .link-btn{
+    background:none; border:none; color:var(--danger); font-size:.8rem; cursor:pointer;
+    min-height:24px; padding:.2rem .4rem;
+  }
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:.4rem;
+    padding:.75rem 1rem; border-radius:10px; border:none; font-size:.95rem; cursor:pointer;
+  }
+  /* color: var(--accent-text), nicht #fff — im Dunkelmodus ergäbe Weiß auf dem
+     hellen Akzentgrün nur 2,44:1 (WCAG 2.2 SC 1.4.3 AA verlangt 4,5:1). */
+  .btn-primary{background:var(--accent); color:var(--accent-text); width:100%;}
+  .btn-secondary{background:none; border:1px dashed var(--border); color:var(--text); width:100%;}
+  .btn-danger{background:none; border:1px solid var(--danger); color:var(--danger); width:100%;}
+  .setup-actions{display:flex; flex-direction:column; gap:.6rem; margin-top:1.2rem;}
+  .danger-zone{
+    margin-top:2.5rem; padding-top:1.2rem; border-top:1px solid var(--border);
+  }
+  .feld-hinweis{font-size:.78rem; color:var(--muted); margin:.35rem 0 0;}
+  .feld-hinweis code{background:var(--border); padding:.05rem .25rem; border-radius:4px;}
+  .danger-zone h2{font-size:.95rem; margin:0 0 .4rem;}
+  .danger-zone p{font-size:.85rem; color:var(--muted); margin:0 0 .8rem;}
+  details.mensa-defaults{margin-bottom:1rem; font-size:.85rem;}
+  details.mensa-defaults summary{cursor:pointer; color:var(--muted);}
+
+  .chips{display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem;}
+  .chip{
+    display:inline-flex; align-items:center; gap:.3rem; background:var(--bg); border:1px solid var(--border);
+    border-radius:999px; padding:.25rem .3rem .25rem .65rem; font-size:.82rem;
+  }
+  /* min-width/height 24px: WCAG 2.5.8 (AA) fordert mindestens 24×24 CSS-Pixel
+     für Bedienelemente — die Chips waren vorher deutlich kleiner. */
+  .chip-x{
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; line-height:1;
+    min-width:24px; min-height:24px; padding:0 .2rem;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .chips-hint{color:var(--muted); font-size:.82rem;}
+
+  .toast{
+    position:fixed; left:1rem; right:1rem; bottom:1.1rem; max-width:600px; margin:0 auto;
+    background:var(--text); color:var(--bg); padding:.7rem 1rem; border-radius:10px; font-size:.85rem;
+    text-align:center; z-index:20;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1><button type="button" id="titleHome" class="title-btn">👋 Heute Schule</button></h1>
+    <div class="datum" id="datumAnzeige"></div>
+  </div>
+  <button class="iconbtn" id="btnSettings" title="Einstellungen" aria-label="Einstellungen">⚙️</button>
+</header>
+
+<main>
+
+  <!-- ── Dashboard ── -->
+  <section id="dashboard" class="hidden" aria-label="Stundenpläne">
+    <div class="tag-toggle" id="tagToggle" role="group" aria-label="Tag auswählen">
+      <button type="button" class="tag-btn active" data-slot="heute" aria-pressed="true">Heute</button>
+      <button type="button" class="tag-btn" data-slot="a" aria-pressed="false"></button>
+      <button type="button" class="tag-btn" data-slot="b" aria-pressed="false"></button>
+    </div>
+    <!-- aria-live: die Karten werden nach dem Abruf asynchron gefüllt. Ohne
+         Live-Region merken Screenreader-Nutzer:innen nicht, dass aus den
+         "–"-Platzhaltern inzwischen echte Daten geworden sind. "polite",
+         damit es die aktuelle Vorlesestelle nicht unterbricht. -->
+    <div id="childCards" aria-live="polite" aria-busy="false"></div>
+    <p id="dashboardEmptyHint" class="empty-hint hidden">Noch keine Kinder eingerichtet — tippe oben rechts auf ⚙️.</p>
+    <p id="dashboardLegend" class="legend hidden">
+      🚫 neben einer Stunde blendet dieses Fach dauerhaft aus der Ansicht aus.
+      Ausgeblendete Fächer stehen unter „🙈 Ausgeblendet“ auf der jeweiligen Karte
+      und lassen sich dort mit 👁 jederzeit wieder einblenden.
+    </p>
+
+    <p class="demo-hinweis">
+      ⚠ Hinweis: Dies ist eine Demo-Website. Sie kann jederzeit geändert oder
+      abgeschaltet werden.
+    </p>
+
+    <button class="settings-bottom" id="btnSettingsBottom" type="button">
+      ⚙️ Einstellungen <span>(Zugangsdaten anpassen, weitere Kinder hinzufügen, …)</span>
+    </button>
+  </section>
+  <button class="fab hidden" id="btnRefresh" title="Aktualisieren" aria-label="Aktualisieren">⟳</button>
+
+  <!-- ── Setup ── -->
+  <section id="setup" class="hidden" aria-label="Einstellungen">
+    <p class="setup-intro">
+      Zeigt den täglichen Stundenplan &amp; Schulessen-Status Deiner Kinder an einer
+      Stelle an, ohne dass Du Dich überall einzeln einloggen musst.
+    </p>
+
+    <p class="demo-hinweis">
+      ⚠ Hinweis: Dies ist eine Demo-Website. Sie kann jederzeit geändert oder
+      abgeschaltet werden.
+    </p>
+
+    <p class="setup-intro">
+      Dazu musst Du die Zugangsdaten einmalig eingeben. Sie werden dann lokal auf
+      Deinem Gerät (localStorage) gespeichert. Um den Stundenplan und die gebuchten
+      Essen anzeigen zu können, werden die Login-Daten direkt oder über unseren
+      Proxy an die Seiten der Anbieter geschickt — jeweils über eine
+      verschlüsselte HTTPS-Verbindung — und deren Antworten für Dich hier
+      dargestellt.
+    </p>
+
+    <div id="childrenSetup"></div>
+
+    <button class="btn btn-secondary" id="btnAddChild" type="button">+ Kind hinzufügen</button>
+
+    <div class="setup-actions">
+      <button class="btn btn-primary" id="btnSave" type="button">Speichern &amp; anzeigen</button>
+    </div>
+
+    <!-- Löschen war vorher nur über die Browser-Einstellungen möglich ("Website-
+         daten löschen"). Für einen Teil der Zielgruppe ist das praktisch eine
+         Sackgasse — damit bleibt das Auskunfts-/Löschrecht theoretisch. Ein
+         Knopf macht daraus etwas tatsächlich Ausführbares. -->
+    <div class="danger-zone">
+      <h2>Daten auf diesem Gerät</h2>
+      <p>
+        Alle Angaben — Namen, Zugangsdaten, ausgeblendete Fächer — liegen
+        ausschließlich in diesem Browser auf diesem Gerät. Hier kannst Du sie
+        vollständig entfernen. Danach ist die Seite wieder wie beim ersten
+        Aufruf.
+      </p>
+      <button class="btn btn-danger" id="btnDeleteAll" type="button">
+        Alle meine Daten auf diesem Gerät löschen
+      </button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="legal">
+  <a href="ueber.html">Über Heute Schule</a> · <a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a>
+</footer>
+
+<template id="childSetupTemplate">
+  <div class="child-setup" data-child>
+    <!-- h2, nicht h3: darüber steht nur die h1 im Header. Eine übersprungene
+         Ebene macht die Gliederung für Screenreader unnötig krumm. -->
+    <div class="child-setup-head">
+      <h2 data-kind-titel>Kind</h2>
+      <button class="link-btn" data-remove type="button">Entfernen</button>
+    </div>
+
+    <label>Name</label>
+    <input type="text" data-field="name" placeholder="z. B. Mia">
+
+    <fieldset style="margin-top:.8rem;">
+      <legend>WebUntis</legend>
+      <label>Server</label>
+      <input type="text" data-field="webuntis.server" placeholder="lg-norderstedt.webuntis.com">
+      <div class="row2">
+        <div>
+          <label>Benutzername</label>
+          <input type="text" data-field="webuntis.user" placeholder="Klasse-9c">
+        </div>
+        <div>
+          <label>Passwort</label>
+          <input type="password" data-field="webuntis.password">
+        </div>
+      </div>
+      <label>Klasse (wie in WebUntis benannt)</label>
+      <input type="text" data-field="webuntis.klasse" placeholder="9c">
+    </fieldset>
+
+    <fieldset style="margin-top:.8rem;">
+      <legend>Schulessen</legend>
+      <label>Anbieter</label>
+      <select data-field="lunch.provider" data-provider-select>
+        <option value="mensamax">Mensamax</option>
+        <option value="cccampus">ccCampus</option>
+      </select>
+
+      <div data-provider-fields="mensamax">
+        <label>Basis-URL</label>
+        <input type="text" data-field="lunch.base" placeholder="https://parentsmensa.de">
+        <div class="row2">
+          <div>
+            <label>Projekt</label>
+            <input type="text" data-field="lunch.projekt" placeholder="SE2922">
+          </div>
+          <div>
+            <label>Einrichtung</label>
+            <input type="text" data-field="lunch.einrichtung" placeholder="Lessing">
+          </div>
+        </div>
+        <div class="row2">
+          <div>
+            <label>Benutzername</label>
+            <input type="text" data-field="lunch.username">
+          </div>
+          <div>
+            <label>Passwort</label>
+            <input type="password" data-field="lunch.password">
+          </div>
+        </div>
+      </div>
+
+      <div data-provider-fields="cccampus">
+        <label>Basis-URL</label>
+        <input type="text" data-field="lunch.cccampus.base" placeholder="https://cccampus.mbs5online.de/ordering">
+        <p class="feld-hinweis">
+          Aktuell sind nur Adressen unter <code>mbs5online.de</code> freigeschaltet.
+          Nutzt Deine Schule ccCampus unter einer anderen Adresse, sag uns kurz
+          Bescheid — das ist eine einmalige Freischaltung.
+        </p>
+        <div class="row2">
+          <div>
+            <label>Kundennummer</label>
+            <input type="text" data-field="lunch.cccampus.kundennummer" placeholder="z. B. 12345">
+          </div>
+          <div>
+            <label>PIN</label>
+            <input type="password" data-field="lunch.cccampus.pin">
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset style="margin-top:.8rem;">
+      <legend>Ausgeblendete Fächer</legend>
+      <div class="chips" data-hidden-chips></div>
+      <input type="text" data-add-hidden aria-label="Fach zum Ausblenden hinzufügen" placeholder="Fach eintippen + Enter (z. B. Geige)">
+    </fieldset>
+  </div>
+</template>
+
+<template id="childCardTemplate">
+  <div class="child-card" data-card>
+    <div class="child-head">
+      <div>
+        <h2 data-name></h2>
+        <div class="child-sub" data-sub></div>
+      </div>
+      <a data-mensa-link target="_blank" rel="noopener">Mensamax-Login ↗</a>
+    </div>
+    <div class="lunch" data-lunch>–</div>
+    <table class="stunden" data-stunden></table>
+    <p class="empty-hint hidden" data-empty>Heute keine Stunden / schulfrei.</p>
+    <p class="fehler-hint hidden" data-fehler></p>
+    <div class="hidden-hint hidden" data-hidden-hint></div>
+  </div>
+</template>
+
+<script>
+(function(){
+  'use strict';
+
+  var STORAGE_KEY = 'heute-schule-config';
+  var WOCHENTAGE = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+
+  // Fest vorgegeben, kein Nutzer-Setting: der Proxy ist feste Infrastruktur,
+  // niemand außer Björn muss die URL je kennen oder ändern können.
+  var PROXY_URL = 'https://stundenplan-proxy.bluedemann.workers.dev';
+
+  function loadConfig(){
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { proxyUrl: PROXY_URL, children: [] };
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed.children)) parsed.children = [];
+      parsed.proxyUrl = PROXY_URL; // überschreibt evtl. veraltete/leere gespeicherte Werte
+      // Back-compat: ältere gespeicherte Configs kennen hiddenFaecher und
+      // den Mehr-Anbieter-Support beim Schulessen noch nicht.
+      parsed.children.forEach(function(c){
+        if (!Array.isArray(c.hiddenFaecher)) c.hiddenFaecher = [];
+        if (!c.lunch) c.lunch = {};
+        if (!c.lunch.provider) c.lunch.provider = 'mensamax';
+        if (!c.lunch.cccampus) {
+          c.lunch.cccampus = { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' };
+        }
+      });
+      return parsed;
+    } catch (e) {
+      return { proxyUrl: PROXY_URL, children: [] };
+    }
+  }
+
+  function saveConfig(cfg){
+    // Darf nie eine laufende Aktion blockieren — manche Vorschau-/Sandbox-
+    // Umgebungen (z. B. data:-URLs) verbieten localStorage komplett.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+      return true;
+    } catch (e) {
+      console.warn('Konnte Konfiguration nicht speichern:', e);
+      return false;
+    }
+  }
+
+  function uid(){
+    return 'k' + Math.random().toString(36).slice(2, 9);
+  }
+
+  // Ohne Vorlage: Startwerte, die für die erste Nutzergruppe (Lessing-Schule)
+  // meistens ohnehin stimmen — bewusst vorausgefüllt statt nur als grauer
+  // Platzhalter, damit man sie nur bei Bedarf ändern statt eintippen muss.
+  // Mit Vorlage (zweites/weiteres Kind): übernimmt die schulweiten Angaben
+  // (Server/Login/Mensa-Einrichtung) vom ersten Kind — die sind bei
+  // Geschwistern i. d. R. identisch, nur Klasse & Mensa-Login sind pro Kind
+  // unterschiedlich und bleiben deshalb leer.
+  function neuesKind(vorlage){
+    if (vorlage){
+      return {
+        id: uid(), name: '',
+        webuntis: { server: vorlage.webuntis.server, user: vorlage.webuntis.user, password: vorlage.webuntis.password, klasse: '' },
+        lunch: {
+          provider: vorlage.lunch.provider || 'mensamax',
+          base: vorlage.lunch.base, projekt: vorlage.lunch.projekt, einrichtung: vorlage.lunch.einrichtung, username: '', password: '',
+          cccampus: { base: (vorlage.lunch.cccampus && vorlage.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
+        },
+        hiddenFaecher: [],
+      };
+    }
+    return {
+      id: uid(), name: '',
+      webuntis: { server: 'lg-norderstedt.webuntis.com', user: 'Klasse-9c', password: '', klasse: '9c' },
+      lunch: {
+        provider: 'mensamax',
+        base: 'https://parentsmensa.de', projekt: 'SE2922', einrichtung: 'Lessing', username: '', password: '',
+        cccampus: { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
+      },
+      hiddenFaecher: [],
+    };
+  }
+
+  function datumStrFuer(tagOffset){
+    var d = new Date();
+    d.setDate(d.getDate() + tagOffset);
+    return '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  }
+
+
+  function setDeep(obj, path, value){
+    var parts = path.split('.');
+    var cur = obj;
+    for (var i = 0; i < parts.length - 1; i++){
+      cur = cur[parts[i]];
+    }
+    cur[parts[parts.length - 1]] = value;
+  }
+
+  function getDeep(obj, path){
+    return path.split('.').reduce(function(o, k){ return (o || {})[k]; }, obj);
+  }
+
+  var cfg = loadConfig();
+  var activeOffset = 0;  // 0 = heute, sonst Tages-Offset ab heute
+  var fensterIndex = 1;  // linke Datums-Fläche = n-ter kommender Schultag
+
+  // ── Elemente ──
+  var dashboard = document.getElementById('dashboard');
+  var setup = document.getElementById('setup');
+  var childCards = document.getElementById('childCards');
+  var childrenSetup = document.getElementById('childrenSetup');
+  var dashboardEmptyHint = document.getElementById('dashboardEmptyHint');
+  var dashboardLegend = document.getElementById('dashboardLegend');
+  var tagToggle = document.getElementById('tagToggle');
+  var btnRefresh = document.getElementById('btnRefresh');
+  var btnSettings = document.getElementById('btnSettings');
+  var btnAddChild = document.getElementById('btnAddChild');
+  var btnSave = document.getElementById('btnSave');
+  var childSetupTpl = document.getElementById('childSetupTemplate');
+  var childCardTpl = document.getElementById('childCardTemplate');
+
+  function renderDatumAnzeige(){
+    var d = new Date();
+    d.setDate(d.getDate() + activeOffset);
+    document.getElementById('datumAnzeige').textContent =
+      WOCHENTAGE[d.getDay()] + ', ' + d.toLocaleDateString('de-DE');
+  }
+
+  function kurzDatum(offset){
+    var d = new Date();
+    d.setDate(d.getDate() + offset);
+    return WOCHENTAGE[d.getDay()].slice(0, 2) + ' ' + d.getDate() + '.' + (d.getMonth() + 1) + '.';
+  }
+
+  var btnTagHeute = tagToggle.querySelector('[data-slot="heute"]');
+  var btnTagA = tagToggle.querySelector('[data-slot="a"]');
+  var btnTagB = tagToggle.querySelector('[data-slot="b"]');
+
+  // Offset (in Kalendertagen ab heute) des n-ten kommenden Schultags.
+  // Wochenenden werden übersprungen: Für einen Stundenplan ist ein Samstag
+  // eine garantierte Leermeldung und würde eine der nur drei Flächen
+  // verschenken. "Heute" bleibt davon unberührt — wenn heute Samstag ist,
+  // zeigt die Seite auch ehrlich den Samstag.
+  function schultagOffset(n){
+    var d = new Date();
+    var offset = 0;
+    for (var gefunden = 0; gefunden < n; ){
+      offset++;
+      d.setDate(d.getDate() + 1);
+      var wt = d.getDay();
+      if (wt !== 0 && wt !== 6) gefunden++;
+    }
+    return offset;
+  }
+
+  function renderTagToggle(){
+    var offsetA = schultagOffset(fensterIndex);
+    var offsetB = schultagOffset(fensterIndex + 1);
+    btnTagA.textContent = kurzDatum(offsetA);
+    btnTagB.textContent = kurzDatum(offsetB);
+    // Klasse "active" ist rein visuell — aria-pressed sagt dasselbe auch
+    // Screenreadern, sonst klingen alle drei Knöpfe identisch.
+    [[btnTagHeute, activeOffset === 0],
+     [btnTagA, activeOffset === offsetA],
+     [btnTagB, activeOffset === offsetB]].forEach(function(paar){
+      paar[0].classList.toggle('active', paar[1]);
+      paar[0].setAttribute('aria-pressed', paar[1] ? 'true' : 'false');
+    });
+  }
+
+  function waehleTagIndex(index){
+    // Rechte Fläche verschiebt das Zwei-Tage-Fenster einen Schultag weiter
+    // nach vorn (dann steht dort der jeweils nächste); linke Fläche wählt
+    // nur innerhalb des aktuellen Fensters, ohne es zu verschieben — das
+    // ist automatisch der "einen Tag zurück"-Schritt von der rechten Fläche.
+    var offset = schultagOffset(index);
+    if (index === fensterIndex + 1) fensterIndex += 1;
+    activeOffset = offset;
+    renderTagToggle();
+    renderDatumAnzeige();
+    refreshAll();
+  }
+
+  btnTagHeute.addEventListener('click', function(){
+    fensterIndex = 1;
+    activeOffset = 0;
+    renderTagToggle();
+    renderDatumAnzeige();
+    refreshAll();
+  });
+  btnTagA.addEventListener('click', function(){ waehleTagIndex(fensterIndex); });
+  btnTagB.addEventListener('click', function(){ waehleTagIndex(fensterIndex + 1); });
+
+  renderTagToggle();
+  renderDatumAnzeige();
+
+  // ── Setup-Ansicht rendern ──
+  function renderSetup(){
+    childrenSetup.innerHTML = '';
+    cfg.children.forEach(renderChildSetup);
+  }
+
+  function renderChildSetup(child){
+    var node = childSetupTpl.content.firstElementChild.cloneNode(true);
+    node.dataset.id = child.id;
+    var kindTitel = node.querySelector('[data-kind-titel]');
+    var entfernenBtn = node.querySelector('[data-remove]');
+
+    // Bei mehreren Kindern heißen sonst alle Entfernen-Knöpfe gleich —
+    // "Entfernen", "Entfernen", "Entfernen". Der sichtbare Text bleibt kurz,
+    // der vorgelesene Name wird eindeutig.
+    function setzeKindName(name){
+      var angezeigt = name || 'Kind';
+      kindTitel.textContent = angezeigt;
+      entfernenBtn.setAttribute('aria-label', angezeigt + ' entfernen');
+    }
+    setzeKindName(child.name);
+
+    node.querySelectorAll('[data-field]').forEach(function(input){
+      input.value = getDeep(child, input.dataset.field) || '';
+      input.addEventListener('input', function(){
+        setDeep(child, input.dataset.field, input.value);
+        if (input.dataset.field === 'name') setzeKindName(input.value);
+      });
+      // Jedes Feld bekommt eine pro Kind eindeutige id, das direkt davor
+      // stehende <label> ein passendes for — sonst können Screenreader
+      // Label und Feld nicht einander zuordnen (v. a. bei mehreren Kindern
+      // mit sonst identischen Feldnamen).
+      var feldId = 'feld-' + child.id + '-' + input.dataset.field.replace(/\./g, '-');
+      input.id = feldId;
+      var zugehoerigesLabel = input.previousElementSibling;
+      if (zugehoerigesLabel && zugehoerigesLabel.tagName === 'LABEL'){
+        zugehoerigesLabel.setAttribute('for', feldId);
+      }
+    });
+    entfernenBtn.addEventListener('click', function(){
+      cfg.children = cfg.children.filter(function(c){ return c.id !== child.id; });
+      node.remove();
+    });
+
+    var anbieterSelect = node.querySelector('[data-provider-select]');
+    function zeigeAnbieterFelder(){
+      // Bewusst vom <select>-Element selbst lesen, nicht vom Datenmodell —
+      // unabhängig davon, ob der generische input-Listener (setDeep) schon
+      // gelaufen ist oder nicht.
+      var gewaehlt = (anbieterSelect ? anbieterSelect.value : child.lunch.provider) || 'mensamax';
+      node.querySelectorAll('[data-provider-fields]').forEach(function(div){
+        div.classList.toggle('hidden', div.dataset.providerFields !== gewaehlt);
+      });
+    }
+    zeigeAnbieterFelder();
+    if (anbieterSelect){
+      anbieterSelect.addEventListener('change', zeigeAnbieterFelder);
+      anbieterSelect.addEventListener('input', zeigeAnbieterFelder);
+    }
+
+    renderHiddenChips(node, child);
+    node.querySelector('[data-add-hidden]').addEventListener('keydown', function(e){
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var val = e.target.value.trim();
+      if (!val) return;
+      if (!Array.isArray(child.hiddenFaecher)) child.hiddenFaecher = [];
+      if (child.hiddenFaecher.indexOf(val) === -1) child.hiddenFaecher.push(val);
+      e.target.value = '';
+      renderHiddenChips(node, child);
+    });
+
+    childrenSetup.appendChild(node);
+  }
+
+  function renderHiddenChips(node, child){
+    var wrap = node.querySelector('[data-hidden-chips]');
+    wrap.innerHTML = '';
+    var liste = child.hiddenFaecher || [];
+    if (!liste.length){
+      var hint = document.createElement('span');
+      hint.className = 'chips-hint';
+      hint.textContent = 'Keine ausgeblendeten Fächer.';
+      wrap.appendChild(hint);
+      return;
+    }
+    liste.forEach(function(fach){
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      var label = document.createElement('span');
+      label.textContent = fach;
+      var x = document.createElement('button');
+      x.type = 'button'; x.className = 'chip-x'; x.textContent = '×';
+      x.title = '"' + fach + '" wieder einblenden';
+      x.setAttribute('aria-label', fach + ' wieder einblenden');
+      x.addEventListener('click', function(){
+        child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== fach; });
+        renderHiddenChips(node, child);
+      });
+      chip.appendChild(label); chip.appendChild(x);
+      wrap.appendChild(chip);
+    });
+  }
+
+  btnAddChild.addEventListener('click', function(){
+    var child = neuesKind(cfg.children[0]);
+    cfg.children.push(child);
+    renderChildSetup(child);
+  });
+
+  btnSave.addEventListener('click', function(){
+    var gespeichert = saveConfig(cfg);
+    showDashboard();
+    if (!gespeichert){
+      toast('⚠ Konnte nicht dauerhaft gespeichert werden (Speicher in dieser Vorschau gesperrt). Auf der echten Seite funktioniert das normal.');
+    }
+  });
+
+  // Vollständiges Löschen aller lokal gespeicherten Daten. Bewusst mit
+  // Rückfrage: Der Knopf steht in den Einstellungen, wo auch versehentlich
+  // hingetippt wird, und die Aktion ist nicht rückgängig zu machen.
+  var btnDeleteAll = document.getElementById('btnDeleteAll');
+  btnDeleteAll.addEventListener('click', function(){
+    var anzahl = cfg.children.length;
+    var frage = anzahl === 1
+      ? 'Wirklich alle Daten von 1 Kind auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.'
+      : 'Wirklich alle Daten von ' + anzahl + ' Kindern auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.';
+    if (!window.confirm(frage)) return;
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // Privater Modus o. Ä. — der Zustand im Speicher wird trotzdem geleert.
+    }
+    cfg = { proxyUrl: PROXY_URL, children: [] };
+    cardsById = {};
+    lastDataById = {};
+    renderSetup();
+    renderDashboard();
+    toast('Alle Daten auf diesem Gerät wurden gelöscht.');
+  });
+
+  // ── Dashboard-Ansicht ──
+  var cardsById = {};
+  var lastDataById = {};
+
+  function renderDashboard(){
+    childCards.innerHTML = '';
+    cardsById = {};
+    if (!cfg.children.length){
+      dashboardEmptyHint.classList.remove('hidden');
+      dashboardLegend.classList.add('hidden');
+      btnRefresh.classList.add('hidden');
+      return;
+    }
+    dashboardEmptyHint.classList.add('hidden');
+    dashboardLegend.classList.remove('hidden');
+    btnRefresh.classList.remove('hidden');
+    cfg.children.forEach(function(child){
+      var node = childCardTpl.content.firstElementChild.cloneNode(true);
+      node.querySelector('[data-name]').textContent = child.name || 'Kind';
+      var schule = ((child.webuntis && child.webuntis.server) || '').replace(/\.webuntis\.com$/i, '');
+      var klasse = (child.webuntis && child.webuntis.klasse) || '';
+      var subTeile = [];
+      if (schule) subTeile.push(schule);
+      if (klasse) subTeile.push('Klasse ' + klasse);
+      node.querySelector('[data-sub]').textContent = subTeile.join(' · ');
+      var lunchLink = node.querySelector('[data-mensa-link]');
+      var lunchProvider = (child.lunch && child.lunch.provider) || 'mensamax';
+      if (lunchProvider === 'cccampus'){
+        var ccBase = (child.lunch.cccampus && child.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering';
+        lunchLink.href = ccBase.replace(/\/$/, '');
+        lunchLink.textContent = 'ccCampus-Login ↗';
+      } else {
+        var mensaBase = (child.lunch && child.lunch.base) || 'https://parentsmensa.de';
+        lunchLink.href = mensaBase.replace(/\/$/, '') + '/login.aspx';
+        lunchLink.textContent = 'Mensamax-Login ↗';
+      }
+      childCards.appendChild(node);
+      cardsById[child.id] = node;
+    });
+  }
+
+  function setCardLoading(card){
+    card.classList.add('fetching');
+    var lunch = card.querySelector('[data-lunch]');
+    lunch.className = 'lunch';
+    lunch.textContent = 'Lädt …';
+  }
+
+  function renderHiddenHint(el, child, card){
+    el.innerHTML = '';
+    var liste = child.hiddenFaecher || [];
+    if (!liste.length){
+      el.classList.add('hidden');
+      return;
+    }
+    el.classList.remove('hidden');
+    var label = document.createElement('span');
+    label.className = 'hidden-hint-label';
+    label.textContent = '🙈 Ausgeblendet:';
+    el.appendChild(label);
+    liste.forEach(function(fach){
+      var chip = document.createElement('span');
+      chip.className = 'chip chip-restore';
+      var span = document.createElement('span');
+      span.textContent = fach;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip-x';
+      btn.textContent = '👁';
+      btn.title = '"' + fach + '" wieder einblenden';
+      btn.setAttribute('aria-label', fach + ' wieder einblenden');
+      btn.addEventListener('click', function(){
+        child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== fach; });
+        saveConfig(cfg);
+        renderChildResult(card, child, lastDataById[child.id], null);
+      });
+      chip.appendChild(span); chip.appendChild(btn);
+      el.appendChild(chip);
+    });
+  }
+
+  function renderChildResult(card, child, data, requestError){
+    card.classList.remove('fetching');
+    var lunchEl = card.querySelector('[data-lunch]');
+    var tableEl = card.querySelector('[data-stunden]');
+    var emptyEl = card.querySelector('[data-empty]');
+    var fehlerEl = card.querySelector('[data-fehler]');
+    var hiddenHintEl = card.querySelector('[data-hidden-hint]');
+
+    tableEl.innerHTML = '';
+    emptyEl.classList.add('hidden');
+    fehlerEl.classList.add('hidden');
+    renderHiddenHint(hiddenHintEl, child, card);
+
+    if (requestError){
+      lunchEl.className = 'lunch err';
+      lunchEl.textContent = '⚠ Keine Daten';
+      fehlerEl.textContent = requestError;
+      fehlerEl.classList.remove('hidden');
+      return;
+    }
+
+    var lunchText = data.lunch || '–';
+    var lunchProvider2 = (child.lunch && child.lunch.provider) || 'mensamax';
+    var einrichtung = lunchProvider2 === 'cccampus' ? 'ccCampus' : ((child.lunch && child.lunch.einrichtung) || '');
+    lunchEl.className = 'lunch' +
+      (/fehlgeschlagen|nicht verfügbar|nicht gefunden|fehler beim abrufen/i.test(lunchText) ? ' err' :
+       /kein menü|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
+    lunchEl.textContent = '🍽 ' + (einrichtung ? einrichtung + ': ' : '') + lunchText;
+
+    var stunden = data.stunden || [];
+    var hidden = child.hiddenFaecher || [];
+    var sichtbar = stunden.filter(function(s){ return hidden.indexOf(s.fach) === -1; });
+
+    if (!stunden.length){
+      emptyEl.classList.remove('hidden');
+      emptyEl.textContent = 'Heute keine Stunden / schulfrei.';
+    } else if (!sichtbar.length){
+      emptyEl.classList.remove('hidden');
+      emptyEl.textContent = 'Alle heutigen Fächer sind ausgeblendet.';
+    } else {
+      // Nach Startzeit gruppieren: zeitgleiche Stunden (z. B. Gruppenteilung)
+      // landen wie im ursprünglichen E-Mail-Format in einer Zeile, mit "/"
+      // getrennt, statt als verwirrende doppelte Zeitzeile.
+      var gruppen = [];
+      var byZeit = {};
+      sichtbar.forEach(function(s){
+        var key = s.start + '|' + s.ende;
+        if (!byZeit[key]) { byZeit[key] = []; gruppen.push(byZeit[key]); }
+        byZeit[key].push(s);
+      });
+
+      gruppen.forEach(function(gruppe){
+        var tr = document.createElement('tr');
+        var tdZeit = document.createElement('td');
+        tdZeit.className = 'zeit';
+        tdZeit.textContent = gruppe[0].start + '–' + gruppe[0].ende;
+        var tdFach = document.createElement('td');
+        var tdAction = document.createElement('td');
+        tdAction.className = 'aktion';
+
+        gruppe.forEach(function(s, idx){
+          if (idx > 0) tdFach.appendChild(document.createTextNode(' / '));
+          var span = document.createElement('span');
+          span.textContent = s.fach + ' · ' + s.raum;
+          if (s.vertretung){
+            var badge = document.createElement('span');
+            badge.className = 'badge-vertretung';
+            badge.textContent = 'Vertretung';
+            span.appendChild(badge);
+          }
+          tdFach.appendChild(span);
+
+          var hideBtn = document.createElement('button');
+          hideBtn.type = 'button';
+          hideBtn.className = 'hide-fach';
+          hideBtn.title = '"' + s.fach + '" ausblenden';
+          // Ohne aria-label wäre der vorgelesene Name das nackte Emoji
+          // ("Verbotsschild") — mit Fachname ist klar, was ausgeblendet wird.
+          hideBtn.setAttribute('aria-label', s.fach + ' ausblenden');
+          hideBtn.textContent = '🚫';
+          hideBtn.addEventListener('click', function(){
+            if (child.hiddenFaecher.indexOf(s.fach) === -1) child.hiddenFaecher.push(s.fach);
+            saveConfig(cfg);
+            renderChildResult(card, child, lastDataById[child.id], null);
+          });
+          tdAction.appendChild(hideBtn);
+        });
+
+        tr.appendChild(tdZeit); tr.appendChild(tdFach); tr.appendChild(tdAction);
+        tableEl.appendChild(tr);
+      });
+    }
+
+    var fehlerTeile = [];
+    if (data.stundenFehler) fehlerTeile.push('Stundenplan: ' + data.stundenFehler);
+    if (data.lunchFehler) fehlerTeile.push('Schulessen: ' + data.lunchFehler);
+    if (fehlerTeile.length){
+      fehlerEl.textContent = '⚠ ' + fehlerTeile.join(' · ');
+      fehlerEl.classList.remove('hidden');
+    }
+  }
+
+  // ── ccCampus (mbs5online) — bewusst NICHT über den Proxy ───────────────
+  // ccCampus blockiert Anfragen von Server-Infrastruktur (Cloudflare
+  // Workers) mit 403, lässt echte Browser-Anfragen aber durch (offene
+  // CORS-Header). Deswegen läuft das hier direkt im Browser, anders als
+  // WebUntis/Mensamax, die genau umgekehrt CORS-blockiert sind und den
+  // Proxy brauchen.
+  function decodeHtmlEntitiesClient(str){
+    var map = {amp:'&', lt:'<', gt:'>', quot:'"', apos:"'", nbsp:' '};
+    return str
+      .replace(/&#(\d+);/g, function(_, dec){ return String.fromCodePoint(parseInt(dec, 10)); })
+      .replace(/&#x([0-9a-fA-F]+);/g, function(_, hex){ return String.fromCodePoint(parseInt(hex, 16)); })
+      .replace(/&([a-zA-Z]+);/g, function(m, name){ return map.hasOwnProperty(name) ? map[name] : m; });
+  }
+
+  // Muss mit connect-src in web/_headers übereinstimmen. Wird eine ccCampus-
+  // Instanz unter einer anderen Domain eingetragen, blockiert die CSP den
+  // Abruf — und zwar nur mit einem nackten "Failed to fetch", das für
+  // Nutzer:innen nicht von einem Netzausfall zu unterscheiden ist. Deswegen
+  // hier vorab prüfen und stattdessen sagen, was wirklich los ist.
+  var CCCAMPUS_ERLAUBTE_DOMAIN = '.mbs5online.de';
+
+  function ccCampusDomainErlaubt(baseUrl){
+    try {
+      var host = new URL(baseUrl).hostname.toLowerCase();
+      return host === CCCAMPUS_ERLAUBTE_DOMAIN.slice(1) || host.endsWith(CCCAMPUS_ERLAUBTE_DOMAIN);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function holeCcCampusEssen(cfg, datumStr){
+    var base = (cfg.base || 'https://cccampus.mbs5online.de/ordering').replace(/\/$/, '');
+    if (!cfg.kundennummer || !cfg.pin){
+      return Promise.resolve({ lunch: null, lunchFehler: 'ccCampus-Konfiguration unvollständig (Kundennummer/PIN)' });
+    }
+    if (!ccCampusDomainErlaubt(base)){
+      return Promise.resolve({
+        lunch: null,
+        lunchFehler: 'Diese ccCampus-Adresse ist auf dieser Seite noch nicht freigeschaltet '
+          + '(erlaubt sind aktuell nur Adressen unter ' + CCCAMPUS_ERLAUBTE_DOMAIN.slice(1) + '). '
+          + 'Bitte melde Dich beim Betreiber — es ist eine einmalige Freischaltung nötig.',
+      });
+    }
+    return fetch(base + '/Login/Login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: 'identifierValue=' + encodeURIComponent(cfg.kundennummer) + '&secretValue=' + encodeURIComponent(cfg.pin) + '&identifierType=0&secretType=0',
+    })
+      .then(function(resp){ return resp.text(); })
+      .then(function(loginText){
+        var loginJson;
+        try { loginJson = JSON.parse(loginText); } catch(e){
+          throw new Error('ccCampus-Login: unerwartete Antwort');
+        }
+        if (loginJson && loginJson.errorMessage){
+          return { lunch: 'Schulessen: Login fehlgeschlagen', lunchFehler: null };
+        }
+        var token = loginJson && loginJson.token;
+        if (!token) throw new Error('ccCampus-Login erfolgreich, aber kein Token gefunden');
+
+        return fetch(base + '/Mealplan/Weekplan', { headers: { 'Authorization': 'Bearer ' + token } })
+          .then(function(planResp){
+            if (!planResp.ok) return { lunch: 'Schulessen: Daten nicht verfügbar', lunchFehler: null };
+            return planResp.text().then(function(planText){
+              var isoDatum = datumStr.slice(0, 4) + '-' + datumStr.slice(4, 6) + '-' + datumStr.slice(6, 8);
+              var statusNodeRe = /<div class="status-node[^>]*>/g;
+              var match, titel = null;
+              while ((match = statusNodeRe.exec(planText)) !== null){
+                var tag = match[0];
+                if (tag.indexOf('data-date="' + isoDatum + '"') !== -1){
+                  var titleMatch = tag.match(/title="([^"]*)"/);
+                  titel = titleMatch ? decodeHtmlEntitiesClient(titleMatch[1]).trim() : '';
+                  break;
+                }
+              }
+              var text;
+              if (titel === null) text = 'Schulessen: Status für heute nicht gefunden';
+              else if (titel === '') text = 'Kein Menü bestellt';
+              else if (titel === 'kein Liefertag') text = 'Kein Schulessen heute';
+              else if (titel === 'Abwesend') text = 'Abwesend gemeldet (kein Essen)';
+              else if (titel === 'abgelaufen') text = 'Bestellfrist abgelaufen';
+              else text = 'Essen bestellt: ' + titel;
+              return { lunch: text, lunchFehler: null };
+            });
+          });
+      })
+      .catch(function(err){
+        return { lunch: null, lunchFehler: String(err.message || err) };
+      });
+  }
+
+  function fetchChild(child){
+    var card = cardsById[child.id];
+    if (!cfg.proxyUrl){
+      renderChildResult(card, child, null, 'Keine Proxy-URL eingetragen — unter ⚙️ Einstellungen nachtragen.');
+      return Promise.resolve();
+    }
+    setCardLoading(card);
+    var datum = datumStrFuer(activeOffset);
+    var lunchIstCcCampus = child.lunch && child.lunch.provider === 'cccampus';
+
+    var proxyPromise = fetch(cfg.proxyUrl + '/api/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webuntis: child.webuntis,
+        // Bei ccCampus keine echten Zugangsdaten an den Proxy schicken —
+        // der wird dort ohnehin blockiert, das läuft separat im Browser.
+        lunch: lunchIstCcCampus ? { provider: 'cccampus', cccampus: {} } : child.lunch,
+        datum: datum,
+      }),
+    })
+      .then(function(resp){
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      });
+
+    var lunchPromise = lunchIstCcCampus
+      ? holeCcCampusEssen(child.lunch.cccampus, datum)
+      : Promise.resolve(null);
+
+    return Promise.all([proxyPromise, lunchPromise])
+      .then(function(results){
+        var data = results[0];
+        var ccResult = results[1];
+        if (ccResult){
+          if (ccResult.lunchFehler){
+            data.lunch = 'Fehler beim Abrufen';
+            data.lunchFehler = ccResult.lunchFehler;
+          } else {
+            data.lunch = ccResult.lunch;
+            data.lunchFehler = null;
+          }
+        }
+        lastDataById[child.id] = data;
+        renderChildResult(card, child, data, null);
+      })
+      .catch(function(err){ renderChildResult(card, child, null, String(err.message || err)); });
+  }
+
+  function refreshAll(){
+    if (!cfg.children.length) return;
+    btnRefresh.classList.add('spin');
+    childCards.setAttribute('aria-busy', 'true');
+    // Nacheinander statt parallel: mehrere Kinder nutzen oft denselben
+    // gemeinsamen WebUntis-Login (Klassen-Sammellogin) — zwei fast
+    // zeitgleiche Logins vom selben Konto können sich bei WebUntis
+    // gegenseitig die Session kaputt machen. Sequenziell abrufen vermeidet
+    // das zuverlässig, kostet nur etwas Zeit beim Refresh.
+    cfg.children
+      .reduce(function(kette, child){
+        return kette.then(function(){ return fetchChild(child); });
+      }, Promise.resolve())
+      .finally(function(){
+        btnRefresh.classList.remove('spin');
+        childCards.setAttribute('aria-busy', 'false');
+      });
+  }
+
+  btnRefresh.addEventListener('click', refreshAll);
+
+  // ── Navigation ──
+  // showDashboard() lädt bewusst IMMER auch die Daten nach. Vorher stand an
+  // jeder Aufrufstelle von Hand "showDashboard(); refreshAll();" — an einer
+  // davon (Klick auf den Titel) fehlte das refreshAll(), und die Karten
+  // blieben mit lauter "–" stehen. Solange beides getrennt ist, ist genau
+  // dieser Fehler jederzeit wieder einbaubar; zusammengelegt nicht mehr.
+  // renderDashboard() baut die Karten neu auf (mit "–"-Platzhaltern),
+  // refreshAll() füllt sie — die Reihenfolge muss so bleiben.
+  function showDashboard(){
+    setup.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    renderDashboard();
+    refreshAll();
+  }
+
+  function showSetup(){
+    dashboard.classList.add('hidden');
+    btnRefresh.classList.add('hidden');
+    setup.classList.remove('hidden');
+    renderSetup();
+  }
+
+  btnSettings.addEventListener('click', showSetup);
+  var btnSettingsBottom = document.getElementById('btnSettingsBottom');
+  if (btnSettingsBottom) btnSettingsBottom.addEventListener('click', showSetup);
+
+  // Titel oben links führt immer zurück zur Übersicht (dem Stundenplan),
+  // egal ob man gerade in den Einstellungen ist.
+  var titleHome = document.getElementById('titleHome');
+  titleHome.addEventListener('click', showDashboard);
+
+  // ── Toast ──
+  var toastTimer;
+  function toast(msg){
+    var el = document.querySelector('.toast');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ el.remove(); }, 3200);
+  }
+
+  // ── Start ──
+  if (cfg.proxyUrl && cfg.children.length){
+    showDashboard();
+  } else {
+    showSetup();
+  }
+
+  // PWA: Service Worker registrieren (App-Shell-Cache, optional)
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){ /* egal, kein Blocker */ });
+    });
+  }
+})();
+</script>
+</body>
+</html>

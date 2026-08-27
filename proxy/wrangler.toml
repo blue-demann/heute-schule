@@ -1,0 +1,12 @@
+name = "stundenplan-proxy"
+main = "worker.js"
+compatibility_date = "2026-08-25"
+
+# Schränkt Access-Control-Allow-Origin auf die eigene Website ein statt "*"
+# (alle Websites). Ohne das könnte jede fremde Seite den Proxy per
+# Browser-JS im Namen eines Besuchers ansprechen — z. B. relevant für ein
+# Phishing-Szenario (Fake-Seite sammelt Zugangsdaten, schickt sie im
+# Hintergrund an den echten Proxy). Bei einer eigenen Domain statt
+# *.pages.dev hier anpassen.
+[vars]
+ALLOWED_ORIGIN = "https://heute-schule.pages.dev"

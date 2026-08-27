@@ -1,0 +1,24 @@
+# Wrangler-Cache — enthält u. a. die eigene Cloudflare-Account-ID lokal im Klartext
+.wrangler/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# System
+.DS_Store
+
+# Persönliche Apps-Script-Automation (Björns eigener Mail-Agent) — nicht Teil
+# des veröffentlichten "Heute Schule"-Web-Tools. Enthält tatsächlich
+# familienspezifische Daten (echte Mensamax-Benutzernamen, private
+# Mailadressen, echte Klassen-/Einrichtungskennungen) und bleibt deshalb außen
+# vor.
+stundenplan_agent.gs
+
+# Hinweis: stundenplan.js und run-tests.js waren hier früher ebenfalls
+# gelistet — das war ein Versehen. Beide enthalten keine personenbezogenen
+# Daten (reine Logik bzw. erfundene Testdaten) und gehören ins Repo, sonst
+# wird die Testsuite faktisch nicht gepflegt.
+
+# Ad-hoc Diagnose-Werkzeuge, kein Teil der veröffentlichten App
+diagnose-*.html
