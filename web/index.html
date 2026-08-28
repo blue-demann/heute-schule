@@ -338,7 +338,7 @@
         <label>Basis-URL</label>
         <input type="text" data-field="lunch.cccampus.base" placeholder="https://cccampus.mbs5online.de/ordering">
         <p class="feld-hinweis">
-          Aktuell sind nur Adressen unter <code>mbs5online.de</code> freigeschaltet.
+          Aktuell sind nur Adressen unter <code>mbs5online.de</code> oder <code>mbs5.de</code> freigeschaltet.
           Nutzt Deine Schule ccCampus unter einer anderen Adresse, sag uns kurz
           Bescheid — das ist eine einmalige Freischaltung.
         </p>
@@ -926,7 +926,7 @@
     }
   }
 
-  // ── ccCampus (mbs5online) — bewusst NICHT über den Proxy ───────────────
+  // ── ccCampus (mbs5online.de / mbs5.de) — bewusst NICHT über den Proxy ──
   // ccCampus blockiert Anfragen von Server-Infrastruktur (Cloudflare
   // Workers) mit 403, lässt echte Browser-Anfragen aber durch (offene
   // CORS-Header). Deswegen läuft das hier direkt im Browser, anders als
@@ -945,12 +945,19 @@
   // Abruf — und zwar nur mit einem nackten "Failed to fetch", das für
   // Nutzer:innen nicht von einem Netzausfall zu unterscheiden ist. Deswegen
   // hier vorab prüfen und stattdessen sagen, was wirklich los ist.
-  var CCCAMPUS_ERLAUBTE_DOMAIN = '.mbs5online.de';
+  // Liste statt Einzelwert: Aus dem Betatest bestätigt (28.08.), dass
+  // derselbe Anbieter (gleiche Software, gleicher Pfad "/ordering/") unter
+  // mehreren Domains läuft — mbs5online.de UND das kürzere mbs5.de. Beide
+  // müssen auch in web/_headers (connect-src) eingetragen sein, sonst
+  // blockiert die CSP trotz Freischaltung hier.
+  var CCCAMPUS_ERLAUBTE_DOMAINS = ['.mbs5online.de', '.mbs5.de'];
 
   function ccCampusDomainErlaubt(baseUrl){
     try {
       var host = new URL(baseUrl).hostname.toLowerCase();
-      return host === CCCAMPUS_ERLAUBTE_DOMAIN.slice(1) || host.endsWith(CCCAMPUS_ERLAUBTE_DOMAIN);
+      return CCCAMPUS_ERLAUBTE_DOMAINS.some(function(d){
+        return host === d.slice(1) || host.endsWith(d);
+      });
     } catch (e) {
       return false;
     }
@@ -965,7 +972,8 @@
       return Promise.resolve({
         lunch: null,
         lunchFehler: 'Diese ccCampus-Adresse ist auf dieser Seite noch nicht freigeschaltet '
-          + '(erlaubt sind aktuell nur Adressen unter ' + CCCAMPUS_ERLAUBTE_DOMAIN.slice(1) + '). '
+          + '(erlaubt sind aktuell nur Adressen unter '
+          + CCCAMPUS_ERLAUBTE_DOMAINS.map(function(d){ return d.slice(1); }).join(' oder ') + '). '
           + 'Bitte melde Dich beim Betreiber — es ist eine einmalige Freischaltung nötig.',
       });
     }

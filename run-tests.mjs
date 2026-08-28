@@ -5,6 +5,7 @@
 // Apps-Script-Logik in stundenplan.js ist weiterhin CommonJS und wird von
 // Node hier automatisch als Default-Export eingebunden.
 
+import { readFileSync } from 'node:fs';
 import stundenplan from './stundenplan.js';
 import { istPrivatesOderLokalesZiel, pruefeSicherenHostname, pruefeSichereHttpsUrl } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
@@ -507,6 +508,36 @@ test('Passwörter stehen im Material (wird gehasht, nie roh gespeichert)', () =>
 test('fehlende Konfiguration wirft nicht', () => {
   buildCacheKeyMaterial('20260827');
   buildCacheKeyMaterial('20260827', {}, {});
+});
+
+// ── ccCampus-Domain-Allowlist: index.html und _headers müssen übereinstimmen ─
+//
+// Zwei unabhängige Mechanismen prüfen dieselbe Domain-Liste: die CSP
+// (connect-src in web/_headers, blockiert auf Browser-Ebene) und
+// CCCAMPUS_ERLAUBTE_DOMAINS in web/index.html (zeigt die verständliche
+// Fehlermeldung, statt es an der CSP scheitern zu lassen). Eine Domain nur
+// an einer Stelle einzutragen reicht nicht — genau dieser Bug wäre mit den
+// bisherigen Tests unsichtbar geblieben, da beide Dateien nie gegeneinander
+// geprüft wurden.
+
+console.log('\nccCampus-Domain-Allowlist (index.html vs. _headers)');
+
+test('CCCAMPUS_ERLAUBTE_DOMAINS und CSP connect-src listen dieselben Domains', () => {
+  const indexHtml = readFileSync(new URL('./web/index.html', import.meta.url), 'utf-8');
+  const headers = readFileSync(new URL('./web/_headers', import.meta.url), 'utf-8');
+
+  const jsMatch = indexHtml.match(/CCCAMPUS_ERLAUBTE_DOMAINS\s*=\s*\[([^\]]*)\]/);
+  assert(jsMatch, 'CCCAMPUS_ERLAUBTE_DOMAINS nicht in index.html gefunden — Test selbst kaputt?');
+  const ausJs = jsMatch[1].match(/'\.([a-z0-9.-]+)'/g).map(s => s.slice(2, -1)).sort();
+
+  // Nicht einfach nach "connect-src" suchen — das Wort steht auch in der
+  // Erklär-Kommentarzeile davor und würde die falsche Zeile treffen.
+  const cspMatch = headers.match(/^\s*Content-Security-Policy:[^\n]*/m);
+  assert(cspMatch, 'Content-Security-Policy nicht in _headers gefunden — Test selbst kaputt?');
+  const ausCsp = [...cspMatch[0].matchAll(/https:\/\/\*\.([a-z0-9.-]*mbs5[a-z0-9.-]*)/g)]
+    .map(m => m[1]).sort();
+
+  assertEqual(JSON.stringify(ausJs), JSON.stringify(ausCsp));
 });
 
 // ── Ergebnis ───────────────────────────────────────────────────────────────
