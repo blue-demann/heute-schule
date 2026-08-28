@@ -36,7 +36,14 @@ fi
 
 if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "web" ]; then
   echo "▶ Website deployen…"
-  ( cd web && npx wrangler pages deploy . --project-name=heute-schule )
+  # --branch=production explizit setzen, NICHT weglassen: wrangler pages
+  # deploy erkennt sonst automatisch den lokalen Git-Branch und behandelt
+  # den Deploy als Branch-Preview (landet auf main.heute-schule.pages.dev
+  # statt heute-schule.pages.dev). Passiert seit es hier ein Git-Repo gibt —
+  # ohne Git griff wrangler mangels Branch-Info auf den in Cloudflare
+  # hinterlegten Produktions-Branch zurück, der "production" heißt (per
+  # `wrangler pages deployment list` bestätigt, nicht "main").
+  ( cd web && npx wrangler pages deploy . --project-name=heute-schule --branch=production )
   echo ""
 fi
 
