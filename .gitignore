@@ -22,3 +22,10 @@ stundenplan_agent.gs
 
 # Ad-hoc Diagnose-Werkzeuge, kein Teil der veröffentlichten App
 diagnose-*.html
+
+# Von Drittanbietern übernommene Rechtsdokumente (z. B. lokal als PDF
+# gesicherte Cloudflare-Vertragstexte) — lokale Nachweise für das
+# Verarbeitungsverzeichnis, keine eigenen Texte. Nicht ungefragt in ein
+# später öffentliches Repo mitziehen; Cloudflares Originale bleiben unter
+# den in Verarbeitungsverzeichnis-INTERN.md verlinkten URLs verfügbar.
+Cloudflare-*.pdf

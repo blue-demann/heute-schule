@@ -110,13 +110,16 @@ die Tests laufen und bricht bei einem Fehlschlag ab:
 Impressum ist frei formuliert. Die Datenschutzerklärung folgt für Abschnitt 2
 ("Was dieser Dienst macht") einer individuellen Beschreibung des tatsächlichen
 Datenflusses; die übrigen Abschnitte (Rechte, Hosting-Formulierungen,
-SSL-Hinweis, Server-Log-Dateien) sind an den Standard-Baustein von eRecht24
-angelehnt, unter dessen kostenloser Nutzungsbedingung, dass die Herkunft
-nicht entfernt werden darf, wenn man ihren Generator direkt nutzt — hier
-umgangen, da der Text selbst geschrieben statt generiert wurde. Kein Ersatz
-für eine anwaltliche Prüfung im Zweifelsfall — diese Einschätzung ist eine
-Projektnotiz für die Weiterentwicklung, gehört nicht auf die Nutzer-Seite
-selbst (dort stand sie versehentlich mal drin, wurde entfernt).
+SSL-Hinweis, Server-Log-Dateien) entstanden auf Basis einer Vorlage von
+eRecht24. Korrektur (28.08.2026): Hier stand vorher, die Herkunftsangabe sei
+"umgangen", weil der Text selbst geschrieben statt generiert wurde — das war
+zu unsicher formuliert. Ob ein eigenständig verfasster, an eRecht24
+angelehnter Text von deren kostenloser Nutzungsbedingung (Herkunftsangabe bei
+direkter Generator-Nutzung) tatsächlich ausgenommen ist, ist nicht
+zweifelsfrei geklärt. Statt das Risiko einzugehen: Die Datenschutzerklärung
+nennt eRecht24 jetzt explizit als Quelle, mit Link (Abschnitt am Ende der
+Seite). Kein Ersatz für eine anwaltliche Prüfung im Zweifelsfall — diese
+Einschätzung ist eine Projektnotiz für die Weiterentwicklung.
 
 ## ⚠ Vor weiterer Ausweitung prüfen: rechtliche Rolle ändert sich
 
@@ -197,9 +200,16 @@ Zu klären, bevor der Kreis weiter wächst:
   Werten im Code, keine externen JS-Bibliotheken eingebunden — damit kein
   offensichtlicher XSS-Angriffsweg, der laut OWASP/heise sonst das
   Hauptrisiko bei dieser Speicherart wäre. Restrisiko: physischer/eingeloggter
-  Gerätezugriff. Für den Anwendungsfall (kein Finanzschaden möglich, nur
-  Schulessen-Status lesbar) als vertretbar eingeschätzt — Entscheidung offen,
-  ob das noch gehärtet wird (siehe nächster Punkt).
+  Gerätezugriff.
+  Korrektur (28.08.2026): Hier stand vorher „kein Finanzschaden möglich" —
+  das stimmt nicht ganz. Mit den Mensa-Zugangsdaten lässt sich auf der
+  Anbieter-Website Essen bestellen, echtes Geld ist also im Spiel. Die
+  Einschätzung „vertretbar" beruht stattdessen auf der Kombination aus:
+  keinem finanziellen Vorteil für Angreifende (also kaum Motivation für den
+  nötigen Aufwand), Auffälligkeit beim nächsten eigenen Login der Familie,
+  und der Möglichkeit, eine Bestellung rückgängig zu machen. Ausführlicher
+  in `../PROJEKT.md`, Abschnitt 5. Entscheidung offen, ob das noch weiter
+  gehärtet wird (siehe nächster Punkt).
 
 ### Idee (27.08., noch nicht umgesetzt): Verschlüsselung ohne Master-Passwort
 
