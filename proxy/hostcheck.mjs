@@ -41,11 +41,29 @@ export function istPrivatesOderLokalesZiel(hostname) {
 // sinnvoll (die Integration spricht nie etwas anderes an), für die
 // Essensanbieter bewusst nicht, da andere Schulen andere Portal-Domains
 // desselben Anbieter-Typs nutzen können.
+// Nimmt statt eines reinen Hostnamens eine ganze URL entgegen (z. B. aus der
+// Browser-Adresszeile kopiert, inkl. Pfad/Hash: ".../WebUntis/#/basic/login")
+// und liefert nur den Hostnamen zurück. Kein Sicherheitsnachlass: new URL()
+// parst den Host unabhängig von Pfad-Tricks, das Ergebnis durchläuft
+// anschließend exakt dieselbe Prüfung wie ein direkt eingegebener Hostname.
+// Das Frontend bereinigt das Server-Feld zwar schon beim Verlassen des
+// Eingabefelds (siehe extrahiereWebUntisHostname in web/index.html) — diese
+// zweite, serverseitige Stufe fängt ältere Website-Stände und alles ab, was
+// das Frontend aus welchem Grund auch immer nicht bereinigt hat.
+function extrahiereHostnameAusUrl(eingabe) {
+  const wert = String(eingabe || '').trim();
+  if (/^https?:\/\//i.test(wert)) {
+    try { return new URL(wert).hostname; } catch (e) { /* fällt durch zur normalen Prüfung */ }
+  }
+  return wert;
+}
+
 export function pruefeSicherenHostname(hostname, { pflichtSuffix } = {}) {
-  if (!hostname || typeof hostname !== 'string' || hostname.includes('@') || hostname.includes('/')) {
+  const bereinigt = extrahiereHostnameAusUrl(hostname);
+  if (!bereinigt || typeof bereinigt !== 'string' || bereinigt.includes('@') || bereinigt.includes('/')) {
     throw new Error('Ungültiger Server-Hostname');
   }
-  const h = hostname.trim().toLowerCase();
+  const h = bereinigt.trim().toLowerCase();
   if (!h) throw new Error('Ungültiger Server-Hostname');
   if (istPrivatesOderLokalesZiel(h)) {
     throw new Error('Server-Hostname zeigt auf ein internes/lokales Ziel — nicht erlaubt');

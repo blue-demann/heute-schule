@@ -404,6 +404,26 @@ test('Pfad im Hostnamen wird abgelehnt', () => {
 test('leerer Hostname wird abgelehnt', () => {
   assertWirft(() => pruefeSicherenHostname(''), 'Ungültiger Server-Hostname');
 });
+test('REGRESSION: komplette aus der Adresszeile kopierte WebUntis-URL wird akzeptiert', () => {
+  // Genau der Fall aus dem Betatest (28.08.): Nutzerin hat die volle URL aus
+  // der Adresszeile ins Server-Feld eingefügt, nicht nur den Hostnamen.
+  assertEqual(
+    pruefeSicherenHostname('https://gems-harksheide.webuntis.com/WebUntis/#/basic/login', { pflichtSuffix: '.webuntis.com' }),
+    'gems-harksheide.webuntis.com'
+  );
+});
+test('WebUntis-URL ohne Pfad wird akzeptiert', () => {
+  assertEqual(
+    pruefeSicherenHostname('https://gems-harksheide.webuntis.com/', { pflichtSuffix: '.webuntis.com' }),
+    'gems-harksheide.webuntis.com'
+  );
+});
+test('URL zu einer fremden Domain bleibt abgelehnt (kein Freifahrtschein durchs URL-Parsing)', () => {
+  assertWirft(() => pruefeSicherenHostname('https://angreifer.example/x', { pflichtSuffix: '.webuntis.com' }), 'muss auf');
+});
+test('URL zu einer internen Adresse bleibt abgelehnt', () => {
+  assertWirft(() => pruefeSicherenHostname('https://169.254.169.254/pfad'), 'internes/lokales Ziel');
+});
 
 console.log('\npruefeSichereHttpsUrl()');
 test('Mensamax-Basis-URL geht durch', () => {
