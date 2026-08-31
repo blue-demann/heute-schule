@@ -28,6 +28,35 @@ if ! node run-tests.mjs; then
 fi
 echo ""
 
+# web/source/ und web/docs/ sind von Hand gepflegte Kopien (siehe
+# web/ueber.html, Abschnitt "Technische Details") — kein automatischer
+# Abgleich mit dem Original. Ohne diese Prüfung würde ein veralteter Dump
+# niemandem auffallen, bis ihn jemand von außen bemerkt.
+echo "▶ Datei-Dump (web/source/, web/docs/) aktuell?"
+DUMP_VERALTET=0
+for PAAR in \
+  "proxy/worker.js:web/source/proxy/worker.js" \
+  "proxy/hostcheck.mjs:web/source/proxy/hostcheck.mjs" \
+  "proxy/cachekey.mjs:web/source/proxy/cachekey.mjs" \
+  "PROJEKT.md:web/docs/PROJEKT.md" \
+  "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md"; do
+  ORIGINAL="${PAAR%%:*}"
+  KOPIE="${PAAR##*:}"
+  if ! diff -q "$ORIGINAL" "$KOPIE" >/dev/null 2>&1; then
+    echo "  ✗ $KOPIE weicht von $ORIGINAL ab"
+    DUMP_VERALTET=1
+  fi
+done
+if [ "$DUMP_VERALTET" = "1" ]; then
+  echo ""
+  echo "✗ Datei-Dump veraltet — Original geändert, Kopie in web/ nicht."
+  echo "  Kopie manuell nachziehen (z. B. cp proxy/worker.js web/source/proxy/),"
+  echo "  danach erneut deployen."
+  exit 1
+fi
+echo "  ✓ aktuell"
+echo ""
+
 if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "proxy" ]; then
   echo "▶ Proxy deployen…"
   ( cd proxy && npx wrangler deploy )

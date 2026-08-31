@@ -482,9 +482,9 @@
     return path.split('.').reduce(function(o, k){ return (o || {})[k]; }, obj);
   }
 
-  // Aus dem Betatest: Statt nur "gems-harksheide.webuntis.com" wurde die
-  // ganze aus der Adresszeile kopierte URL ins Server-Feld eingefügt
-  // ("https://gems-harksheide.webuntis.com/WebUntis/#/basic/login") — die
+  // Aus dem Betatest: Statt nur "schule.webuntis.com" wurde die ganze aus
+  // der Adresszeile kopierte URL ins Server-Feld eingefügt (z. B.
+  // "https://schule.webuntis.com/WebUntis/#/basic/login") — die
   // naheliegende Handlung, wenn man gerade in WebUntis eingeloggt ist. Statt
   // das nur mit einem Fehler zu quittieren, wird es automatisch bereinigt.
   function extrahiereWebUntisHostname(eingabe){
@@ -492,7 +492,7 @@
     if (/^https?:\/\//i.test(wert)){
       try { return new URL(wert).hostname; } catch (e) { /* fällt durch */ }
     }
-    // Auch ohne Protokoll eingefügt (z. B. "gems-harksheide.webuntis.com/WebUntis/...")
+    // Auch ohne Protokoll eingefügt (z. B. "schule.webuntis.com/WebUntis/...")
     return wert.split('/')[0].split('#')[0].split('?')[0];
   }
 

@@ -93,7 +93,7 @@ die Tests laufen und bricht bei einem Fehlschlag ab:
 
 ### Neue Ideen (25.08., noch nicht bewertet/umgesetzt)
 
-- **Custom-Termine** (Vorschlag von Markus): frei definierbare eigene Termine
+- **Custom-Termine** (Vorschlag aus dem Bekanntenkreis): frei definierbare eigene Termine
   (z. B. "Dienstags Tanzen"), lokal gespeichert und zusammen mit dem
   WebUntis-Stundenplan angezeigt. Björns eigene Einschätzung dazu, die ich
   teile: **einfache** einmalige oder "jeden Wochentag X"-Termine wären

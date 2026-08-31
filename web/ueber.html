@@ -50,8 +50,39 @@
     Das Design ist so mit einem Fokus auf Sicherheit aufgebaut und
     serverschonend umgesetzt. Der Code ist unter Open-Source-Lizenz
     <a href="https://de.wikipedia.org/wiki/MIT-Lizenz" target="_blank" rel="noopener">MIT</a>
-    und hier bald verlinkt. So kann bei Bedarf jeder nachvollziehen, was hier
-    passiert.
+    — Belege dazu direkt unten. So kann bei Bedarf jeder nachvollziehen, was
+    hier passiert.
+  </p>
+
+  <h2>Technische Details</h2>
+  <p>
+    Der sichtbare Teil dieser Seite (diese Seite selbst, der Stundenplan,
+    die Einstellungen) ist bewusst ohne Build-Schritt und ohne
+    Verschleierung gebaut — „Seitenquelltext anzeigen" im Browser zeigt
+    schon heute den kompletten Code. Der Teil, der das nicht zeigt, ist der
+    Server im Hintergrund (der „Proxy"), der die Anfragen an WebUntis und
+    Mensamax stellt. Genau dessen Code liegt hier zusätzlich offen:
+  </p>
+  <ul>
+    <li><a href="source/proxy/worker.js">worker.js</a> — der Proxy selbst</li>
+    <li><a href="source/proxy/hostcheck.mjs">hostcheck.mjs</a> — prüft Ziel-Adressen, bevor der Proxy sie anfragt</li>
+    <li><a href="source/proxy/cachekey.mjs">cachekey.mjs</a> — bildet den Zwischenspeicher-Schlüssel aus den Zugangsdaten</li>
+  </ul>
+  <p>
+    Und weil Code allein wenig über die Entstehungsgeschichte verrät —
+    inklusive der Stellen, an denen etwas nicht auf Anhieb geklappt hat —,
+    liegt die Doku mit dabei:
+  </p>
+  <ul>
+    <li><a href="docs/PROJEKT.md">Projekt- und Design-Dokumentation</a> — Architektur, Entscheidungen, Sicherheitsmodell, Release-Historie</li>
+    <li><a href="docs/QA-Bericht-2026-08-27-v0.1.1.md">QA-Bericht</a> — eine kritische Analyse der Seite, im Stil eines Testberichts</li>
+    <li><a href="docs/PEER-REVIEW-2026-08-27.md">Peer-Review</a> — eine unabhängige Gegenprüfung dieses QA-Berichts</li>
+    <li><a href="docs/OFFEN-naechste-Fixes.md">Offene Punkte</a> — was noch fehlt, ehrlich aufgeschrieben statt verschwiegen</li>
+  </ul>
+  <p style="font-size:.85rem; color:var(--muted);">
+    Diese Dateien sind Kopien aus dem eigentlichen Projektverlauf, von Hand
+    hier abgelegt — kein automatischer Abgleich. Stand jeweils am Dateikopf
+    erkennbar.
   </p>
 
   <p class="demo-hinweis">

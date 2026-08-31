@@ -409,14 +409,14 @@ test('REGRESSION: komplette aus der Adresszeile kopierte WebUntis-URL wird akzep
   // Genau der Fall aus dem Betatest (28.08.): Nutzerin hat die volle URL aus
   // der Adresszeile ins Server-Feld eingefügt, nicht nur den Hostnamen.
   assertEqual(
-    pruefeSicherenHostname('https://gems-harksheide.webuntis.com/WebUntis/#/basic/login', { pflichtSuffix: '.webuntis.com' }),
-    'gems-harksheide.webuntis.com'
+    pruefeSicherenHostname('https://schule.webuntis.com/WebUntis/#/basic/login', { pflichtSuffix: '.webuntis.com' }),
+    'schule.webuntis.com'
   );
 });
 test('WebUntis-URL ohne Pfad wird akzeptiert', () => {
   assertEqual(
-    pruefeSicherenHostname('https://gems-harksheide.webuntis.com/', { pflichtSuffix: '.webuntis.com' }),
-    'gems-harksheide.webuntis.com'
+    pruefeSicherenHostname('https://schule.webuntis.com/', { pflichtSuffix: '.webuntis.com' }),
+    'schule.webuntis.com'
   );
 });
 test('URL zu einer fremden Domain bleibt abgelehnt (kein Freifahrtschein durchs URL-Parsing)', () => {
