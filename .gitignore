@@ -15,11 +15,6 @@ npm-debug.log*
 # vor.
 stundenplan_agent.gs
 
-# Hinweis: stundenplan.js und run-tests.js waren hier früher ebenfalls
-# gelistet — das war ein Versehen. Beide enthalten keine personenbezogenen
-# Daten (reine Logik bzw. erfundene Testdaten) und gehören ins Repo, sonst
-# wird die Testsuite faktisch nicht gepflegt.
-
 # Ad-hoc Diagnose-Werkzeuge, kein Teil der veröffentlichten App
 diagnose-*.html
 
@@ -31,17 +26,16 @@ diagnose-*.html
 Cloudflare-*.pdf
 
 # Echte Rechtstexte mit personenbezogenen Kontaktdaten (Name, Adresse,
-# Telefon, E-Mail) — 31.08.2026, auf Björns ausdrücklichen Wunsch: Die
-# MIT-Lizenz gilt für den Code, nicht automatisch für private Kontaktdaten
-# in den Inhalten. Die echten Dateien bleiben hier auf der Platte liegen
-# und werden ganz normal deployed (§ 5 DDG verlangt ein echtes Impressum
-# auf der LIVE-Website — das ist unabhängig davon, was in Git steht).
-# Vorlagen mit Platzhaltern liegen stattdessen im Repo:
+# Telefon, E-Mail). Die MIT-Lizenz gilt für den Code, nicht automatisch für
+# private Kontaktdaten in den Inhalten. Die echten Dateien bleiben hier auf
+# der Platte liegen und werden ganz normal deployed (§ 5 DDG verlangt ein
+# echtes Impressum auf der LIVE-Website — das ist unabhängig davon, was in
+# Git steht). Vorlagen mit Platzhaltern liegen stattdessen im Repo:
 # web/impressum.example.html, web/datenschutz.example.html.
 web/impressum.html
 web/datenschutz.html
 
-# Internes Verarbeitungsverzeichnis — war laut eigenem Namen nie für Dritte
-# gedacht (siehe Kopfzeile der Datei selbst), gehörte hier eigentlich nie
-# rein. Bleibt lokal vorhanden, nur nicht mehr versioniert.
+# Internes Verarbeitungsverzeichnis, laut eigenem Namen nicht für Dritte
+# gedacht (siehe Kopfzeile der Datei selbst). Bleibt lokal vorhanden, nur
+# nicht versioniert.
 Verarbeitungsverzeichnis-INTERN.md

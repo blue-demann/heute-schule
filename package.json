@@ -1,0 +1,22 @@
+{
+  "name": "heute-schule",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Stundenplan- und Schulessen-Übersicht für mehrere Kinder (Web-App + Cloudflare-Worker-Proxy).",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node run-tests.mjs",
+    "lint": "eslint .",
+    "deploy": "./deploy.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blue-demann/heute-schule.git"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0"
+  }
+}

@@ -27,7 +27,7 @@ function extractUpdatedPhpsessid(rawCookies) {
 
 function parseLunchStatus(cal, details, heute) {
   if (!cal) return 'Schulessen: Daten nicht verfügbar';
-  const y = heute.getFullYear(), m = heute.getMonth() + 1, d = heute.getDate();
+  const y = heute.getFullYear(); const m = heute.getMonth() + 1; const d = heute.getDate();
   const tag = ((cal[String(y)] || {})[String(m)] || {})[String(d)] || {};
   if (!tag.CATERING)  return 'Kein Schulessen heute';
   if (tag.SIGNED_OFF) return 'Abgemeldet (kein Essen)';
@@ -97,16 +97,16 @@ function buildEmail(kinderDaten, heute) {
       : '';
     return [
       `── ${kind.name} (Klasse ${kind.klasse.toUpperCase()}) ──────────────`,
-      ``, `📚 Stundenplan${fehlerHinweis}`,
+      '', `📚 Stundenplan${fehlerHinweis}`,
       fehler ? '' : formatStunden(stunden),
-      ``, `🍽 Schulessen`, `  ${lunch}`,
+      '', '🍽 Schulessen', `  ${lunch}`,
     ].join('\n');
   }).join('\n\n');
   const body = [
-    `Hallo Liebe Eltern! 👋`, ``,
-    `Heute ist ${wochentag}, ${datum} — hier der Überblick:`, ``,
-    kinderSektionen, ``,
-    `Einen guten Tag! 🌟`, `Deine Heute Schule App`,
+    'Hallo Liebe Eltern! 👋', '',
+    `Heute ist ${wochentag}, ${datum} — hier der Überblick:`, '',
+    kinderSektionen, '',
+    'Einen guten Tag! 🌟', 'Deine Heute Schule App',
   ].join('\n');
   return { subject, body };
 }

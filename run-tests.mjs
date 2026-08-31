@@ -20,7 +20,7 @@ const {
   buildEmail,
 } = stundenplan;
 
-let passed = 0, failed = 0;
+let passed = 0; let failed = 0;
 
 function test(name, fn) {
   try {
@@ -406,8 +406,8 @@ test('leerer Hostname wird abgelehnt', () => {
   assertWirft(() => pruefeSicherenHostname(''), 'Ungültiger Server-Hostname');
 });
 test('REGRESSION: komplette aus der Adresszeile kopierte WebUntis-URL wird akzeptiert', () => {
-  // Genau der Fall aus dem Betatest (28.08.): Nutzerin hat die volle URL aus
-  // der Adresszeile ins Server-Feld eingefügt, nicht nur den Hostnamen.
+  // Deckt den Fall ab, dass jemand die volle URL aus der Adresszeile ins
+  // Server-Feld einfügt statt nur den Hostnamen.
   assertEqual(
     pruefeSicherenHostname('https://schule.webuntis.com/WebUntis/#/basic/login', { pflichtSuffix: '.webuntis.com' }),
     'schule.webuntis.com'
@@ -454,9 +454,9 @@ test('Unsinn wird abgelehnt', () => {
 
 // ── Proxy: Cache-Schlüssel ─────────────────────────────────────────────────
 //
-// Diese Tests existieren wegen einer echten Lücke (27.08.2026): Der Schlüssel
-// enthielt keine Passwörter, wodurch ein Cache-Treffer fremde Daten ohne
-// Login auslieferte. Der erste Test unten ist der, der das verhindert hätte.
+// Prüft, dass unterschiedliche Zugangsdaten immer zu unterschiedlichen
+// Cache-Schlüsseln führen — sonst könnte ein Cache-Treffer Daten ausliefern,
+// ohne dass ein Login stattgefunden hat (siehe Kommentar in cachekey.mjs).
 
 console.log('\nbuildCacheKeyMaterial()');
 
@@ -538,6 +538,36 @@ test('CCCAMPUS_ERLAUBTE_DOMAINS und CSP connect-src listen dieselben Domains', (
     .map(m => m[1]).sort();
 
   assertEqual(JSON.stringify(ausJs), JSON.stringify(ausCsp));
+});
+
+// ── Keine Journal Comments im Code ──────────────────────────────────────────
+//
+// Kommentare erklären den aktuellen Stand, nicht die Änderungshistorie
+// dahin — das gehört in Commit-Nachrichten oder die Design-Doku
+// (PROJEKT.md), nicht in den Code (siehe Clean Code, Kapitel "Comments" —
+// "Journal Comments" als benanntes Anti-Pattern).
+// Dokumentationsdateien (*.md) sind bewusst ausgenommen: Dort gehört
+// Zeitbezug hin.
+
+console.log('\nKeine Journal Comments im Code');
+
+test('keine Datums-/Historie-Signalwörter in Code-Kommentaren', () => {
+  const dateien = [
+    'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
+    'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
+    'web/index.html', 'web/_headers',
+  ];
+  const signalwoerter = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert/;
+  const treffer = [];
+  for (const datei of dateien) {
+    const inhalt = readFileSync(new URL(`./${datei}`, import.meta.url), 'utf-8');
+    inhalt.split('\n').forEach((zeile, i) => {
+      if (/^\s*(\/\/|#|\*)/.test(zeile) && signalwoerter.test(zeile)) {
+        treffer.push(`${datei}:${i + 1}: ${zeile.trim()}`);
+      }
+    });
+  }
+  assert(treffer.length === 0, 'Journal-Comment-Signalwörter gefunden:\n    ' + treffer.join('\n    '));
 });
 
 // ── Ergebnis ───────────────────────────────────────────────────────────────

@@ -2,10 +2,9 @@
 #
 # Deploy mit Test-Gate.
 #
-# Hintergrund: Die Testsuite lief bisher nur, wenn jemand daran dachte. Genau
-# so ist eine Sicherheitslücke im Cache-Schlüssel monatelang unentdeckt
-# geblieben (siehe proxy/cachekey.mjs). Seit fremde Familien mitnutzen, ist
-# "ich hab's im Kopf" keine ausreichende Absicherung mehr.
+# Läuft die Testsuite vor jedem Deploy automatisch, statt sich darauf zu
+# verlassen, dass sie jemand von Hand anstößt — bei mehreren Familien als
+# Nutzerkreis reicht "ich hab's im Kopf" nicht als Absicherung.
 #
 # Aufruf aus dem Stundenplan-Ordner:
 #   ./deploy.sh          # Tests, dann Proxy + Website
@@ -26,6 +25,15 @@ if ! node run-tests.mjs; then
   echo "✗ Tests fehlgeschlagen — Deploy abgebrochen."
   exit 1
 fi
+echo ""
+
+echo "▶ Lint (Google JavaScript Style Guide, siehe eslint.config.mjs)…"
+if ! npx eslint .; then
+  echo ""
+  echo "✗ Lint-Fehler — Deploy abgebrochen."
+  exit 1
+fi
+echo "  ✓ sauber"
 echo ""
 
 # web/source/ und web/docs/ sind von Hand gepflegte Kopien (siehe
@@ -66,12 +74,11 @@ fi
 if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "web" ]; then
   echo "▶ Website deployen…"
   # --branch=production explizit setzen, NICHT weglassen: wrangler pages
-  # deploy erkennt sonst automatisch den lokalen Git-Branch und behandelt
-  # den Deploy als Branch-Preview (landet auf main.heute-schule.pages.dev
-  # statt heute-schule.pages.dev). Passiert seit es hier ein Git-Repo gibt —
-  # ohne Git griff wrangler mangels Branch-Info auf den in Cloudflare
-  # hinterlegten Produktions-Branch zurück, der "production" heißt (per
-  # `wrangler pages deployment list` bestätigt, nicht "main").
+  # deploy erkennt sonst automatisch den lokalen Git-Branch (hier "main")
+  # und behandelt den Deploy als Branch-Preview (landet auf
+  # main.heute-schule.pages.dev statt heute-schule.pages.dev). Der bei
+  # Cloudflare hinterlegte Produktions-Branch heißt "production", nicht
+  # "main" (per `wrangler pages deployment list` prüfbar).
   ( cd web && npx wrangler pages deploy . --project-name=heute-schule --branch=production )
   echo ""
 fi

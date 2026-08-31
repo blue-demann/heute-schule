@@ -48,10 +48,6 @@ const CACHE_TTL_SECONDS = 240; // 4 Minuten
 // WebUntis unsere Cloudflare-IP, nicht die des Angreifers).
 const RATE_LIMIT_PRO_MINUTE = 30;
 
-function pad(n) {
-  return String(n).padStart(2, '0');
-}
-
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -101,7 +97,7 @@ async function fetchWithTimeout(url, options) {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (e) {
     if (e && e.name === 'AbortError') {
-      throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (>${FETCH_TIMEOUT_MS / 1000}s)`);
+      throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (>${FETCH_TIMEOUT_MS / 1000}s)`, { cause: e });
     }
     throw e;
   } finally {
@@ -161,7 +157,7 @@ async function webuntisRpc(server, cookie, method, params) {
   try {
     data = JSON.parse(text);
   } catch (e) {
-    throw new Error(`WebUntis ${method}: keine gültige JSON-Antwort (HTTP ${resp.status})`);
+    throw new Error(`WebUntis ${method}: keine gültige JSON-Antwort (HTTP ${resp.status})`, { cause: e });
   }
   if (data.error) throw new Error(`WebUntis ${method}: ${data.error.message}`);
   return data.result;
@@ -184,7 +180,7 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
     // zweiten wäre das irreführend, da geben wir die Original-Meldung weiter.
     const msg = String((e && e.message) || e);
     if (msg.indexOf('WebUntis authenticate:') === 0) {
-      throw new Error('WebUntis-Login fehlgeschlagen — Benutzername oder Passwort prüfen.');
+      throw new Error('WebUntis-Login fehlgeschlagen — Benutzername oder Passwort prüfen.', { cause: e });
     }
     throw e;
   }
@@ -207,7 +203,7 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
   const raeumMap = {};
   raeume.forEach(r => { raeumMap[r.id] = r.name || '?'; });
 
-  try { await webuntisRpc(server, cookie, 'logout', {}); } catch (e) { /* egal */ }
+  try { await webuntisRpc(server, cookie, 'logout', {}); } catch { /* egal */ }
 
   const seen = new Set();
   return stunden
@@ -421,7 +417,7 @@ export default {
     let body;
     try {
       body = await request.json();
-    } catch (e) {
+    } catch {
       return jsonResponse({ error: 'Ungültiger Request-Body (JSON erwartet)' }, 400, corsHeaders);
     }
 

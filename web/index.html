@@ -482,11 +482,11 @@
     return path.split('.').reduce(function(o, k){ return (o || {})[k]; }, obj);
   }
 
-  // Aus dem Betatest: Statt nur "schule.webuntis.com" wurde die ganze aus
-  // der Adresszeile kopierte URL ins Server-Feld eingefügt (z. B.
-  // "https://schule.webuntis.com/WebUntis/#/basic/login") — die
-  // naheliegende Handlung, wenn man gerade in WebUntis eingeloggt ist. Statt
-  // das nur mit einem Fehler zu quittieren, wird es automatisch bereinigt.
+  // Das Server-Feld akzeptiert auch die komplette aus der Adresszeile
+  // kopierte URL (z. B. "https://schule.webuntis.com/WebUntis/#/basic/login")
+  // statt nur den Hostnamen — naheliegend, wenn man gerade in WebUntis
+  // eingeloggt ist. Wird automatisch auf den Hostnamen bereinigt, statt
+  // nur mit einem Fehler zu quittieren.
   function extrahiereWebUntisHostname(eingabe){
     var wert = String(eingabe || '').trim();
     if (/^https?:\/\//i.test(wert)){
@@ -945,11 +945,12 @@
   // Abruf — und zwar nur mit einem nackten "Failed to fetch", das für
   // Nutzer:innen nicht von einem Netzausfall zu unterscheiden ist. Deswegen
   // hier vorab prüfen und stattdessen sagen, was wirklich los ist.
-  // Liste statt Einzelwert: Aus dem Betatest bestätigt (28.08.), dass
-  // derselbe Anbieter (gleiche Software, gleicher Pfad "/ordering/") unter
-  // mehreren Domains läuft — mbs5online.de UND das kürzere mbs5.de. Beide
-  // müssen auch in web/_headers (connect-src) eingetragen sein, sonst
-  // blockiert die CSP trotz Freischaltung hier.
+  //
+  // Liste statt Einzelwert, weil derselbe Anbieter (gleiche Software,
+  // gleicher Pfad "/ordering/") unter mehreren Domains läuft —
+  // mbs5online.de und das kürzere mbs5.de. Beide müssen auch in
+  // web/_headers (connect-src) eingetragen sein, sonst blockiert die CSP
+  // trotz Freischaltung hier.
   var CCCAMPUS_ERLAUBTE_DOMAINS = ['.mbs5online.de', '.mbs5.de'];
 
   function ccCampusDomainErlaubt(baseUrl){
