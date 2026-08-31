@@ -1,0 +1,231 @@
+<!--
+  Vorlage — keine echten Daten außer Abschnitt 1. Kopieren nach
+  datenschutz.html, Platzhalter in Abschnitt 1 ausfüllen, Rest bei Bedarf an
+  die eigene Architektur anpassen. datenschutz.html selbst ist bewusst NICHT
+  Teil dieses Repos (siehe .gitignore) — die MIT-Lizenz gilt für den Code,
+  nicht für personenbezogene Kontaktdaten.
+-->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datenschutzerklärung — Heute Schule</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Längster Fließtext im Projekt — etwas breitere Spalte und engere
+     Absatzabstände als die anderen Textseiten. */
+  :root{ --seitenbreite:680px; }
+  body.textseite p, body.textseite li{margin:.4rem 0;}
+</style>
+</head>
+<body class="textseite">
+<main>
+  <div class="page-nav">
+    <a class="back" href="index.html">← Zurück</a>
+    <a class="uebersicht-btn" href="index.html">Übersicht</a>
+  </div>
+  <h1>Datenschutzerklärung</h1>
+  <p style="font-size:.8rem; color:var(--muted); margin-top:-.4rem;">Stand: 28.08.2026</p>
+
+  <h2>1. Verantwortlicher</h2>
+  <p>
+    [Vor- und Nachname]<br>
+    [Straße und Hausnummer, PLZ und Ort]<br>
+    Telefon: [Telefonnummer] · E-Mail: [E-Mail-Adresse]
+  </p>
+
+  <h2>2. Was dieser Dienst macht — und welche Daten dabei fließen</h2>
+  <p>
+    Der Dienst zeigt den tagesaktuellen Stundenplan und Schulessen-Status für ein oder
+    mehrere Kinder an. Dafür gibst du die WebUntis-Zugangsdaten sowie die
+    Zugangsdaten deines gewählten Essensanbieters (Mensamax oder ccCampus)
+    einmalig ein.
+  </p>
+  <ul>
+    <li>
+      <strong>Im Browser (localStorage):</strong> Name des Kindes, WebUntis-
+      Zugangsdaten, Zugangsdaten des gewählten Essensanbieters. Diese Daten
+      verlassen dein Gerät ausschließlich für den jeweiligen Abruf (siehe unten)
+      und werden <strong>nirgends zentral von uns gespeichert</strong> — nicht in
+      einer Datenbank, nicht in Logs. Du kannst sie jederzeit selbst löschen: in
+      den Einstellungen (⚙️) ganz unten über den Knopf
+      <em>„Alle meine Daten auf diesem Gerät löschen"</em>. Alternativ,
+      wie bei jeder Website, über die Website-Daten deines Browsers.
+    </li>
+    <li>
+      <strong>Beim Abruf — WebUntis und Mensamax (über unseren Proxy-Server,
+      Cloudflare Workers):</strong> Wenn du auf "Aktualisieren" tippst, schickt
+      dein Browser die Zugangsdaten an unseren Proxy-Server bei Cloudflare. Der
+      reicht sie unmittelbar an WebUntis bzw. Mensamax weiter, holt die Antwort ab
+      und leitet sie an deinen Browser zurück. Auch hier: keine Speicherung der
+      Zugangsdaten — sie laufen nur "durch". Aus technischen Gründen
+      (Serverschutz, um WebUntis/Mensamax nicht bei jedem Klick neu anzufragen)
+      wird nur das Abfrage-Ergebnis (Stundenplan, Schulessen-Status) für ca. 4
+      Minuten zwischengespeichert.
+      <p style="margin-top:.6rem;">
+        <strong>Was das technisch bedeutet — offen gesagt:</strong> Damit der
+        Proxy die Zugangsdaten weiterreichen kann, muss er sie unterwegs
+        <em>sehen</em> können. Die Transportverschlüsselung (HTTPS) endet bei
+        Cloudflare, wird dort für den Weiterversand kurz aufgelöst und zu
+        WebUntis bzw. Mensamax neu aufgebaut. Der Betreiber dieser Seite
+        <em>könnte</em> die Zugangsdaten an dieser Stelle also technisch
+        mitlesen. Er tut es nicht — es wird nichts protokolliert und nichts
+        gespeichert — aber du sollst dich nicht darauf verlassen müssen:
+        Genau deshalb liegt der komplette Quellcode offen (MIT-Lizenz), sodass
+        das jederzeit von außen überprüfbar ist. Wer diesen Umweg gar nicht
+        gehen möchte, kann den Dienst nicht sinnvoll nutzen — WebUntis und
+        Mensamax lassen direkte Anfragen aus dem Browser nicht zu.
+      </p>
+    </li>
+    <li>
+      <strong>Beim Abruf — ccCampus (direkt aus deinem Browser):</strong> Bei
+      diesem Essensanbieter schickt dein Browser die Zugangsdaten direkt an
+      ccCampus (mbs5online.de), ohne Umweg über unseren Proxy-Server — technisch
+      bedingt (ccCampus lässt direkte Browser-Anfragen zu, blockiert aber
+      Anfragen von Server-Infrastruktur wie unserem Proxy). Auch hier: keine
+      Speicherung bei uns, die Daten laufen ausschließlich zwischen deinem
+      Browser und ccCampus.
+    </li>
+    <li>
+      <strong>Empfänger:</strong> WebUntis (die von dir jeweils eingetragene
+      Schule) sowie der von dir gewählte Essensanbieter (Mensamax oder
+      ccCampus) erhalten die Zugangsdaten direkt, um die angeforderten
+      Informationen abzurufen. Diese Dienste verarbeiten die Daten nach ihren
+      eigenen Datenschutzbestimmungen — dafür sind sie jeweils selbst
+      verantwortlich.
+    </li>
+  </ul>
+  <p>
+    <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des
+    von dir angeforderten Dienstes) bzw. lit. f DSGVO (berechtigtes Interesse an
+    einer funktionierenden, einfachen Übersicht). Die Eingabe der Zugangsdaten
+    deines Kindes erfolgt durch dich als Erziehungsberechtigte:n freiwillig und
+    eigenverantwortlich.
+  </p>
+
+  <h2>3. Hosting</h2>
+  <p>
+    Dieser Dienst (Website und Proxy-Server) wird extern gehostet bei:<br>
+    Cloudflare Germany GmbH, Rosental 7, 80331 München
+  </p>
+  <p>
+    Der Hoster verarbeitet dabei technische Verbindungsdaten (v. a. IP-Adressen,
+    Zeitpunkt des Zugriffs) im Rahmen der sicheren, schnellen Bereitstellung dieses
+    Dienstes (Art. 6 Abs. 1 lit. f DSGVO). Eine gesonderte, zentrale Speicherung
+    deiner Zugangsdaten durch den Hoster findet nicht statt — dazu siehe Abschnitt 2.
+  </p>
+  <p>
+    Mit Cloudflare besteht ein Vertrag über Auftragsverarbeitung (AVV) — der
+    datenschutzrechtlich vorgeschriebene Vertrag, der sicherstellt, dass
+    Cloudflare Daten nur nach unseren Weisungen und unter Einhaltung der
+    DSGVO verarbeitet. Cloudflare bindet diesen AVV automatisch in die
+    Nutzungsbedingungen für Kund:innen ohne separat verhandelten
+    Enterprise-Vertrag ein (sogenannte „Self-Serve Subscription Agreement" —
+    das betrifft auch diesen, kostenlosen Account), ohne dass eine
+    gesonderte Unterschrift nötig ist. Geprüft am 28.08.2026, bestätigt im
+    Cloudflare-Dashboard unter Konto-Konfiguration. Der AVV selbst:
+    <a href="https://www.cloudflare.com/cloudflare-customer-dpa/" target="_blank" rel="noopener">Cloudflare Data Processing Addendum</a>.
+  </p>
+
+  <h2>4. Cookies &amp; Tracking</h2>
+  <p>
+    Es werden keine Cookies gesetzt und keine Analyse- oder Tracking-Tools
+    eingebunden. Die einzige lokale Speicherung ist das oben beschriebene
+    <code>localStorage</code> für deine eigenen eingegebenen Daten.
+  </p>
+
+  <h2>5. Server-Log-Dateien</h2>
+  <p>
+    Der Hoster erhebt und speichert automatisch Informationen in Server-Log-Dateien,
+    die dein Browser automatisch übermittelt:
+  </p>
+  <ul>
+    <li>Browsertyp und Browserversion</li>
+    <li>verwendetes Betriebssystem</li>
+    <li>Referrer-URL</li>
+    <li>Hostname des zugreifenden Rechners</li>
+    <li>Uhrzeit der Serveranfrage</li>
+    <li>IP-Adresse</li>
+  </ul>
+  <p>
+    Eine Zusammenführung dieser Daten mit anderen Quellen erfolgt nicht. Grundlage:
+    Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an technisch fehlerfreiem
+    Betrieb).
+  </p>
+
+  <h2>6. Technische und organisatorische Maßnahmen</h2>
+  <p>
+    Dieser Dienst ist durchgängig per SSL-/TLS-Verschlüsselung erreichbar. Eine
+    verschlüsselte Verbindung erkennst du daran, dass die Adresszeile deines
+    Browsers mit <code>https://</code> beginnt und am Schloss-Symbol in der
+    Adresszeile. Darüber hinaus, in einfachen Worten statt in Paragraphen:
+  </p>
+  <ul>
+    <li>
+      Keine Zugangsdaten werden serverseitig protokolliert oder dauerhaft
+      gespeichert (siehe Abschnitt 2) — auch nicht in Fehlerprotokollen.
+    </li>
+    <li>
+      Zwischengespeicherte Antworten (die 4-Minuten-Kurzzeit-Zwischenspeicherung
+      aus Abschnitt 2) sind ausschließlich über deine tatsächlichen
+      Zugangsdaten abrufbar — ein zwischengespeichertes Ergebnis wird nur an
+      dieselbe, korrekt authentifizierte Anfrage ausgeliefert, nie ungeprüft.
+    </li>
+    <li>
+      Der Proxy-Server nimmt Anfragen ausschließlich an vorab geprüfte,
+      bekannte Ziel-Adressen entgegen (WebUntis- bzw. Essensanbieter-Server) —
+      er lässt sich nicht als Werkzeug missbrauchen, um beliebige andere
+      Adressen im Internet anzufragen.
+    </li>
+    <li>
+      Eine Mengenbegrenzung schützt davor, dass der Proxy-Server für massenhafte,
+      automatisierte Anmeldeversuche missbraucht wird.
+    </li>
+    <li>
+      Standard-Sicherheitsmechanismen des Browsers sind aktiviert (u. a. eine
+      Content-Security-Policy, die das Nachladen fremden Codes unterbindet, sowie
+      Schutz vor Einbettung dieser Seite in fremde Webseiten).
+    </li>
+    <li>
+      Der komplette Quellcode ist offen einsehbar (MIT-Lizenz) — jede der
+      genannten Maßnahmen lässt sich unabhängig nachprüfen, statt auf unser
+      Wort angewiesen zu sein.
+    </li>
+  </ul>
+  <p style="font-size:.85rem; color:var(--muted);">
+    Diese Liste beschreibt den tatsächlichen technischen Stand zum Zeitpunkt
+    der letzten Aktualisierung dieser Erklärung, ist aber keine abschließende
+    rechtliche Bewertung nach Art. 32 DSGVO — dazu gehört auch ein internes,
+    hier nicht veröffentlichtes Verzeichnis der Verarbeitungstätigkeiten.
+  </p>
+
+  <h2>7. Deine Rechte</h2>
+  <p>Du hast jederzeit das Recht auf:</p>
+  <ul>
+    <li><strong>Auskunft</strong> über deine bei uns verarbeiteten Daten, deren Herkunft, Empfänger und Zweck der Verarbeitung</li>
+    <li><strong>Berichtigung</strong> unrichtiger Daten</li>
+    <li><strong>Löschung</strong> — da nichts zentral gespeichert wird, erledigst du das selbst und sofort: in den Einstellungen (⚙️) ganz unten über den Knopf „Alle meine Daten auf diesem Gerät löschen"</li>
+    <li><strong>Einschränkung der Verarbeitung</strong>, etwa solange die Richtigkeit deiner Daten strittig ist</li>
+    <li><strong>Widerspruch</strong> gegen eine auf Art. 6 Abs. 1 lit. f DSGVO gestützte Verarbeitung aus Gründen, die sich aus deiner besonderen Situation ergeben</li>
+    <li><strong>Datenübertragbarkeit</strong> für automatisiert verarbeitete Daten, in einem gängigen, maschinenlesbaren Format</li>
+    <li><strong>Beschwerde bei einer Datenschutz-Aufsichtsbehörde</strong>, insbesondere in dem Mitgliedstaat deines gewöhnlichen Aufenthalts oder Arbeitsplatzes</li>
+  </ul>
+  <p>
+    Bei Fragen oder zur Ausübung dieser Rechte erreichst du mich über die
+    Kontaktdaten oben.
+  </p>
+
+  <p style="font-size:.78rem; color:var(--muted); margin-top:2rem;">
+    Diese Datenschutzerklärung wurde für Abschnitt 2 individuell verfasst;
+    die übrigen Abschnitte entstanden auf Basis einer Vorlage von
+    <a href="https://www.e-recht24.de/" target="_blank" rel="noopener">eRecht24</a>
+    und wurden für diesen Dienst angepasst.
+  </p>
+</main>
+<footer class="legal">
+  <a href="ueber.html">Über Heute Schule</a> · <a href="impressum.html">Impressum</a>
+</footer>
+</body>
+</html>

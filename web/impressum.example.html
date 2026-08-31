@@ -1,0 +1,60 @@
+<!--
+  Vorlage — keine echten Daten. Kopieren nach impressum.html, Platzhalter
+  unten ausfüllen. impressum.html selbst ist bewusst NICHT Teil dieses
+  Repos (siehe .gitignore) — die MIT-Lizenz gilt für den Code, nicht für
+  personenbezogene Kontaktdaten. Ohne ausgefülltes Impressum ist eine in
+  Deutschland betriebene Website nicht rechtskonform (§ 5 DDG).
+-->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impressum — Heute Schule</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Nur impressumsspezifisch: die Abschnittsüberschriften sind hier bewusst
+     kleine Großbuchstaben-Label statt normaler h2-Überschriften. */
+  body.textseite h2{
+    margin-top:2rem; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.02em; font-size:.8rem;
+  }
+  body.textseite p{margin:.3rem 0;}
+</style>
+</head>
+<body class="textseite">
+<main>
+  <div class="page-nav">
+    <a class="back" href="index.html">← Zurück</a>
+    <a class="uebersicht-btn" href="index.html">Übersicht</a>
+  </div>
+  <h1>Impressum</h1>
+
+  <h2>Angaben gemäß § 5 DDG</h2>
+  <p>[Vor- und Nachname]</p>
+  <p>[Straße und Hausnummer]</p>
+  <p>[PLZ und Ort]</p>
+
+  <h2>Kontakt</h2>
+  <p>Telefon: [Telefonnummer]</p>
+  <p>E-Mail: [E-Mail-Adresse]</p>
+
+  <h2>Verantwortlich für den Inhalt</h2>
+  <p>[Vor- und Nachname] (Anschrift wie oben)</p>
+
+  <h2>Haftungshinweis</h2>
+  <p>
+    Diese Seite zeigt lediglich Daten an, die auf Anfrage der Nutzer:innen direkt von
+    WebUntis bzw. dem jeweils gewählten Essensanbieter (Mensamax/parentsmensa.de oder
+    ccCampus/mbs5online.de) abgerufen werden. Für die Richtigkeit,
+    Vollständigkeit und Verfügbarkeit dieser Drittanbieter-Daten wird keine Gewähr
+    übernommen. Für Inhalte externer, verlinkter Seiten sind ausschließlich deren
+    Betreiber verantwortlich.
+  </p>
+</main>
+<footer class="legal">
+  <a href="ueber.html">Über Heute Schule</a> · <a href="datenschutz.html">Datenschutz</a>
+</footer>
+</body>
+</html>
