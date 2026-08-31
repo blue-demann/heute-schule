@@ -230,6 +230,12 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
 
 // ── Mensamax / parentsmensa.de ──────────────────────────────────────────
 
+// Wachsbare Liste statt starrem Einzeldomain-Zwang, weil andere Schulen
+// andere Mensamax-Portal-Domains desselben Anbieter-Typs nutzen können —
+// derselbe Ansatz wie CCCAMPUS_ERLAUBTE_DOMAINS in web/index.html. Taucht
+// eine neue Schule mit anderer Mensamax-Domain auf, hier ergänzen.
+const MENSAMAX_ERLAUBTE_DOMAINS = ['.parentsmensa.de'];
+
 // Mensamax liefert Menü-Texte mit HTML-kodierten Sonderzeichen aus (z. B.
 // "&amp;" statt "&", teils auch Umlaute als Entity). Ohne Cloudflare-Workers-
 // eigenes DOM müssen wir das manuell dekodieren, statt die Rohzeichen an die
@@ -331,7 +337,7 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
   if (!base || !lunchCfg.username || !lunchCfg.password) {
     throw new Error('Mensamax-Konfiguration unvollständig (base/username/password)');
   }
-  pruefeSichereHttpsUrl(base);
+  pruefeSichereHttpsUrl(base, { pflichtSuffixe: MENSAMAX_ERLAUBTE_DOMAINS });
 
   const cookieHeader = await getMensamaxCookies(lunchCfg);
   if (!cookieHeader) return 'Schulessen: Login fehlgeschlagen';

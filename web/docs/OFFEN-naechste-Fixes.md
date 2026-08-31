@@ -1,12 +1,15 @@
 # Offene Punkte
 
-**Stand: 28.08.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 31.08.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
-offen. Seither wurden alle bis auf einen (rechtliche Prüfung) umgesetzt und
+offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
 [QA-Bericht-2026-08-27-v0.1.1.md](QA-Bericht-2026-08-27-v0.1.1.md) und
-[PEER-REVIEW-2026-08-27.md](PEER-REVIEW-2026-08-27.md), die als Zeitpunkt-
-Momentaufnahmen unverändert bleiben.
+[PEER-REVIEW-2026-08-27.md](PEER-REVIEW-2026-08-27.md). Eine dritte
+Prüfrunde am 31.08. (frische Sitzungen, kein Vorwissen) ergänzt zwei weitere
+Befunde, siehe [QA-Bericht-2026-08-31.md](QA-Bericht-2026-08-31.md) und
+[PEER-REVIEW-2026-08-31.md](PEER-REVIEW-2026-08-31.md). Alle vier Berichte
+bleiben als Zeitpunkt-Momentaufnahmen unverändert.
 
 ## Erledigt seit dem Peer-Review
 
@@ -22,26 +25,23 @@ Momentaufnahmen unverändert bleiben.
 | (nicht aus dem Review, aus dem Betatest 28.08.) Server-Feld akzeptierte keine kopierten Browser-URLs | Client- und serverseitige Bereinigung, `extrahiereWebUntisHostname` / `hostcheck.mjs` |
 | (Betatest 28.08., zweite Familie) ccCampus-Instanz unter `mbs5.de` statt `mbs5online.de` war blockiert | `CCCAMPUS_ERLAUBTE_DOMAINS`-Liste statt Einzelwert (`web/index.html`), CSP `connect-src` in `web/_headers` ergänzt, neuer Konsistenz-Test zwischen beiden Dateien |
 | AVV-Behauptung gegenüber Cloudflare unverifiziert | Verifiziert 28.08.2026 im Cloudflare-Dashboard (Konto → Konfigurationen): AVV automatisch Teil der Self-Serve Subscription Agreement, gilt für diesen kostenlosen Account. Details/Beleg in `Verarbeitungsverzeichnis-INTERN.md` Abschnitt 4, Link in `web/datenschutz.html` |
+| Veröffentlichung auf GitHub | Privates Repository unter `github.com/blue-demann/heute-schule` angelegt und gepusht; Commit-Historie vorab mit `git-filter-repo` von echten Kontaktdaten und der echten Commit-Autor-Identität bereinigt |
+| 🟡 (Peer-Review 31.08.) Mensamax-Basis-URL ohne Domain-Beschränkung — akzeptierte jede öffentliche HTTPS-Domain, während WebUntis hart auf `*.webuntis.com` begrenzt war | Wachsbare Allowlist wie bei ccCampus: `MENSAMAX_ERLAUBTE_DOMAINS` in `proxy/worker.js`, aktuell `parentsmensa.de`; `pruefeSicherenHostname()`/`pruefeSichereHttpsUrl()` in `hostcheck.mjs` um `pflichtSuffixe` (Liste statt Einzelwert) erweitert; Formular-Hinweis ergänzt |
 
 ## Noch offen
 
-1. **🟡 Juristische Prüfung vor weiterer Ausweitung.** Haushaltsausnahme
-   (Art. 2 Abs. 2 lit. c DSGVO) fällt weg, sobald weitere fremde Familien
-   mitnutzen. Vorbereitet: `Verarbeitungsverzeichnis-INTERN.md` (Entwurf,
-   Art. 30, AVV-Punkt jetzt verifiziert), TOM-Abschnitt in der
+1. **🟡 Juristische Prüfung.** Die Haushaltsausnahme (Art. 2 Abs. 2 lit. c
+   DSGVO) deckt nur rein familiäre Nutzung ab — eine zweite,
+   familienfremde Familie nutzt bereits aktiv mit (ccCampus-Essensanbieter,
+   siehe `PROJEKT.md` Abschnitt 1), die Ausnahme dürfte also schon jetzt
+   nicht mehr greifen, nicht erst „bei weiterer Ausweitung". Vorbereitet:
+   `Verarbeitungsverzeichnis-INTERN.md` (Entwurf, Art. 30, AVV-Punkt
+   verifiziert), TOM-Abschnitt in der
    Datenschutzerklärung. Noch zu tun:
    - Einschätzung durch jemanden mit juristischem Hintergrund einholen
    - Speicherdauer der Cloudflare-Server-Logs klären
-2. **Veröffentlichung auf GitHub (oder vergleichbar).** Aktuell nur lokales
-   Git-Repository, kein Remote. Löst gleich zwei offene Punkte: das in
-   `ueber.html`/der Datenschutzerklärung gegebene Versprechen „Quellcode
-   liegt offen, hier bald verlinkt" ist erst damit eingelöst, und der
-   Bus-Factor (Abschnitt 13 in `PROJEKT.md`) sinkt, weil Code und Historie
-   dann nicht mehr ausschließlich auf Björns eigenem Rechner liegen. Vorher
-   kurz prüfen: `.gitignore` erneut gegenchecken (siehe erster Commit), ggf.
-   privates statt öffentliches Repo für den Anfang.
-3. **Kosmetisch, keine Eile:** Die WCAG-Versionsangaben in den beiden
-   Audit-Dokumenten (QA-Bericht Runde 1/2, Peer-Review) sind uneinheitlich
+2. **Kosmetisch, keine Eile:** Die WCAG-Versionsangaben in den Audit-
+   Dokumenten (QA-Bericht Runde 1/2, Peer-Review 27.08.) sind uneinheitlich
    zitiert (mal 2.1, mal ohne Version). Die Dokumente selbst bleiben als
    Zeitpunkt-Momentaufnahmen unverändert; für alle künftigen Prüfungen gilt:
    durchgängig **WCAG 2.2** referenzieren, mit Level (A/AA/AAA).

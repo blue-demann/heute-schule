@@ -121,15 +121,16 @@ nennt eRecht24 jetzt explizit als Quelle, mit Link (Abschnitt am Ende der
 Seite). Kein Ersatz für eine anwaltliche Prüfung im Zweifelsfall — diese
 Einschätzung ist eine Projektnotiz für die Weiterentwicklung.
 
-## ⚠ Vor weiterer Ausweitung prüfen: rechtliche Rolle ändert sich
+## ⚠ Juristische Prüfung nötig: rechtliche Rolle hat sich vermutlich geändert
 
-**Kein Rechtsrat, sondern ein Merkposten aus dem Peer-Review (27.08.2026).**
+**Kein Rechtsrat, sondern ein Merkposten aus zwei Peer-Reviews (27.08. und
+31.08.2026).**
 
-Solange „Heute Schule" nur die eigene Familie bedient, greift plausibel die
-**Haushaltsausnahme (Art. 2 Abs. 2 lit. c DSGVO)** — ausschließlich
-persönliche oder familiäre Tätigkeiten sind vom Anwendungsbereich
-ausgenommen. Sobald der Link an befreundete Familien geht, fällt diese
-Ausnahme weg: Dann werden personenbezogene Daten *fremder Kinder*
+Die **Haushaltsausnahme (Art. 2 Abs. 2 lit. c DSGVO)** deckt ausschließlich
+persönliche oder familiäre Tätigkeiten ab. Mit dem Essensanbieter ccCampus
+nutzt bereits eine befreundete, familienfremde Familie aktiv mit — die
+Ausnahme dürfte damit schon jetzt nicht mehr greifen, nicht erst bei
+künftiger Ausweitung. Dann werden personenbezogene Daten *fremder Kinder*
 verarbeitet, und der Betreiber ist voll Verantwortlicher im Sinne der DSGVO.
 
 Damit kommen Pflichten dazu, die eine Datenschutzerklärung allein nicht
@@ -151,15 +152,19 @@ Zu klären, bevor der Kreis weiter wächst:
   Browsers, nicht zentral.
 - Der Proxy selbst persistiert nichts, reicht Anfragen nur durch.
 - Schulessen-Status wird nur **gelesen**, nichts wird bestellt/storniert.
-- **SSRF/Open-Relay im Proxy (gefunden 27.08., behoben 27.08.):** `server`
-  (WebUntis) und `base` (Mensamax/ccCampus) kamen unvalidiert aus dem
-  unauthentifizierten Client-Request und landeten direkt in `fetch()`-Calls
-  — der Proxy ließ sich damit als offener Relay für beliebige https-Ziele
-  missbrauchen. Behoben durch Ziel-Host-Validierung in
-  `../proxy/hostcheck.mjs` (nur https, kein Zugangsdaten-in-URL-Trick, keine
-  privaten/Loopback/Link-lokalen Ziele; `server` zusätzlich hart auf
-  `*.webuntis.com` begrenzt). Mit Tests abgesichert, siehe Abschnitt "Tests"
-  oben.
+- **SSRF/Open-Relay im Proxy (gefunden 27.08., behoben 27.08., erweitert
+  31.08.):** `server` (WebUntis) und `base` (Mensamax/ccCampus) kamen
+  unvalidiert aus dem unauthentifizierten Client-Request und landeten
+  direkt in `fetch()`-Calls — der Proxy ließ sich damit als offener Relay
+  für beliebige https-Ziele missbrauchen. Behoben durch Ziel-Host-
+  Validierung in `../proxy/hostcheck.mjs` (nur https, kein
+  Zugangsdaten-in-URL-Trick, keine privaten/Loopback/Link-lokalen Ziele;
+  `server` zusätzlich hart auf `*.webuntis.com` begrenzt). Am 31.08. per
+  Peer-Review gefunden: Die Mensamax-`base` hatte diese zusätzliche
+  Domain-Beschränkung noch nicht — jede öffentliche HTTPS-Domain wurde
+  akzeptiert. Nachgezogen mit derselben wachsbaren Allowlist wie bei
+  ccCampus (`MENSAMAX_ERLAUBTE_DOMAINS` in `worker.js`, aktuell nur
+  `parentsmensa.de`). Mit Tests abgesichert, siehe Abschnitt "Tests" oben.
 - **Security-Header:** CSP, `Strict-Transport-Security`, `X-Frame-Options`
   u. a. über `_headers` (Cloudflare Pages). Die CSP erlaubt `unsafe-inline`
   für Skript/Style, weil die App bewusst als eine Datei ohne Build-Schritt
@@ -193,8 +198,8 @@ Zu klären, bevor der Kreis weiter wächst:
   benannt**: TLS endet bei Cloudflare, der Betreiber *könnte* die
   Zugangsdaten technisch mitlesen. Er tut es nicht (nichts wird geloggt oder
   gespeichert), aber niemand soll sich darauf verlassen müssen — deshalb der
-  offene Quellcode. Das gehörte offen gesagt, sobald fremde Familien
-  mitnutzen.
+  offene Quellcode. Das gehörte offen gesagt, jetzt eine familienfremde
+  Familie aktiv mitnutzt.
 - **Zugangsdaten liegen aktuell unverschlüsselt (Klartext-JSON) in
   localStorage.** Geprüft (27.08.): kein `innerHTML` mit externen/dynamischen
   Werten im Code, keine externen JS-Bibliotheken eingebunden — damit kein

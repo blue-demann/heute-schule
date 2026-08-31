@@ -58,7 +58,12 @@ function extrahiereHostnameAusUrl(eingabe) {
   return wert;
 }
 
-export function pruefeSicherenHostname(hostname, { pflichtSuffix } = {}) {
+// pflichtSuffix: genau eine feste Domain (z. B. WebUntis).
+// pflichtSuffixe: eine wachsbare Liste möglicher Domains (z. B. Mensamax,
+// wo verschiedene Schulen verschiedene Portal-Domains desselben
+// Anbieter-Typs nutzen können) — der Hostname muss auf mindestens eine
+// davon enden. Beide Parameter sind optional und schließen sich aus.
+export function pruefeSicherenHostname(hostname, { pflichtSuffix, pflichtSuffixe } = {}) {
   const bereinigt = extrahiereHostnameAusUrl(hostname);
   if (!bereinigt || typeof bereinigt !== 'string' || bereinigt.includes('@') || bereinigt.includes('/')) {
     throw new Error('Ungültiger Server-Hostname');
@@ -68,16 +73,20 @@ export function pruefeSicherenHostname(hostname, { pflichtSuffix } = {}) {
   if (istPrivatesOderLokalesZiel(h)) {
     throw new Error('Server-Hostname zeigt auf ein internes/lokales Ziel — nicht erlaubt');
   }
-  if (pflichtSuffix) {
-    const nackt = pflichtSuffix.replace(/^\./, '');
-    if (h !== nackt && !h.endsWith(pflichtSuffix)) {
-      throw new Error(`Server-Hostname muss auf "${pflichtSuffix}" enden`);
+  const kandidaten = pflichtSuffixe || (pflichtSuffix ? [pflichtSuffix] : null);
+  if (kandidaten) {
+    const passt = kandidaten.some((suffix) => {
+      const nackt = suffix.replace(/^\./, '');
+      return h === nackt || h.endsWith(suffix);
+    });
+    if (!passt) {
+      throw new Error(`Server-Hostname muss auf ${kandidaten.map((s) => `"${s}"`).join(' oder ')} enden`);
     }
   }
   return h;
 }
 
-export function pruefeSichereHttpsUrl(rawUrl) {
+export function pruefeSichereHttpsUrl(rawUrl, { pflichtSuffixe } = {}) {
   let u;
   try {
     u = new URL(rawUrl);
@@ -90,6 +99,6 @@ export function pruefeSichereHttpsUrl(rawUrl) {
   if (u.username || u.password) {
     throw new Error('Ungültige Basis-URL (keine Zugangsdaten in der URL selbst)');
   }
-  pruefeSicherenHostname(u.hostname);
+  pruefeSicherenHostname(u.hostname, { pflichtSuffixe });
   return u;
 }

@@ -384,6 +384,22 @@ test('gültiger WebUntis-Server geht durch', () => {
 test('Großschreibung wird normalisiert', () => {
   assertEqual(pruefeSicherenHostname('LG-Norderstedt.WebUntis.com', { pflichtSuffix: '.webuntis.com' }), 'lg-norderstedt.webuntis.com');
 });
+test('pflichtSuffixe (Liste) lässt eine der mehreren erlaubten Domains durch', () => {
+  assertEqual(
+    pruefeSicherenHostname('parentsmensa.de', { pflichtSuffixe: ['.parentsmensa.de', '.andere-schule.de'] }),
+    'parentsmensa.de'
+  );
+  assertEqual(
+    pruefeSicherenHostname('portal.andere-schule.de', { pflichtSuffixe: ['.parentsmensa.de', '.andere-schule.de'] }),
+    'portal.andere-schule.de'
+  );
+});
+test('pflichtSuffixe (Liste) lehnt Domain ab, die zu keinem Eintrag passt', () => {
+  assertWirft(
+    () => pruefeSicherenHostname('angreifer.example', { pflichtSuffixe: ['.parentsmensa.de', '.andere-schule.de'] }),
+    'muss auf'
+  );
+});
 test('fremde Domain wird abgelehnt', () => {
   assertWirft(() => pruefeSicherenHostname('angreifer.example', { pflichtSuffix: '.webuntis.com' }), 'muss auf');
 });
@@ -450,6 +466,24 @@ test('Cloud-Metadata als Basis-URL wird abgelehnt', () => {
 });
 test('Unsinn wird abgelehnt', () => {
   assertWirft(() => pruefeSichereHttpsUrl('nicht mal eine url'), 'Ungültige Basis-URL');
+});
+test('REGRESSION: Mensamax-Allowlist lässt die bekannte Domain durch', () => {
+  assertEqual(
+    pruefeSichereHttpsUrl('https://parentsmensa.de', { pflichtSuffixe: ['.parentsmensa.de'] }).hostname,
+    'parentsmensa.de'
+  );
+});
+test('REGRESSION: Mensamax-Allowlist lehnt beliebige fremde Domain ab', () => {
+  assertWirft(
+    () => pruefeSichereHttpsUrl('https://angreifer.example', { pflichtSuffixe: ['.parentsmensa.de'] }),
+    'muss auf'
+  );
+});
+test('REGRESSION: Suffix-Trick auf die Mensamax-Allowlist bleibt abgelehnt', () => {
+  assertWirft(
+    () => pruefeSichereHttpsUrl('https://parentsmensa.de.angreifer.example', { pflichtSuffixe: ['.parentsmensa.de'] }),
+    'muss auf'
+  );
 });
 
 // ── Proxy: Cache-Schlüssel ─────────────────────────────────────────────────

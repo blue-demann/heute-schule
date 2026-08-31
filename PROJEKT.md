@@ -91,11 +91,6 @@ Vergessenes missverstanden werden:
 - **Keine automatisierte Lighthouse-/axe-Core-Prüfung.** Beide QA-Runden
   liefen mit manueller Kontrastberechnung und DOM-Inspektion statt Tooling
   — offengelegt in den Audit-Berichten, nicht verschwiegen.
-- **Keine generische Mehr-Domain-Unterstützung für Mensamax.** Die
-  Basis-URL ist konfigurierbar, aber nicht gegen eine Allowlist geprüft wie
-  bei ccCampus — anders als WebUntis/ccCampus gibt es keine bekannte feste
-  Domain, auf die sich einschränken ließe, ohne andere Mensamax-Portale
-  auszuschließen.
 - **Keine Verschlüsselung der Zugangsdaten in localStorage.** Diskutiert
   und bewusst zurückgestellt (siehe Entscheidungs-Log).
 
@@ -254,10 +249,12 @@ offen benannt statt verschwiegen.
   (Technische und organisatorische Maßnahmen), eRecht24-Textbausteine für
   die Standardabschnitte.
 - **Interne Grenze, technisch relevant:** Die Haushaltsausnahme
-  (Art. 2 Abs. 2 lit. c DSGVO) deckt rein familiäre Nutzung ab — sobald
-  fremde Familien mitnutzen, entfällt sie, und volle DSGVO-Pflichten
-  greifen (u. a. Art. 30 Verzeichnis von Verarbeitungstätigkeiten,
-  Art. 32 TOMs). **Das ist eine Frage des Anwendungsbereichs, keine Frage
+  (Art. 2 Abs. 2 lit. c DSGVO) deckt nur rein familiäre Nutzung ab — mit
+  der zweiten, familienfremden Familie aus Abschnitt 1 dürfte sie bereits
+  heute nicht mehr greifen, nicht erst bei weiterer Ausweitung — mit
+  vollen DSGVO-Pflichten als Konsequenz (u. a. Art. 30 Verzeichnis von
+  Verarbeitungstätigkeiten, Art. 32 TOMs). **Das ist eine Frage des
+  Anwendungsbereichs, keine Frage
   der Sicherheitsqualität** — sie hängt daran, *wessen* Daten verarbeitet
   werden (Personen außerhalb des eigenen Haushalts oder nicht), nicht daran,
   wie gut Cache-Fix, Rate-Limit oder Security-Header inzwischen sind. Die
