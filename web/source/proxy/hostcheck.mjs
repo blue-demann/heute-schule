@@ -20,7 +20,7 @@ export function istPrivatesOderLokalesZiel(hostname) {
 
   const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4) {
-    const a = Number(ipv4[1]), b = Number(ipv4[2]);
+    const a = Number(ipv4[1]); const b = Number(ipv4[2]);
     if (a === 0 || a === 127 || a === 10) return true;   // "diese" Adresse / Loopback / RFC1918
     if (a === 172 && b >= 16 && b <= 31) return true;    // RFC1918
     if (a === 192 && b === 168) return true;             // RFC1918
@@ -53,7 +53,7 @@ export function istPrivatesOderLokalesZiel(hostname) {
 function extrahiereHostnameAusUrl(eingabe) {
   const wert = String(eingabe || '').trim();
   if (/^https?:\/\//i.test(wert)) {
-    try { return new URL(wert).hostname; } catch (e) { /* fällt durch zur normalen Prüfung */ }
+    try { return new URL(wert).hostname; } catch { /* fällt durch zur normalen Prüfung */ }
   }
   return wert;
 }
@@ -82,7 +82,7 @@ export function pruefeSichereHttpsUrl(rawUrl) {
   try {
     u = new URL(rawUrl);
   } catch (e) {
-    throw new Error('Ungültige Basis-URL');
+    throw new Error('Ungültige Basis-URL', { cause: e });
   }
   if (u.protocol !== 'https:') {
     throw new Error('Nur https:// als Basis-URL erlaubt');
