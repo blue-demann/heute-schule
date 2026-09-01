@@ -111,7 +111,7 @@ Vergessenes missverstanden werden:
 └─────────────┘
 ```
 
-**Drei Komponenten:**
+**Zwei Komponenten:**
 
 - **`web/`** — statische PWA auf Cloudflare Pages. Eine `index.html` für die
   App, drei Rechtstext-Seiten (`impressum.html`, `datenschutz.html`,
@@ -121,14 +121,6 @@ Vergessenes missverstanden werden:
   Mensamax-Anfragen serverseitig stellt (löst deren fehlende
   CORS-Freigabe), plus `hostcheck.mjs` (Ziel-Host-Validierung) und
   `cachekey.mjs` (Cache-Schlüssel-Bildung) als ausgelagerte, testbare Module.
-- **`analytics-report/`** — eigenständiger Cloudflare Worker mit
-  Cron-Trigger (wöchentlich), fragt Cloudflares eigene Analytics-Daten
-  (Web Analytics + Workers-Invocations) über die GraphQL Analytics API ab
-  und verschickt eine kurze Zusammenfassung per Mail über Resend. Kein
-  zusätzliches Tracking, keine Cookies — nutzt nur Daten, die Cloudflare
-  für Pages/Workers ohnehin erhebt. Läuft unabhängig vom Hauptproxy, eigene
-  `wrangler.toml`. Einrichtung (Konten/Tokens, die nur Björn selbst anlegen
-  kann) in `analytics-report/README.md`.
 
 **Warum zwei verschiedene Wege für strukturell ähnliche Anbieter:**
 WebUntis und Mensamax senden keine `Access-Control-Allow-Origin`-Header —
@@ -319,7 +311,7 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | `pad()`, Cookie-Extraktion, `parseLunchStatus()`, `buildLessonList()`, `formatLessons()`, `buildEmail()` | `stundenplan.js` | Geerbte Logik aus der ursprünglichen Apps-Script-Automation |
 | `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` (Beispielwerte + Property-Tests, s. u.) | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link) |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
-| `lastWeekAsRange()`, `formatEmailText()` | `analytics-report/worker.js` | Reine Formatierungs-/Datumslogik der Wochenstatistik-Mail |
+| `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
 **Property-based Tests** (`proxy/hostcheck.mjs`, seit 01.09.2026): Neben den
 Beispielwerten oben zusätzlich Tests, die über benannte Äquivalenzklassen
@@ -333,15 +325,16 @@ kein neues Paket) für reproduzierbare Fehlschläge.
 
 **Code Coverage** (`c8`, seit 01.09.2026): `npm run test:coverage` bzw. als
 Info-Zeile in `deploy.sh` (bricht den Deploy nicht ab). Miss nur, was
-`run-tests.mjs` tatsächlich lädt — `proxy/*`, `stundenplan.js`,
-`analytics-report/*`; `web/index.html` läuft im Browser und taucht bewusst
-nicht auf (siehe `.c8rc.json`, `include`-Liste). `hostcheck.mjs`/
-`cachekey.mjs`/`stundenplan.js` liegen bei 100 % Statement-Coverage,
-`proxy/worker.js` bei 0 % — der HTTP-Handler selbst (Rate-Limit,
-Request-Parsing, Response-Bau) ist nicht direkt getestet, nur die daraus
-ausgelagerten reinen Funktionen. Kein Mindestwert erzwungen
-(`check-coverage: false`) — eine erzwungene Zahl hätte hier wenig Aussage,
-da die App-Logik in `web/index.html` ohnehin außerhalb der Messung liegt.
+`run-tests.mjs` tatsächlich lädt — `proxy/*`, `stundenplan.js`;
+`web/index.html` läuft im Browser und taucht bewusst nicht auf (siehe
+`.c8rc.json`, `include`-Liste). Gesamt 99 % Statement-Coverage;
+`hostcheck.mjs`/`cachekey.mjs`/`stundenplan.js` bei 100 %, `worker.js` bei
+~99 % (ungetestet bleiben nur der Timeout-Abbruch-Pfad und eine
+kaputte-JSON-Antwort von WebUntis — beides schwer ohne echte Verzögerung
+bzw. künstlich verstümmelte Antwort zu simulieren, geringer Grenznutzen).
+Kein Mindestwert erzwungen (`check-coverage: false`) — eine erzwungene
+Zahl hätte hier wenig Aussage, da die App-Logik in `web/index.html`
+ohnehin außerhalb der Messung liegt.
 
 **Was die Testsuite bewusst nicht abdeckt:** UI-Verhalten im Browser (dafür
 wurden in den QA-Runden gezielte, manuelle Browser-Tests gegen echte oder
@@ -412,10 +405,9 @@ verloren war und am 31.08. erneut bereitgestellt wurde — siehe
 ## 10. Betrieb & Deploy
 
 ```bash
-./deploy.sh             # Standard: Tests, dann Proxy + Website + Analytics-Report
-./deploy.sh proxy       # nur der Haupt-Proxy
-./deploy.sh web         # nur die Website
-./deploy.sh analytics   # nur der Analytics-Report-Worker
+./deploy.sh          # Standard: Tests, dann Proxy + Website
+./deploy.sh proxy    # nur der Proxy
+./deploy.sh web      # nur die Website
 ```
 
 Bricht bei fehlschlagenden Tests ab, ohne zu deployen.

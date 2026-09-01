@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import stundenplan from './stundenplan.js';
 import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
-import { lastWeekAsRange, formatEmailText } from './analytics-report/worker.js';
+import proxyWorker from './proxy/worker.js';
 
 const {
   pad,
@@ -26,6 +26,21 @@ let passed = 0; let failed = 0;
 function test(name, fn) {
   try {
     fn();
+    console.log(`  ✓ ${name}`);
+    passed++;
+  } catch (e) {
+    console.error(`  ✗ ${name}`);
+    console.error(`    ${e.message}`);
+    failed++;
+  }
+}
+
+// For tests against proxy/worker.js's fetch() handler, which is async
+// throughout (real awaits on Promise.allSettled, cache lookups, ...) — a
+// plain sync test() can't catch a rejected promise.
+async function testAsync(name, fn) {
+  try {
+    await fn();
     console.log(`  ✓ ${name}`);
     passed++;
   } catch (e) {
@@ -657,6 +672,373 @@ test('missing config does not throw', () => {
   buildCacheKeyMaterial('20260827', {}, {});
 });
 
+// ── proxy/worker.js: fetch() handler ────────────────────────────────────
+//
+// worker.js runs in the Cloudflare Workers runtime, not Node — but its
+// fetch() handler only actually needs Request/Response/URL/crypto.subtle
+// (all native since Node 18) plus the Workers-only Cache API
+// (caches.default). A tiny hand-rolled stub is enough to call the real,
+// exported fetch() handler directly and exercise routing, rate-limiting,
+// caching and error-aggregation end to end — no wrangler dev/Miniflare
+// needed, consistent with this project's habit of writing 20 lines
+// instead of pulling in a package (see mulberry32 above).
+
+function makeCachesStub() {
+  const store = new Map();
+  return {
+    default: {
+      async match(request) {
+        const key = typeof request === 'string' ? request : request.url;
+        const stored = store.get(key);
+        return stored ? stored.clone() : undefined;
+      },
+      async put(request, response) {
+        const key = typeof request === 'string' ? request : request.url;
+        store.set(key, response.clone());
+      },
+    },
+  };
+}
+
+// worker.js fires cache writes via ctx.waitUntil() without awaiting them
+// (correct for a real Worker, which keeps running after the response is
+// sent) — a test that wants to see a completed write's effect (e.g. "the
+// next request now hits the cache") needs to explicitly drain them first.
+function makeCtx() {
+  const waits = [];
+  return {
+    waitUntil(promise) { waits.push(promise); },
+    async drain() { await Promise.all(waits); waits.length = 0; },
+  };
+}
+
+// Routes outbound fetch() calls made by worker.js (to WebUntis/Mensamax)
+// to canned responses instead of the real network. Throws loudly on an
+// unexpected call instead of silently reaching the real internet — tests
+// that expect zero network calls pass an empty handler list on purpose.
+const realFetch = globalThis.fetch;
+function mockFetch(handlers) {
+  globalThis.fetch = async (url, options = {}) => {
+    const urlStr = String(url);
+    const handler = handlers.find((h) => h.test(urlStr, options));
+    if (!handler) throw new Error(`unexpected fetch() in test: ${urlStr}`);
+    return handler.respond(urlStr, options);
+  };
+}
+function restoreFetch() {
+  globalThis.fetch = realFetch;
+}
+
+const TEST_ENV = { ALLOWED_ORIGIN: 'https://heute-schule.pages.dev' };
+
+function apiRequest(body, extraHeaders = {}) {
+  return new Request('https://proxy.test/api/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.7', ...extraHeaders },
+    body: JSON.stringify(body),
+  });
+}
+
+console.log('\nproxy/worker.js: fetch() handler');
+
+await testAsync('OPTIONS request gets a CORS preflight response', async () => {
+  globalThis.caches = makeCachesStub();
+  const resp = await proxyWorker.fetch(new Request('https://proxy.test/api/status', { method: 'OPTIONS' }), TEST_ENV, makeCtx());
+  assertEqual(resp.status, 200);
+  assertEqual(resp.headers.get('Access-Control-Allow-Origin'), 'https://heute-schule.pages.dev');
+});
+
+await testAsync('an unknown path is rejected with 404', async () => {
+  globalThis.caches = makeCachesStub();
+  const resp = await proxyWorker.fetch(new Request('https://proxy.test/nope', { method: 'POST' }), TEST_ENV, makeCtx());
+  assertEqual(resp.status, 404);
+});
+
+await testAsync('GET on /api/status is rejected with 405', async () => {
+  globalThis.caches = makeCachesStub();
+  const resp = await proxyWorker.fetch(new Request('https://proxy.test/api/status', { method: 'GET' }), TEST_ENV, makeCtx());
+  assertEqual(resp.status, 405);
+});
+
+await testAsync('invalid JSON body is rejected with 400', async () => {
+  globalThis.caches = makeCachesStub();
+  const req = new Request('https://proxy.test/api/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: 'not json',
+  });
+  const resp = await proxyWorker.fetch(req, TEST_ENV, makeCtx());
+  assertEqual(resp.status, 400);
+});
+
+await testAsync('REGRESSION: the 31st request from the same IP within a minute is rate-limited', async () => {
+  globalThis.caches = makeCachesStub();
+  const ctx = makeCtx();
+  for (let i = 0; i < 30; i++) {
+    const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch: {} }), TEST_ENV, ctx);
+    await ctx.drain();
+    assert(resp.status !== 429, `request ${i + 1} of 30 was rate-limited too early`);
+  }
+  const blocked = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch: {} }), TEST_ENV, ctx);
+  assertEqual(blocked.status, 429);
+  assert(blocked.headers.get('Retry-After'), 'missing Retry-After header on a 429');
+});
+
+await testAsync('no CF-Connecting-IP header (local dev) is never rate-limited', async () => {
+  globalThis.caches = makeCachesStub();
+  const ctx = makeCtx();
+  const req = () => new Request('https://proxy.test/api/status', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ webuntis: {}, lunch: {} }),
+  });
+  for (let i = 0; i < 35; i++) {
+    const resp = await proxyWorker.fetch(req(), TEST_ENV, ctx);
+    assert(resp.status !== 429, `request ${i + 1} of 35 was rate-limited despite no IP header`);
+  }
+});
+
+await testAsync('empty webuntis/lunch config surfaces both errors, no network call made', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([]); // any fetch() call here is a bug: nothing should reach the network
+  const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch: {} }), TEST_ENV, makeCtx());
+  restoreFetch();
+  assertEqual(resp.status, 200);
+  const body = await resp.json();
+  assert(body.stundenFehler && body.stundenFehler.includes('WebUntis-Konfiguration unvollständig'), 'missing WebUntis config error');
+  assert(body.lunchFehler && body.lunchFehler.includes('Mensamax-Konfiguration unvollständig'), 'missing Mensamax config error');
+  assertEqual(body.stunden.length, 0);
+});
+
+await testAsync('an unsafe WebUntis server is rejected before any network call', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'angreifer.example', user: 'x', password: 'x', klasse: '9c' }, lunch: {} }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assert(body.stundenFehler.includes('muss auf'), 'expected the hostcheck allowlist rejection message');
+});
+
+await testAsync('REGRESSION: an identical second request is served from cache, not a second WebUntis round-trip', async () => {
+  globalThis.caches = makeCachesStub();
+  const ctx = makeCtx();
+  let webuntisCalls = 0;
+  mockFetch([{
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async () => {
+      webuntisCalls++;
+      return new Response(JSON.stringify({ error: { message: 'invalid credentials' } }));
+    },
+  }]);
+  const req = () => apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' }, lunch: {} });
+  await proxyWorker.fetch(req(), TEST_ENV, ctx);
+  await ctx.drain();
+  await proxyWorker.fetch(req(), TEST_ENV, ctx);
+  await ctx.drain();
+  restoreFetch();
+  assertEqual(webuntisCalls, 1);
+});
+
+await testAsync('a full WebUntis success round-trip returns a sorted, deduplicated lesson list', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([{
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async (url, options) => {
+      const requested = JSON.parse(options.body);
+      const results = {
+        authenticate: { sessionId: 'abc123' },
+        getKlassen: [{ id: 1, name: '9c' }],
+        getTimetable: [
+          { id: 10, startTime: 945, endTime: 1030, su: [{ id: 20 }], ro: [{ id: 2 }], code: null },
+          { id: 11, startTime: 800, endTime: 845, su: [{ id: 21 }], ro: [{ id: 1 }], code: 'irregular' },
+        ],
+        getSubjects: [{ id: 20, longName: 'Deutsch' }, { id: 21, longName: 'Mathematik' }],
+        getRooms: [{ id: 1, name: 'R101' }, { id: 2, name: 'R102' }],
+        logout: {},
+      };
+      return new Response(JSON.stringify({ result: results[requested.method] }));
+    },
+  }]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' }, lunch: {}, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.stundenFehler, null);
+  assertEqual(body.stunden.length, 2);
+  assertEqual(body.stunden[0].fach, 'Mathematik'); // sorted by start time: 08:00 first
+  assertEqual(body.stunden[0].vertretung, true);
+  assertEqual(body.stunden[1].fach, 'Deutsch');
+});
+
+await testAsync('a wrong WebUntis password produces the friendly login-failure message', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([{
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async () => new Response(JSON.stringify({ error: { message: 'invalid credentials' } })),
+  }]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'wrong', klasse: '9c' }, lunch: {}, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assert(body.stundenFehler.includes('Benutzername oder Passwort prüfen'), 'expected the friendly login-failure message');
+});
+
+await testAsync('a failed Mensamax login is reported as "Login fehlgeschlagen"', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([{
+    test: (url) => url.endsWith('/login.aspx'),
+    respond: async (url, options) => {
+      if (options.method === 'POST') return new Response('<html>Anmeldung fehlgeschlagen</html>');
+      return new Response('<html><input name="__VIEWSTATE" value="x"><input name="__VIEWSTATEGENERATOR" value="x"><input name="__EVENTVALIDATION" value="x"></html>');
+    },
+  }]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({
+      webuntis: {},
+      lunch: { provider: 'mensamax', base: 'https://x.parentsmensa.de', projekt: 'P', einrichtung: 'E', username: 'u', password: 'wrong' },
+      datum: '20260901',
+    }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.lunch, 'Schulessen: Login fehlgeschlagen');
+});
+
+await testAsync('a successful Mensamax order is parsed off the plan page', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([
+    {
+      test: (url) => url.endsWith('/login.aspx'),
+      respond: async (url, options) => {
+        if (options.method === 'POST') {
+          return new Response('<html>ok</html>', {
+            headers: [['Set-Cookie', 'MensaMax=tok123; Path=/'], ['Set-Cookie', 'ASP.NET_SessionId=sess1; Path=/']],
+          });
+        }
+        return new Response('<html><input name="__VIEWSTATE" value="x"><input name="__VIEWSTATEGENERATOR" value="x"><input name="__EVENTVALIDATION" value="x"></html>');
+      },
+    },
+    {
+      test: (url) => url.includes('/PlanForm.aspx'),
+      respond: async () => new Response(
+        '<div id="td20260901_1" class="speiseplan-menue tdSelected"><li>Spaghetti &amp; Soße</li></div>',
+        { status: 200 }
+      ),
+    },
+  ]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({
+      webuntis: {},
+      lunch: { provider: 'mensamax', base: 'https://x.parentsmensa.de', projekt: 'P', einrichtung: 'E', username: 'u', password: 'p' },
+      datum: '20260901',
+    }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.lunch, 'Essen bestellt: Spaghetti & Soße');
+});
+
+await testAsync('a ccCampus child sent to the proxy anyway gets the "runs in the browser" note, no network call', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: {}, lunch: { provider: 'cccampus' }, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.lunch, 'Schulessen: ccCampus wird direkt im Browser abgefragt, nicht über den Proxy');
+});
+
+await testAsync('an unknown lunch provider is reported by name, no network call', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: {}, lunch: { provider: 'irgendwas' }, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.lunch, 'Schulessen: unbekannter Anbieter "irgendwas"');
+});
+
+await testAsync('a Mensamax day with no menu selected yet is distinguished from no school lunch at all', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([
+    {
+      test: (url) => url.endsWith('/login.aspx'),
+      respond: async (url, options) => {
+        if (options.method === 'POST') {
+          return new Response('<html>ok</html>', { headers: [['Set-Cookie', 'MensaMax=tok123; Path=/']] });
+        }
+        return new Response('<html></html>');
+      },
+    },
+    {
+      // day marker present, but no "tdSelected" — a menu day with nothing ordered yet.
+      test: (url) => url.includes('/PlanForm.aspx'),
+      respond: async () => new Response('<div id="td20260901_1" class="speiseplan-menue"><li>Spaghetti</li></div>'),
+    },
+  ]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({
+      webuntis: {},
+      lunch: { provider: 'mensamax', base: 'https://x.parentsmensa.de', projekt: 'P', einrichtung: 'E', username: 'u', password: 'p' },
+      datum: '20260901',
+    }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.lunch, 'Kein Menü bestellt');
+});
+
+await testAsync('getSetCookies falls back to a single set-cookie header when getSetCookie() is unavailable', async () => {
+  globalThis.caches = makeCachesStub();
+  // Simulate a fetch implementation without Headers#getSetCookie() (older
+  // runtimes) by handing back a Response whose headers object lacks it —
+  // exercises the fallback branch instead of skipping it silently.
+  mockFetch([{
+    test: (url) => url.endsWith('/login.aspx'),
+    respond: async (url, options) => {
+      if (options.method === 'POST') {
+        const resp = new Response('<html>Anmeldung fehlgeschlagen</html>');
+        const headers = Object.create(Object.getPrototypeOf(resp.headers), {
+          get: { value: (name) => (name.toLowerCase() === 'set-cookie' ? 'MensaMax=tok; Path=/' : null) },
+          getSetCookie: { value: undefined },
+        });
+        Object.defineProperty(resp, 'headers', { value: headers });
+        return resp;
+      }
+      return new Response('<html></html>');
+    },
+  }]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({
+      webuntis: {},
+      lunch: { provider: 'mensamax', base: 'https://x.parentsmensa.de', projekt: 'P', einrichtung: 'E', username: 'u', password: 'p' },
+      datum: '20260901',
+    }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  // "Anmeldung fehlgeschlagen" in the HTML alone is already enough to fail
+  // the login — this test's point is only that reading the fallback path
+  // doesn't throw, not the login outcome itself.
+  assertEqual(body.lunch, 'Schulessen: Login fehlgeschlagen');
+});
+
+delete globalThis.caches;
+
 // ── ccCampus domain allowlist: index.html and _headers must agree ────────
 //
 // Two independent mechanisms check the same domain list: the CSP
@@ -687,45 +1069,6 @@ test('CCCAMPUS_ALLOWED_DOMAINS and the CSP connect-src list the same domains', (
   assertEqual(JSON.stringify(fromJs), JSON.stringify(fromCsp));
 });
 
-console.log('\nlastWeekAsRange() (analytics-report)');
-
-test('returns exactly 7 full days, ending the day before (UTC)', () => {
-  const now = new Date('2026-09-08T10:00:00Z'); // a Tuesday
-  const { since, until } = lastWeekAsRange(now);
-  assertEqual(since, '2026-09-01T00:00:00.000Z');
-  assertEqual(until, '2026-09-08T00:00:00.000Z');
-});
-
-test('handles a month boundary correctly', () => {
-  const now = new Date('2026-09-03T00:00:00Z');
-  const { since } = lastWeekAsRange(now);
-  assertEqual(since, '2026-08-27T00:00:00.000Z');
-});
-
-console.log('\nformatEmailText() (analytics-report)');
-
-test('full numbers are printed', () => {
-  const text = formatEmailText({
-    since: '2026-09-01T00:00:00.000Z',
-    until: '2026-09-08T00:00:00.000Z',
-    visits: 42,
-    proxyRequests: 17,
-  });
-  assert(text.includes('2026-09-01 bis 2026-09-08'), 'date range missing from the text');
-  assert(text.includes('Website-Besuche: 42'), 'visit count missing from the text');
-  assert(text.includes('Proxy-Anfragen (WebUntis/Mensamax): 17'), 'proxy count missing from the text');
-});
-
-test('missing values are marked "nicht verfügbar", not silently dropped', () => {
-  const text = formatEmailText({
-    since: '2026-09-01T00:00:00.000Z',
-    until: '2026-09-08T00:00:00.000Z',
-    visits: null,
-    proxyRequests: 5,
-  });
-  assert(text.includes('Website-Besuche: nicht verfügbar'), 'missing value is not marked as such');
-});
-
 // ── No journal comments in the code ─────────────────────────────────────────
 //
 // Comments explain the current state, not the history of changes that led
@@ -751,7 +1094,6 @@ test('no date/history signal words in code comments', () => {
   const files = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
     'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
-    'analytics-report/worker.js',
     'web/index.html', 'web/_headers',
   ];
   const signalWords = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert|fix from|beta test \(|for months|has happened since|confirmed \(\d|verified \(\d|\bwas fixed\b|changed later/;

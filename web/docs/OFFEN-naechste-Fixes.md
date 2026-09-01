@@ -41,6 +41,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🔴 (Peer-Review 01.09., Fund A-1) Der Mensamax-SSRF-Fix (Zeile oben) war committet und lokal getestet, lief aber nie auf dem produktiven Proxy — Open-Relay für beliebige öffentliche HTTPS-Ziele blieb live, obwohl als „erledigt" dokumentiert | `./deploy.sh proxy` ausgeführt; per direktem `curl` gegen den Live-Proxy verifiziert — nicht erlaubte Domain wird jetzt abgelehnt, `.parentsmensa.de`-Subdomain kommt durch |
 | 🟡 (Peer-Review 01.09., Fund D-1) Der eigens für obigen Fund gebaute Live-vs-HEAD-Check in `deploy.sh` war selbst funktionslos — Cloudflare Pages liefert Dateien mit führendem Punkt im Namen nicht aus | `web/.deploy-commit` → `web/deploy-commit.txt`; nach vollständigem `./deploy.sh` live verifiziert: Hash stimmt exakt mit Git-HEAD überein |
 | 🟡 (Peer-Review 01.09., Fund D-2) ESLint schloss `web/**` komplett von jeder Prüfung aus, nicht nur eine einzelne Regel | `eslint-plugin-html` prüft jetzt `web/index.html`/`web/ueber.html` (Inline-Script) und `web/sw.js` mit denselben Regeln wie der übrige Code (außer `var`); erster echter Lauf fand vier reale, bisher unentdeckte kleine Probleme im Code, alle behoben |
+| Testlücke aus der Code-Coverage-Einführung: `proxy/worker.js` (der HTTP-Handler selbst) lag bei 0 % | Direkter Test des exportierten `fetch()`-Handlers — kleiner selbstgebauter `caches`-Stub, gemocktes `fetch()`, native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit. Jetzt ~99 % Statement-Coverage, 17 neue Tests (Routing, Rate-Limit, Cache-Hit-Regression, WebUntis-/Mensamax-Voll-Durchlauf inkl. Fehlerfälle) |
 
 ## Noch offen
 
@@ -69,20 +70,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
    SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
    Besonders relevant wegen des geplanten eigenen Wechsels auf iPhone.
-5. **Wartet auf manuelle Einrichtung:** `analytics-report/` (wöchentliche
-   Aufruf-Statistik per Mail) ist fertig gebaut, aber noch nicht live —
-   braucht drei Schritte, die nur Björn selbst machen kann (Web-Analytics-
-   Site anlegen, Cloudflare-API-Token, Resend-Konto). Details in
-   `analytics-report/README.md`. Die GraphQL-Query ist nach Dokumentation
-   gebaut, aber noch nicht gegen einen echten Account getestet.
-6. **Testlücke, durch Code-Coverage-Einführung sichtbar geworden:**
-   `proxy/worker.js` liegt bei 0 % Statement-Coverage — der HTTP-Handler
-   selbst (Rate-Limit, Request-Parsing, Response-Bau) ist nicht direkt
-   getestet, nur die daraus ausgelagerten reinen Funktionen
-   (`hostcheck.mjs`/`cachekey.mjs`). Kein akuter Sicherheitsfund, aber ein
-   echter blinder Fleck — am ehesten mit `wrangler dev` + gezielten
-   `fetch()`-Tests gegen `export default { fetch }` zu schließen.
-
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.
