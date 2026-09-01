@@ -7,9 +7,10 @@
 # users, "I remember it in my head" isn't enough of a safeguard.
 #
 # Called from the Stundenplan folder:
-#   ./deploy.sh          # tests, then proxy + website
-#   ./deploy.sh proxy    # proxy only
-#   ./deploy.sh web      # website only
+#   ./deploy.sh             # tests, then proxy + website + analytics-report — the default, use this
+#   ./deploy.sh proxy       # main proxy only
+#   ./deploy.sh web         # website only
+#   ./deploy.sh analytics   # analytics-report worker only
 #
 # On failing tests, nothing gets deployed.
 #
@@ -121,6 +122,19 @@ if [ "$TARGET" = "alles" ] || [ "$TARGET" = "web" ]; then
     echo "    erneut prüfen: curl https://heute-schule.pages.dev/deploy-commit.txt)"
     echo "    oder der Deploy ist nicht wie erwartet gelaufen."
   fi
+  echo ""
+fi
+
+if [ "$TARGET" = "alles" ] || [ "$TARGET" = "analytics" ]; then
+  echo "▶ Analytics-Report deployen…"
+  # Eigener, unabhängiger Worker (eigene wrangler.toml, eigener Cron) —
+  # gehört trotzdem in den globalen Deploy, sonst muss man sich merken,
+  # ihn separat zu deployen. Läuft erst wirklich (Cron greift, Mail geht
+  # raus), sobald die drei manuellen Einrichtungsschritte aus
+  # analytics-report/README.md erledigt sind — bis dahin deployt dieser
+  # Schritt einfach den (dann noch unvollständig konfigurierten) Code,
+  # ohne Fehler.
+  ( cd analytics-report && npx wrangler deploy )
   echo ""
 fi
 

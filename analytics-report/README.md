@@ -64,8 +64,17 @@ npx wrangler secret put TEST_SECRET
 
 ## 5. Deployen und einmal live testen
 
+Läuft seit dem globalen Deploy-Skript mit — einfach von `Stundenplan/` aus
+(nicht von hier aus) das normale:
+
 ```bash
-npx wrangler deploy
+./deploy.sh
+```
+
+Nur diesen Worker deployen, ohne Proxy/Website anzufassen:
+
+```bash
+./deploy.sh analytics
 ```
 
 Danach (ersetze `DEIN-TEST-SECRET`):

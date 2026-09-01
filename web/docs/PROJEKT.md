@@ -412,9 +412,10 @@ verloren war und am 31.08. erneut bereitgestellt wurde — siehe
 ## 10. Betrieb & Deploy
 
 ```bash
-./deploy.sh          # Tests, dann Proxy + Website
-./deploy.sh proxy    # nur Proxy
-./deploy.sh web      # nur Website
+./deploy.sh             # Standard: Tests, dann Proxy + Website + Analytics-Report
+./deploy.sh proxy       # nur der Haupt-Proxy
+./deploy.sh web         # nur die Website
+./deploy.sh analytics   # nur der Analytics-Report-Worker
 ```
 
 Bricht bei fehlschlagenden Tests ab, ohne zu deployen.
