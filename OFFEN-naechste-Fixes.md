@@ -5,16 +5,22 @@ zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
 [QA-Bericht-2026-08-27-v0.1.1.md](https://github.com/blue-demann/heute-schule/blob/main/QA-Bericht-2026-08-27-v0.1.1.md)
-und [PEER-REVIEW-2026-08-27.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-27.md)
-(Links zeigen auf GitHub statt eine relative Datei — beide Berichte sind
-nicht Teil des `web/docs/`-Dumps, ein relativer Link würde von dort aus
-ins Leere laufen). Eine dritte Prüfrunde am 31.08. (frische Sitzungen,
-kein Vorwissen) ergänzt zwei weitere Befunde, siehe
+und [PEER-REVIEW-2026-08-27.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-27.md).
+Eine dritte Prüfrunde am 31.08. (frische Sitzungen, kein Vorwissen) ergänzte
+zwei weitere Befunde, siehe
 [QA-Bericht-2026-08-31.md](QA-Bericht-2026-08-31.md) und
-[PEER-REVIEW-2026-08-31.md](PEER-REVIEW-2026-08-31.md). Eine vierte Runde
-am 01.09. prüfte gezielt die Doku-Konsistenz, siehe
+[PEER-REVIEW-2026-08-31.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-31.md).
+Eine vierte Runde am 01.09. prüfte gezielt die Doku-Konsistenz, siehe
 [DOKU-KONSISTENZ-CHECK-2026-09-01.md](https://github.com/blue-demann/heute-schule/blob/main/DOKU-KONSISTENZ-CHECK-2026-09-01.md).
-Alle Berichte bleiben als Zeitpunkt-Momentaufnahmen unverändert.
+Eine fünfte Runde, ebenfalls am 01.09. und bewusst ohne die vierte Runde zu
+kennen (Unabhängigkeit), prüfte den QA-Bericht vom 31.08. gegen und führte
+zusätzlich ein eigenes Audit durch — fand dabei den schwerwiegendsten
+Befund bisher: den nicht deployten SSRF-Fix, siehe unten und
+[PEER-REVIEW-2026-09-01.md](PEER-REVIEW-2026-09-01.md).
+(Links zu Berichten, die nicht Teil des `web/docs/`-Dumps sind, zeigen
+bewusst auf GitHub statt auf eine relative Datei — dort würde ein
+relativer Link ins Leere laufen.) Alle Berichte bleiben als
+Zeitpunkt-Momentaufnahmen unverändert.
 
 ## Erledigt seit dem Peer-Review
 
@@ -32,6 +38,9 @@ Alle Berichte bleiben als Zeitpunkt-Momentaufnahmen unverändert.
 | AVV-Behauptung gegenüber Cloudflare unverifiziert | Verifiziert 28.08.2026 im Cloudflare-Dashboard (Konto → Konfigurationen): AVV automatisch Teil der Self-Serve Subscription Agreement, gilt für diesen kostenlosen Account. Details/Beleg in `Verarbeitungsverzeichnis-INTERN.md` Abschnitt 4, Link in `web/datenschutz.html` |
 | Veröffentlichung auf GitHub | Privates Repository unter `github.com/blue-demann/heute-schule` angelegt und gepusht; Commit-Historie vorab mit `git-filter-repo` von echten Kontaktdaten und der echten Commit-Autor-Identität bereinigt |
 | 🟡 (Peer-Review 31.08.) Mensamax-Basis-URL ohne Domain-Beschränkung — akzeptierte jede öffentliche HTTPS-Domain, während WebUntis hart auf `*.webuntis.com` begrenzt war | Wachsbare Allowlist wie bei ccCampus: `MENSAMAX_ERLAUBTE_DOMAINS` in `proxy/worker.js`, aktuell `parentsmensa.de`; `pruefeSicherenHostname()`/`pruefeSichereHttpsUrl()` in `hostcheck.mjs` um `pflichtSuffixe` (Liste statt Einzelwert) erweitert; Formular-Hinweis ergänzt |
+| 🔴 (Peer-Review 01.09., Fund A-1) Der Mensamax-SSRF-Fix (Zeile oben) war committet und lokal getestet, lief aber nie auf dem produktiven Proxy — Open-Relay für beliebige öffentliche HTTPS-Ziele blieb live, obwohl als „erledigt" dokumentiert | `./deploy.sh proxy` ausgeführt; per direktem `curl` gegen den Live-Proxy verifiziert — nicht erlaubte Domain wird jetzt abgelehnt, `.parentsmensa.de`-Subdomain kommt durch |
+| 🟡 (Peer-Review 01.09., Fund D-1) Der eigens für obigen Fund gebaute Live-vs-HEAD-Check in `deploy.sh` war selbst funktionslos — Cloudflare Pages liefert Dateien mit führendem Punkt im Namen nicht aus | `web/.deploy-commit` → `web/deploy-commit.txt`; nach vollständigem `./deploy.sh` live verifiziert: Hash stimmt exakt mit Git-HEAD überein |
+| 🟡 (Peer-Review 01.09., Fund D-2) ESLint schloss `web/**` komplett von jeder Prüfung aus, nicht nur eine einzelne Regel | `eslint-plugin-html` prüft jetzt `web/index.html`/`web/ueber.html` (Inline-Script) und `web/sw.js` mit denselben Regeln wie der übrige Code (außer `var`); erster echter Lauf fand vier reale, bisher unentdeckte kleine Probleme im Code, alle behoben |
 
 ## Noch offen
 
@@ -50,6 +59,16 @@ Alle Berichte bleiben als Zeitpunkt-Momentaufnahmen unverändert.
    zitiert (mal 2.1, mal ohne Version). Die Dokumente selbst bleiben als
    Zeitpunkt-Momentaufnahmen unverändert; für alle künftigen Prüfungen gilt:
    durchgängig **WCAG 2.2** referenzieren, mit Level (A/AA/AAA).
+3. **🟡 (Peer-Review 01.09., Fund C-2) „Demo-Website"-Hinweistext
+   missverständlich.** Klingt nach „nicht ernst gemeint, kann jederzeit
+   verschwinden", gemeint ist eigentlich ein Haftungsausschluss ohne SLA
+   (kein Demo im Sinne von unecht — echtes, täglich genutztes Tool zweier
+   Familien). Bessere Formulierung z. B. „Hobby-Projekt ohne Garantie, kann
+   jederzeit geändert werden".
+4. **🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon fehlt als PNG.**
+   `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
+   SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
+   Besonders relevant wegen des geplanten eigenen Wechsels auf iPhone.
 
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine

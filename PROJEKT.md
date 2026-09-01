@@ -335,14 +335,23 @@ relativer Link würde dort ins Leere laufen:
 - [`QA-Bericht-2026-08-31.md`](QA-Bericht-2026-08-31.md) — dritte Runde,
   ausgeführt von einer frischen Sitzung ohne Vorwissen über frühere
   Projektstände; kein 🔴-Befund, bestätigte alle vorherigen 🔴-Fixes live
-- [`PEER-REVIEW-2026-08-31.md`](PEER-REVIEW-2026-08-31.md) — ebenfalls
-  frische Sitzung, fand die zu enge Mensamax-Domain-Beschränkung (behoben,
-  siehe Entscheidungs-Log/Sicherheitsmodell) und die uneinheitliche
+- [`PEER-REVIEW-2026-08-31.md`](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-31.md) —
+  ebenfalls frische Sitzung, fand die zu enge Mensamax-Domain-Beschränkung
+  (behoben, siehe Entscheidungs-Log/Sicherheitsmodell) und die uneinheitliche
   Haushaltsausnahme-Formulierung in vier Dokumenten (ebenfalls korrigiert)
 - [`DOKU-KONSISTENZ-CHECK-2026-09-01.md`](https://github.com/blue-demann/heute-schule/blob/main/DOKU-KONSISTENZ-CHECK-2026-09-01.md) —
   vierte Runde, gezielt auf Doku-Konsistenz statt den vollen Kriterienkatalog;
   fand zwei 🔴-Funde (private Adresse in einer Prompt-Kopie, Code-Kommentar
   widersprach der eigenen Projekt-Doku), beide behoben
+- [`PEER-REVIEW-2026-09-01.md`](PEER-REVIEW-2026-09-01.md) — fünfte Runde,
+  ebenfalls frische Sitzung und bewusst ohne die vierte Runde gelesen zu
+  haben (Unabhängigkeit); Teil 1 prüft `QA-Bericht-2026-08-31.md` gegen,
+  Teil 2 ist ein eigenständiges Audit. Fand den bislang schwerwiegendsten
+  Befund: Der committete Mensamax-SSRF-Fix lief trotz „erledigt"-Vermerk
+  nie auf dem produktiven Proxy — per Live-`curl` nachgewiesen, seither
+  per `./deploy.sh proxy` behoben und ebenso live nachverifiziert. Fand
+  außerdem den kaputten Live-vs-HEAD-Check (Dotfile-Problem, s. o.) und
+  den zu pauschalen ESLint-Ausschluss von `web/**` (beide ebenfalls behoben)
 
 Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
 Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
@@ -350,14 +359,17 @@ c't-Stil-/Peer-Review-Berichte verlinkt — die Website zeigt den aktuellen
 Stand, nicht die Historie. Die früheren Runden
 bleiben hier im Repository nachvollziehbar.
 
-**Methodik — wichtig für die Einordnung:** Keine der vier Audit-Runden
+**Methodik — wichtig für die Einordnung:** Keine der fünf Audit-Runden
 wurde **von menschlichen Prüfer:innen durchgeführt**, sondern von Claude
 (Anthropics KI-Assistent) anhand strukturierter, von Björn selbst
 formulierter Prompts — mit echtem Zugriff auf die Live-Website und den
 Quellcode, aber ohne die Unabhängigkeit menschlicher Gutachter:innen. Die
-Runde vom 31.08. lief zusätzlich über zwei genuin unabhängige, frische
-Sitzungen ohne Kontext aus früheren Gesprächen zu diesem Projekt — nicht
-nur derselbe Assistent mit neuer Rolle. Alle Prompts liegen unter
+Runden vom 31.08. und die fünfte Runde vom 01.09. liefen zusätzlich über
+genuin unabhängige, frische Sitzungen ohne Kontext aus früheren Gesprächen
+zu diesem Projekt — nicht nur derselbe Assistent mit neuer Rolle; die
+fünfte Runde hat dabei bewusst auch die vierte Runde (Doku-Konsistenz-
+Check) nicht gelesen, um für ihr eigenes Audit unabhängig zu bleiben. Alle
+Prompts liegen unter
 [`prompts/`](prompts/) zur Nachvollziehbarkeit, verbatim archiviert:
 [`prompts/peer-review-bester-freund.md`](prompts/peer-review-bester-freund.md)
 und [`prompts/ct-stil-analyse.md`](prompts/ct-stil-analyse.md) (dessen
