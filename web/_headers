@@ -1,24 +1,23 @@
-# Security-Header für Cloudflare Pages.
-# Format: Pfad-Muster, darunter eingerückt die Header.
+# Security headers for Cloudflare Pages.
+# Format: path pattern, headers indented below it.
 #
-# Zur CSP-Entscheidung: script-src/style-src brauchen 'unsafe-inline', weil
-# die ganze App bewusst als eine Datei mit inline <style>/<script> gebaut ist
-# (keine externen Dateien, keine Frameworks). Die saubere Alternative wären
-# SHA-256-Hashes je Inline-Block — die müssten aber bei JEDER Code-Änderung
-# neu berechnet und hier eingetragen werden, sonst geht die Seite still
-# kaputt. Für ein Ein-Personen-Projekt ist das Risiko-/Wartungsverhältnis
-# schlecht. Der Rest der CSP bleibt deshalb bewusst eng: keine externen
-# Skripte, keine fremden Verbindungsziele, kein Einbetten in fremde Seiten.
+# On the CSP decision: script-src/style-src need 'unsafe-inline', because
+# the whole app is deliberately built as a single file with inline
+# <style>/<script> (no external files, no frameworks). The clean
+# alternative would be a SHA-256 hash per inline block — but those would
+# need recomputing and re-entering here on EVERY code change, or the page
+# silently breaks. For a one-person project that risk/maintenance ratio is
+# bad. The rest of the CSP therefore stays deliberately tight: no external
+# scripts, no third-party connection targets, no embedding in other sites.
 #
-# connect-src listet die tatsächlich genutzten Ziele: den eigenen Proxy
-# (WebUntis + Mensamax laufen über ihn) und ccCampus (läuft technisch bedingt
-# direkt aus dem Browser). ccCampus läuft unter mehreren Domains desselben
-# Anbieters (gleiche Software, gleicher Pfad "/ordering/") — mbs5online.de
-# und das kürzere mbs5.de. Diese Liste muss mit CCCAMPUS_ALLOWED_DOMAINS in
-# web/index.html übereinstimmen — eine Domain nur hier oder nur dort
-# einzutragen reicht nicht, beide Prüfungen müssen sie kennen. Weitere
-# Domains desselben Anbieters sind nicht ausgeschlossen; taucht wieder eine
-# auf, hier UND dort ergänzen.
+# connect-src lists the targets actually used: our own proxy (WebUntis +
+# Mensamax go through it) and ccCampus (runs directly from the browser for
+# technical reasons). ccCampus runs under several domains of the same
+# provider (same software, same "/ordering/" path) — mbs5online.de and the
+# shorter mbs5.de. This list has to match CCCAMPUS_ALLOWED_DOMAINS in
+# web/index.html — entering a domain only here or only there isn't enough,
+# both checks need to know about it. Further domains of the same provider
+# aren't ruled out; if another one shows up, add it here AND there.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://stundenplan-proxy.bluedemann.workers.dev https://*.mbs5online.de https://*.mbs5.de; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
