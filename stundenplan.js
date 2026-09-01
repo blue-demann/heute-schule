@@ -1,13 +1,19 @@
 'use strict';
 
-// Node.js-testbare Version der reinen Logik aus stundenplan_agent.gs
-// Keine GAS-spezifischen APIs (UrlFetchApp, GmailApp, etc.)
+// Node.js-testable version of the pure logic from stundenplan_agent.gs
+// No GAS-specific APIs (UrlFetchApp, GmailApp, etc.)
+//
+// Legacy code: inherited from the original Apps Script email automation
+// that "Heute Schule" replaced. Kept only for its test-covered logic, not
+// called by the live proxy or website. Its output strings (email subject/
+// body, status messages) are deliberately still German — they're the
+// exact text real parents used to receive, not this file's own code.
 
-const WOCHENTAGE = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const WEEKDAYS = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
-// ── Cookie-Extraktion ──────────────────────────────────────────────────────
+// ── Cookie extraction ────────────────────────────────────────────────────
 
 function extractLastPhpsessid(rawCookies) {
   const cookieStr = Array.isArray(rawCookies) ? rawCookies.join(';') : (rawCookies || '');
@@ -23,40 +29,44 @@ function extractUpdatedPhpsessid(rawCookies) {
   return `PHPSESSID=${allMatches[allMatches.length - 1][1]}`;
 }
 
-// ── Schulessen-Logik ───────────────────────────────────────────────────────
+// ── Lunch logic ──────────────────────────────────────────────────────────
 
-function parseLunchStatus(cal, details, heute) {
+function parseLunchStatus(cal, details, today) {
   if (!cal) return 'Schulessen: Daten nicht verfügbar';
-  const y = heute.getFullYear(); const m = heute.getMonth() + 1; const d = heute.getDate();
-  const tag = ((cal[String(y)] || {})[String(m)] || {})[String(d)] || {};
-  if (!tag.CATERING)  return 'Kein Schulessen heute';
-  if (tag.SIGNED_OFF) return 'Abgemeldet (kein Essen)';
+  const y = today.getFullYear(); const m = today.getMonth() + 1; const d = today.getDate();
+  const day = ((cal[String(y)] || {})[String(m)] || {})[String(d)] || {};
+  if (!day.CATERING)  return 'Kein Schulessen heute';
+  if (day.SIGNED_OFF) return 'Abgemeldet (kein Essen)';
   if (details && details.MENUES) {
-    const bestellt = details.MENUES.find(mn => mn.AUSGEWAEHLT === '1');
-    if (bestellt) return `Essen bestellt: ${bestellt.MENUE_TEXT} (${bestellt.PREIS})`;
+    const ordered = details.MENUES.find(mn => mn.AUSGEWAEHLT === '1');
+    if (ordered) return `Essen bestellt: ${ordered.MENUE_TEXT} (${ordered.PREIS})`;
     return 'Essen verfügbar (kein Menü gewählt)';
   }
   return 'Essen bestellt ✓';
 }
 
-// ── Stundenplan-Logik ──────────────────────────────────────────────────────
+// ── Timetable logic ──────────────────────────────────────────────────────
+//
+// Result field names (fach, raum, start, ende, vertretung) match the same
+// shape proxy/worker.js's getTimetable() returns — deliberately not
+// translated on their own, see the note there.
 
-function buildStundenListe(stunden, faecherMap, raeumMap) {
+function buildLessonList(lessons, subjectsById, roomsById) {
   const seen = new Set();
-  return stunden
+  return lessons
     .sort((a, b) => a.startTime - b.startTime || a.id - b.id)
     .filter(st => {
       if (seen.has(st.id) || st.code === 'cancelled') return false;
       seen.add(st.id); return true;
     })
     .map(st => {
-      const fachId = st.su && st.su[0] ? st.su[0].id : null;
-      const raumId = st.ro && st.ro[0] ? st.ro[0].id : null;
+      const subjectId = st.su && st.su[0] ? st.su[0].id : null;
+      const roomId = st.ro && st.ro[0] ? st.ro[0].id : null;
       const s = String(st.startTime).padStart(4, '0');
       const e = String(st.endTime).padStart(4, '0');
       return {
-        fach:       fachId ? (faecherMap[fachId] || '?') : '?',
-        raum:       raumId ? (raeumMap[raumId]   || '?') : '?',
+        fach:       subjectId ? (subjectsById[subjectId] || '?') : '?',
+        raum:       roomId    ? (roomsById[roomId]       || '?') : '?',
         start:      `${s.slice(0,2)}:${s.slice(2)}`,
         ende:       `${e.slice(0,2)}:${e.slice(2)}`,
         vertretung: st.code === 'irregular',
@@ -64,48 +74,48 @@ function buildStundenListe(stunden, faecherMap, raeumMap) {
     });
 }
 
-function formatStunden(stunden) {
-  if (!stunden.length) return '  (keine Stunden / schulfrei)';
+function formatLessons(lessons) {
+  if (!lessons.length) return '  (keine Stunden / schulfrei)';
   const slots = {};
-  stunden.forEach(s => {
+  lessons.forEach(s => {
     const key = `${s.start}|${s.ende}`;
     if (!slots[key]) slots[key] = [];
     slots[key].push(s);
   });
-  return Object.entries(slots).map(([key, gruppe]) => {
-    const [start, ende] = key.split('|');
-    if (gruppe.length === 1) {
-      const s = gruppe[0];
-      return `  ${start}–${ende}  ${s.fach}  (Raum ${s.raum})${s.vertretung ? '  ⚠ Vertretung' : ''}`;
+  return Object.entries(slots).map(([key, group]) => {
+    const [start, end] = key.split('|');
+    if (group.length === 1) {
+      const s = group[0];
+      return `  ${start}–${end}  ${s.fach}  (Raum ${s.raum})${s.vertretung ? '  ⚠ Vertretung' : ''}`;
     }
-    return `  ${start}–${ende}  ` + gruppe.map(s => `${s.fach} (${s.raum})`).join(' / ');
+    return `  ${start}–${end}  ` + group.map(s => `${s.fach} (${s.raum})`).join(' / ');
   }).join('\n');
 }
 
-// ── E-Mail ─────────────────────────────────────────────────────────────────
+// ── Email ────────────────────────────────────────────────────────────────
 
-function buildEmail(kinderDaten, heute) {
-  const wochentag = WOCHENTAGE[heute.getDay()];
-  const datum     = `${pad(heute.getDate())}.${pad(heute.getMonth()+1)}.${heute.getFullYear()}`;
-  const hatFehler = kinderDaten.some(d => d.fehler !== null);
-  const subject = hatFehler
-    ? `[SCHULE] ⚠ Stundenplan (teilweise Fehler) – ${wochentag}, ${datum}`
-    : `[SCHULE] Stundenplan – ${wochentag}, ${datum}`;
-  const kinderSektionen = kinderDaten.map(({ kind, stunden, lunch, fehler }) => {
-    const fehlerHinweis = fehler
+function buildEmail(childrenData, today) {
+  const weekday = WEEKDAYS[today.getDay()];
+  const date    = `${pad(today.getDate())}.${pad(today.getMonth()+1)}.${today.getFullYear()}`;
+  const hasError = childrenData.some(d => d.fehler !== null);
+  const subject = hasError
+    ? `[SCHULE] ⚠ Stundenplan (teilweise Fehler) – ${weekday}, ${date}`
+    : `[SCHULE] Stundenplan – ${weekday}, ${date}`;
+  const childSections = childrenData.map(({ kind, stunden, lunch, fehler }) => {
+    const errorNote = fehler
       ? `\n⚠ Datenabruf fehlgeschlagen: ${fehler}\n  Bitte Stundenplan manuell prüfen.`
       : '';
     return [
       `── ${kind.name} (Klasse ${kind.klasse.toUpperCase()}) ──────────────`,
-      '', `📚 Stundenplan${fehlerHinweis}`,
-      fehler ? '' : formatStunden(stunden),
+      '', `📚 Stundenplan${errorNote}`,
+      fehler ? '' : formatLessons(stunden),
       '', '🍽 Schulessen', `  ${lunch}`,
     ].join('\n');
   }).join('\n\n');
   const body = [
     'Hallo Liebe Eltern! 👋', '',
-    `Heute ist ${wochentag}, ${datum} — hier der Überblick:`, '',
-    kinderSektionen, '',
+    `Heute ist ${weekday}, ${date} — hier der Überblick:`, '',
+    childSections, '',
     'Einen guten Tag! 🌟', 'Deine Heute Schule App',
   ].join('\n');
   return { subject, body };
@@ -116,7 +126,7 @@ module.exports = {
   extractLastPhpsessid,
   extractUpdatedPhpsessid,
   parseLunchStatus,
-  buildStundenListe,
-  formatStunden,
+  buildLessonList,
+  formatLessons,
   buildEmail,
 };

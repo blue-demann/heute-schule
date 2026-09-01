@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 #
-# Deploy mit Test-Gate.
+# Deploy with a test gate.
 #
-# Läuft die Testsuite vor jedem Deploy automatisch, statt sich darauf zu
-# verlassen, dass sie jemand von Hand anstößt — bei mehreren Familien als
-# Nutzerkreis reicht "ich hab's im Kopf" nicht als Absicherung.
+# Runs the test suite automatically before every deploy, instead of
+# relying on someone triggering it by hand — with several families as
+# users, "I remember it in my head" isn't enough of a safeguard.
 #
-# Aufruf aus dem Stundenplan-Ordner:
-#   ./deploy.sh          # Tests, dann Proxy + Website
-#   ./deploy.sh proxy    # nur Proxy
-#   ./deploy.sh web      # nur Website
+# Called from the Stundenplan folder:
+#   ./deploy.sh          # tests, then proxy + website
+#   ./deploy.sh proxy    # proxy only
+#   ./deploy.sh web      # website only
 #
-# Bei fehlschlagenden Tests wird NICHT deployed.
+# On failing tests, nothing gets deployed.
+#
+# Terminal output below (the echo strings) is deliberately German — this
+# script only runs for Björn himself, not for the app's own users; code
+# comments and identifiers are English, this human-facing operator output
+# is not.
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-ZIEL="${1:-alles}"
+TARGET="${1:-alles}"
 
 echo "▶ Testsuite läuft…"
 if ! node run-tests.mjs; then
@@ -36,13 +41,13 @@ fi
 echo "  ✓ sauber"
 echo ""
 
-# web/source/ und web/docs/ sind von Hand gepflegte Kopien (siehe
-# web/ueber.html, Abschnitt "Technische Details") — kein automatischer
-# Abgleich mit dem Original. Ohne diese Prüfung würde ein veralteter Dump
-# niemandem auffallen, bis ihn jemand von außen bemerkt.
+# web/source/ and web/docs/ are hand-maintained copies (see web/ueber.html,
+# section "Technische Details") — no automatic sync with the original.
+# Without this check, a stale dump wouldn't be noticed until someone
+# outside the project spotted it.
 echo "▶ Datei-Dump (web/source/, web/docs/) aktuell?"
-DUMP_VERALTET=0
-for PAAR in \
+DUMP_STALE=0
+for PAIR in \
   "proxy/worker.js:web/source/proxy/worker.js" \
   "proxy/hostcheck.mjs:web/source/proxy/hostcheck.mjs" \
   "proxy/cachekey.mjs:web/source/proxy/cachekey.mjs" \
@@ -53,14 +58,14 @@ for PAAR in \
   "prompts/README.md:web/docs/prompts/README.md" \
   "prompts/ct-stil-analyse.md:web/docs/prompts/ct-stil-analyse.md" \
   "prompts/peer-review-bester-freund.md:web/docs/prompts/peer-review-bester-freund.md"; do
-  ORIGINAL="${PAAR%%:*}"
-  KOPIE="${PAAR##*:}"
-  if ! diff -q "$ORIGINAL" "$KOPIE" >/dev/null 2>&1; then
-    echo "  ✗ $KOPIE weicht von $ORIGINAL ab"
-    DUMP_VERALTET=1
+  SOURCE="${PAIR%%:*}"
+  COPY="${PAIR##*:}"
+  if ! diff -q "$SOURCE" "$COPY" >/dev/null 2>&1; then
+    echo "  ✗ $COPY weicht von $SOURCE ab"
+    DUMP_STALE=1
   fi
 done
-if [ "$DUMP_VERALTET" = "1" ]; then
+if [ "$DUMP_STALE" = "1" ]; then
   echo ""
   echo "✗ Datei-Dump veraltet — Original geändert, Kopie in web/ nicht."
   echo "  Kopie manuell nachziehen (z. B. cp proxy/worker.js web/source/proxy/),"
@@ -70,30 +75,30 @@ fi
 echo "  ✓ aktuell"
 echo ""
 
-if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "proxy" ]; then
+if [ "$TARGET" = "alles" ] || [ "$TARGET" = "proxy" ]; then
   echo "▶ Proxy deployen…"
   ( cd proxy && npx wrangler deploy )
   echo ""
 fi
 
-if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "web" ]; then
+if [ "$TARGET" = "alles" ] || [ "$TARGET" = "web" ]; then
   echo "▶ Website deployen…"
-  # deploy-commit.txt trägt den aktuellen HEAD-Hash mit hoch (gitignored,
-  # bei jedem Deploy neu erzeugt) — Grundlage für den Live-vs-HEAD-
-  # Abgleich direkt im Anschluss. Löst die Lücke, dass das Konsistenz-Gate
-  # oben nur web/source bzw. web/docs gegen die lokalen Originale prüft,
-  # nicht ob der tatsächliche Deploy (Proxy oder Website) seit der letzten
-  # Code-Änderung überhaupt gelaufen ist. Bewusst KEIN führender Punkt im
-  # Dateinamen: Cloudflare Pages liefert Dateien mit führendem Punkt nicht
-  # zuverlässig aus, ein erster Versuch mit ".deploy-commit" lieferte live
-  # 404 und hätte den Check dauerhaft blind gemacht.
+  # deploy-commit.txt carries the current HEAD hash along (gitignored,
+  # regenerated on every deploy) — the basis for the live-vs-HEAD check
+  # right after. Closes the gap that the consistency gate above only
+  # checks web/source resp. web/docs against the local originals, not
+  # whether the actual deploy (proxy or website) has run at all since the
+  # last code change. Deliberately NO leading dot in the filename:
+  # Cloudflare Pages does not reliably serve files with a leading dot — an
+  # initial attempt with ".deploy-commit" returned a live 404 and would
+  # have made this check permanently blind.
   git rev-parse HEAD > web/deploy-commit.txt
-  # --branch=production explizit setzen, NICHT weglassen: wrangler pages
-  # deploy erkennt sonst automatisch den lokalen Git-Branch (hier "main")
-  # und behandelt den Deploy als Branch-Preview (landet auf
-  # main.heute-schule.pages.dev statt heute-schule.pages.dev). Der bei
-  # Cloudflare hinterlegte Produktions-Branch heißt "production", nicht
-  # "main" (per `wrangler pages deployment list` prüfbar).
+  # Set --branch=production explicitly, do NOT omit it: wrangler pages
+  # deploy otherwise auto-detects the local git branch (here "main") and
+  # treats the deploy as a branch preview (ends up on
+  # main.heute-schule.pages.dev instead of heute-schule.pages.dev). The
+  # production branch configured on Cloudflare is named "production", not
+  # "main" (checkable via `wrangler pages deployment list`).
   ( cd web && npx wrangler pages deploy . --project-name=heute-schule --branch=production )
   echo ""
 

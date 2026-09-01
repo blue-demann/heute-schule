@@ -1,9 +1,9 @@
-// Testsuite — läuft ohne Abhängigkeiten mit purem Node:
+// Test suite — runs dependency-free with plain Node:
 //   node run-tests.mjs
 //
-// ESM (.mjs), weil die Proxy-Module (hostcheck.mjs) ESM sind — die
-// Apps-Script-Logik in stundenplan.js ist weiterhin CommonJS und wird von
-// Node hier automatisch als Default-Export eingebunden.
+// ESM (.mjs), because the proxy modules (hostcheck.mjs) are ESM — the
+// Apps Script logic in stundenplan.js is still CommonJS and gets wired in
+// here by Node automatically as a default export.
 
 import { readFileSync } from 'node:fs';
 import stundenplan from './stundenplan.js';
@@ -16,8 +16,8 @@ const {
   extractLastPhpsessid,
   extractUpdatedPhpsessid,
   parseLunchStatus,
-  buildStundenListe,
-  formatStunden,
+  buildLessonList,
+  formatLessons,
   buildEmail,
 } = stundenplan;
 
@@ -45,32 +45,32 @@ function assertEqual(a, b) {
 
 // ── pad ────────────────────────────────────────────────────────────────────
 console.log('\npad()');
-test('einstellige Zahl wird aufgefüllt',   () => assertEqual(pad(5),  '05'));
-test('zweistellige Zahl bleibt gleich',    () => assertEqual(pad(12), '12'));
-test('Null wird zu 00',                    () => assertEqual(pad(0),  '00'));
+test('single-digit number gets padded',   () => assertEqual(pad(5),  '05'));
+test('two-digit number stays the same',   () => assertEqual(pad(12), '12'));
+test('zero becomes 00',                   () => assertEqual(pad(0),  '00'));
 
-// ── Cookie-Extraktion ──────────────────────────────────────────────────────
+// ── Cookie extraction ────────────────────────────────────────────────────
 console.log('\nextractLastPhpsessid()');
 
-test('einfacher Cookie-String', () => {
+test('simple cookie string', () => {
   assertEqual(extractLastPhpsessid('PHPSESSID=abc123; Path=/'), 'PHPSESSID=abc123');
 });
 
-test('letztes von zwei PHPSESSIDs nehmen (Doppel-Cookie-Bug)', () => {
+test('takes the last of two PHPSESSIDs (double-cookie bug)', () => {
   const raw = 'PHPSESSID=first111; Path=/\nPHPSESSID=second222; Path=/';
   assertEqual(extractLastPhpsessid(raw), 'PHPSESSID=second222');
 });
 
-test('Array von Cookies', () => {
+test('array of cookies', () => {
   const raw = ['PHPSESSID=cookieA; Path=/', 'PHPSESSID=cookieB; Path=/'];
   assertEqual(extractLastPhpsessid(raw), 'PHPSESSID=cookieB');
 });
 
-test('kein PHPSESSID → null', () => {
+test('no PHPSESSID → null', () => {
   assertEqual(extractLastPhpsessid('session=xyz'), null);
 });
 
-test('leerer String → null', () => {
+test('empty string → null', () => {
   assertEqual(extractLastPhpsessid(''), null);
 });
 
@@ -78,101 +78,103 @@ test('null → null', () => {
   assertEqual(extractLastPhpsessid(null), null);
 });
 
-// ── Session-Rotation ───────────────────────────────────────────────────────
-console.log('\nextractUpdatedPhpsessid() — Session-Rotation');
+// ── Session rotation ─────────────────────────────────────────────────────
+console.log('\nextractUpdatedPhpsessid() — session rotation');
 
-test('neue PHPSESSID aus Response-Header extrahieren', () => {
-  const respCookies = ['PHPSESSID=rotiert999; Path=/; HttpOnly'];
-  assertEqual(extractUpdatedPhpsessid(respCookies), 'PHPSESSID=rotiert999');
+test('extract a new PHPSESSID from the response header', () => {
+  const respCookies = ['PHPSESSID=rotated999; Path=/; HttpOnly'];
+  assertEqual(extractUpdatedPhpsessid(respCookies), 'PHPSESSID=rotated999');
 });
 
-test('keine neue Cookie → null (kein Update)', () => {
+test('no new cookie → null (no update)', () => {
   assertEqual(extractUpdatedPhpsessid(''), null);
 });
 
-test('letztes Cookie bei mehreren in Response nehmen', () => {
-  const respCookies = 'PHPSESSID=alt111; Path=/\nPHPSESSID=neu222; Path=/';
-  assertEqual(extractUpdatedPhpsessid(respCookies), 'PHPSESSID=neu222');
+test('takes the last cookie when several are in the response', () => {
+  const respCookies = 'PHPSESSID=old111; Path=/\nPHPSESSID=new222; Path=/';
+  assertEqual(extractUpdatedPhpsessid(respCookies), 'PHPSESSID=new222');
 });
 
-// ── parseLunchStatus ───────────────────────────────────────────────────────
+// ── parseLunchStatus ─────────────────────────────────────────────────────
 console.log('\nparseLunchStatus()');
 
-const heute = new Date(2026, 5, 22); // Montag 22.06.2026
+const today = new Date(2026, 5, 22); // Monday 2026-06-22
 
 function makeCalendar(dayProps) {
   return { '2026': { '6': { '22': dayProps } } };
 }
 
-test('kein Catering → kein Schulessen', () => {
+test('no catering → no school lunch', () => {
   const cal = makeCalendar({ CATERING: 0 });
-  assertEqual(parseLunchStatus(cal, null, heute), 'Kein Schulessen heute');
+  assertEqual(parseLunchStatus(cal, null, today), 'Kein Schulessen heute');
 });
 
-test('Catering ohne CATERING-Flag → kein Schulessen', () => {
+test('catering entry present but no CATERING flag → no school lunch', () => {
   const cal = makeCalendar({});
-  assertEqual(parseLunchStatus(cal, null, heute), 'Kein Schulessen heute');
+  assertEqual(parseLunchStatus(cal, null, today), 'Kein Schulessen heute');
 });
 
-test('abgemeldet', () => {
+test('signed off', () => {
   const cal = makeCalendar({ CATERING: 1, SIGNED_OFF: 1 });
-  assertEqual(parseLunchStatus(cal, null, heute), 'Abgemeldet (kein Essen)');
+  assertEqual(parseLunchStatus(cal, null, today), 'Abgemeldet (kein Essen)');
 });
 
-test('Menü bestellt (AUSGEWAEHLT=1)', () => {
+test('menu ordered (AUSGEWAEHLT=1)', () => {
   const cal = makeCalendar({ CATERING: 1 });
   const details = { MENUES: [
     { MENUE_NR: 1, MENUE_TEXT: 'Spaghetti Bolognese', PREIS: '3,80 EUR', AUSGEWAEHLT: '1' },
     { MENUE_NR: 2, MENUE_TEXT: 'Gemüsesuppe',         PREIS: '3,80 EUR', AUSGEWAEHLT: '0' },
   ]};
-  assertEqual(parseLunchStatus(cal, details, heute), 'Essen bestellt: Spaghetti Bolognese (3,80 EUR)');
+  assertEqual(parseLunchStatus(cal, details, today), 'Essen bestellt: Spaghetti Bolognese (3,80 EUR)');
 });
 
-test('Menüs vorhanden aber keines gewählt', () => {
+test('menus available but none selected', () => {
   const cal = makeCalendar({ CATERING: 1 });
   const details = { MENUES: [
     { MENUE_NR: 1, MENUE_TEXT: 'Spaghetti', PREIS: '3,80 EUR', AUSGEWAEHLT: '0' },
   ]};
-  assertEqual(parseLunchStatus(cal, details, heute), 'Essen verfügbar (kein Menü gewählt)');
+  assertEqual(parseLunchStatus(cal, details, today), 'Essen verfügbar (kein Menü gewählt)');
 });
 
-test('details null (Session-Problem oder abgemeldet) → Fallback', () => {
+test('details null (session problem or signed off) → fallback', () => {
   const cal = makeCalendar({ CATERING: 1 });
-  assertEqual(parseLunchStatus(cal, null, heute), 'Essen bestellt ✓');
+  assertEqual(parseLunchStatus(cal, null, today), 'Essen bestellt ✓');
 });
 
-test('cal null → Daten nicht verfügbar', () => {
-  assertEqual(parseLunchStatus(null, null, heute), 'Schulessen: Daten nicht verfügbar');
+test('cal null → data not available', () => {
+  assertEqual(parseLunchStatus(null, null, today), 'Schulessen: Daten nicht verfügbar');
 });
 
-test('zweites Menü ist das gewählte', () => {
+test('the second menu is the selected one', () => {
   const cal = makeCalendar({ CATERING: 1 });
   const details = { MENUES: [
     { MENUE_NR: 1, MENUE_TEXT: 'Fleischgericht', PREIS: '4,00 EUR', AUSGEWAEHLT: '0' },
     { MENUE_NR: 2, MENUE_TEXT: 'Veganes Gericht', PREIS: '4,00 EUR', AUSGEWAEHLT: '1' },
   ]};
-  assertEqual(parseLunchStatus(cal, details, heute), 'Essen bestellt: Veganes Gericht (4,00 EUR)');
+  assertEqual(parseLunchStatus(cal, details, today), 'Essen bestellt: Veganes Gericht (4,00 EUR)');
 });
 
-// ── buildStundenListe ──────────────────────────────────────────────────────
-console.log('\nbuildStundenListe()');
+// ── buildLessonList ──────────────────────────────────────────────────────
+console.log('\nbuildLessonList()');
 
-const faecherMap = { 10: 'Mathematik', 20: 'Deutsch', 30: 'Englisch' };
-const raeumMap   = { 1: 'R101', 2: 'R102', 3: 'Sporthalle' };
+const subjectsById = { 10: 'Mathematik', 20: 'Deutsch', 30: 'Englisch' };
+const roomsById     = { 1: 'R101', 2: 'R102', 3: 'Sporthalle' };
 
-function makeStunde(id, startTime, endTime, fachId, raumId, code) {
+// startTime/endTime use WebUntis's own HHMM integer format (e.g. 800/845
+// = 8:00–8:45, a normal 45-minute first period) — not arbitrary numbers.
+function makeLesson(id, startTime, endTime, subjectId, roomId, code) {
   return {
     id, startTime, endTime,
-    su: fachId ? [{ id: fachId }] : [],
-    ro: raumId ? [{ id: raumId }] : [],
+    su: subjectId ? [{ id: subjectId }] : [],
+    ro: roomId ? [{ id: roomId }] : [],
     code: code || null,
   };
 }
 
-test('einfache Stunde', () => {
-  const result = buildStundenListe(
-    [makeStunde(1, 800, 845, 10, 1)],
-    faecherMap, raeumMap
+test('a simple lesson', () => {
+  const result = buildLessonList(
+    [makeLesson(1, 800, 845, 10, 1)],
+    subjectsById, roomsById
   );
   assert(result.length === 1);
   assertEqual(result[0].fach,  'Mathematik');
@@ -182,184 +184,184 @@ test('einfache Stunde', () => {
   assertEqual(result[0].vertretung, false);
 });
 
-test('ausgefallene Stunde wird gefiltert', () => {
-  const result = buildStundenListe(
-    [makeStunde(1, 800, 845, 10, 1, 'cancelled')],
-    faecherMap, raeumMap
+test('a cancelled lesson is filtered out', () => {
+  const result = buildLessonList(
+    [makeLesson(1, 800, 845, 10, 1, 'cancelled')],
+    subjectsById, roomsById
   );
   assertEqual(result.length, 0);
 });
 
-test('Vertretung wird markiert', () => {
-  const result = buildStundenListe(
-    [makeStunde(1, 800, 845, 20, 1, 'irregular')],
-    faecherMap, raeumMap
+test('a substitution is flagged', () => {
+  const result = buildLessonList(
+    [makeLesson(1, 800, 845, 20, 1, 'irregular')],
+    subjectsById, roomsById
   );
   assertEqual(result[0].vertretung, true);
 });
 
-test('Duplikat-IDs werden dedupliziert', () => {
-  const result = buildStundenListe(
-    [makeStunde(5, 800, 845, 10, 1), makeStunde(5, 800, 845, 10, 1)],
-    faecherMap, raeumMap
+test('duplicate IDs are deduplicated', () => {
+  const result = buildLessonList(
+    [makeLesson(5, 800, 845, 10, 1), makeLesson(5, 800, 845, 10, 1)],
+    subjectsById, roomsById
   );
   assertEqual(result.length, 1);
 });
 
-test('Sortierung nach Startzeit', () => {
-  const result = buildStundenListe(
-    [makeStunde(2, 945, 1030, 20, 2), makeStunde(1, 800, 845, 10, 1)],
-    faecherMap, raeumMap
+test('sorted by start time', () => {
+  const result = buildLessonList(
+    [makeLesson(2, 945, 1030, 20, 2), makeLesson(1, 800, 845, 10, 1)],
+    subjectsById, roomsById
   );
   assertEqual(result[0].start, '08:00');
   assertEqual(result[1].start, '09:45');
 });
 
-test('unbekanntes Fach → ?', () => {
-  const result = buildStundenListe(
-    [makeStunde(1, 800, 845, 99, 1)],
-    faecherMap, raeumMap
+test('unknown subject → ?', () => {
+  const result = buildLessonList(
+    [makeLesson(1, 800, 845, 99, 1)],
+    subjectsById, roomsById
   );
   assertEqual(result[0].fach, '?');
 });
 
-test('kein Fach → ?', () => {
-  const result = buildStundenListe(
-    [makeStunde(1, 800, 845, null, 1)],
-    faecherMap, raeumMap
+test('no subject → ?', () => {
+  const result = buildLessonList(
+    [makeLesson(1, 800, 845, null, 1)],
+    subjectsById, roomsById
   );
   assertEqual(result[0].fach, '?');
 });
 
-test('unbekannter Raum → ?', () => {
-  const result = buildStundenListe(
-    [makeStunde(1, 800, 845, 10, 99)],
-    faecherMap, raeumMap
+test('unknown room → ?', () => {
+  const result = buildLessonList(
+    [makeLesson(1, 800, 845, 10, 99)],
+    subjectsById, roomsById
   );
   assertEqual(result[0].raum, '?');
 });
 
-// ── formatStunden ──────────────────────────────────────────────────────────
-console.log('\nformatStunden()');
+// ── formatLessons ────────────────────────────────────────────────────────
+console.log('\nformatLessons()');
 
-test('leere Liste', () => {
-  assertEqual(formatStunden([]), '  (keine Stunden / schulfrei)');
+test('empty list', () => {
+  assertEqual(formatLessons([]), '  (keine Stunden / schulfrei)');
 });
 
-test('einzelne Stunde', () => {
-  const stunden = [{ fach: 'Mathematik', raum: 'R101', start: '08:00', ende: '08:45', vertretung: false }];
-  const result = formatStunden(stunden);
-  assert(result.includes('08:00–08:45'), 'Zeit fehlt');
-  assert(result.includes('Mathematik'),  'Fach fehlt');
-  assert(result.includes('R101'),        'Raum fehlt');
-  assert(!result.includes('⚠'),          'Kein Vertretungszeichen erwartet');
+test('a single lesson', () => {
+  const lessons = [{ fach: 'Mathematik', raum: 'R101', start: '08:00', ende: '08:45', vertretung: false }];
+  const result = formatLessons(lessons);
+  assert(result.includes('08:00–08:45'), 'time is missing');
+  assert(result.includes('Mathematik'),  'subject is missing');
+  assert(result.includes('R101'),        'room is missing');
+  assert(!result.includes('⚠'),          'no substitution marker expected');
 });
 
-test('Vertretung zeigt ⚠', () => {
-  const stunden = [{ fach: 'Deutsch', raum: 'R102', start: '09:45', ende: '10:30', vertretung: true }];
-  assert(formatStunden(stunden).includes('⚠ Vertretung'));
+test('a substitution shows ⚠', () => {
+  const lessons = [{ fach: 'Deutsch', raum: 'R102', start: '09:45', ende: '10:30', vertretung: true }];
+  assert(formatLessons(lessons).includes('⚠ Vertretung'));
 });
 
-test('Parallelgruppen werden zusammengefasst', () => {
-  const stunden = [
+test('parallel groups are combined into one line', () => {
+  const lessons = [
     { fach: 'Latein',      raum: 'R101', start: '08:00', ende: '08:45', vertretung: false },
     { fach: 'Französisch', raum: 'R102', start: '08:00', ende: '08:45', vertretung: false },
     { fach: 'Spanisch',    raum: 'R103', start: '08:00', ende: '08:45', vertretung: false },
   ];
-  const result = formatStunden(stunden);
+  const result = formatLessons(lessons);
   const lines = result.split('\n');
   assertEqual(lines.length, 1);
-  assert(result.includes('Latein'),      'Latein fehlt');
-  assert(result.includes('Französisch'), 'Französisch fehlt');
-  assert(result.includes('Spanisch'),    'Spanisch fehlt');
+  assert(result.includes('Latein'),      'Latein is missing');
+  assert(result.includes('Französisch'), 'Französisch is missing');
+  assert(result.includes('Spanisch'),    'Spanisch is missing');
 });
 
-test('verschiedene Zeiten bleiben getrennt', () => {
-  const stunden = [
+test('different times stay on separate lines', () => {
+  const lessons = [
     { fach: 'Mathe',    raum: 'R101', start: '08:00', ende: '08:45', vertretung: false },
     { fach: 'Deutsch',  raum: 'R102', start: '09:45', ende: '10:30', vertretung: false },
   ];
-  const lines = formatStunden(stunden).split('\n');
+  const lines = formatLessons(lessons).split('\n');
   assertEqual(lines.length, 2);
 });
 
-// ── buildEmail ─────────────────────────────────────────────────────────────
+// ── buildEmail ───────────────────────────────────────────────────────────
 console.log('\nbuildEmail()');
 
-const montag = new Date(2026, 5, 22); // Montag
+const monday = new Date(2026, 5, 22); // a Monday
 
-const kinderOhneFeher = [
+const childrenNoError = [
   { kind: { name: 'Mia', klasse: '8c' }, stunden: [], lunch: 'Essen bestellt ✓', fehler: null },
   { kind: { name: 'Emma', klasse: '5d' }, stunden: [], lunch: 'Abgemeldet (kein Essen)', fehler: null },
 ];
 
-test('Subject enthält [SCHULE]', () => {
-  const { subject } = buildEmail(kinderOhneFeher, montag);
-  assert(subject.startsWith('[SCHULE]'), 'Kein [SCHULE]-Prefix');
+test('subject contains [SCHULE]', () => {
+  const { subject } = buildEmail(childrenNoError, monday);
+  assert(subject.startsWith('[SCHULE]'), 'missing [SCHULE] prefix');
 });
 
-test('Subject enthält Wochentag', () => {
-  const { subject } = buildEmail(kinderOhneFeher, montag);
-  assert(subject.includes('Montag'), 'Kein Wochentag im Subject');
+test('subject contains the weekday', () => {
+  const { subject } = buildEmail(childrenNoError, monday);
+  assert(subject.includes('Montag'), 'weekday missing from subject');
 });
 
-test('Subject enthält Datum', () => {
-  const { subject } = buildEmail(kinderOhneFeher, montag);
-  assert(subject.includes('22.06.2026'), 'Kein Datum im Subject');
+test('subject contains the date', () => {
+  const { subject } = buildEmail(childrenNoError, monday);
+  assert(subject.includes('22.06.2026'), 'date missing from subject');
 });
 
-test('kein ⚠ im Subject ohne Fehler', () => {
-  const { subject } = buildEmail(kinderOhneFeher, montag);
-  assert(!subject.includes('⚠'), '⚠ nicht erwartet');
+test('no ⚠ in the subject without an error', () => {
+  const { subject } = buildEmail(childrenNoError, monday);
+  assert(!subject.includes('⚠'), '⚠ not expected');
 });
 
-test('⚠ im Subject wenn Fehler vorliegt', () => {
-  const kinderMitFehler = [
+test('⚠ in the subject when there is an error', () => {
+  const childrenWithError = [
     { kind: { name: 'Mia', klasse: '8c' }, stunden: [], lunch: '', fehler: 'Timeout' },
   ];
-  const { subject } = buildEmail(kinderMitFehler, montag);
-  assert(subject.includes('⚠'), '⚠ erwartet bei Fehler');
+  const { subject } = buildEmail(childrenWithError, monday);
+  assert(subject.includes('⚠'), '⚠ expected on error');
 });
 
-test('Body enthält Begrüßung', () => {
-  const { body } = buildEmail(kinderOhneFeher, montag);
-  assert(body.includes('Hallo Liebe Eltern'), 'Begrüßung fehlt');
+test('body contains the greeting', () => {
+  const { body } = buildEmail(childrenNoError, monday);
+  assert(body.includes('Hallo Liebe Eltern'), 'greeting is missing');
 });
 
-test('Body enthält beide Kinder', () => {
-  const { body } = buildEmail(kinderOhneFeher, montag);
-  assert(body.includes('Mia'),  'Mia fehlt');
-  assert(body.includes('Emma'), 'Emma fehlt');
+test('body contains both children', () => {
+  const { body } = buildEmail(childrenNoError, monday);
+  assert(body.includes('Mia'),  'Mia is missing');
+  assert(body.includes('Emma'), 'Emma is missing');
 });
 
-test('Body enthält Klassenname in Großbuchstaben', () => {
-  const { body } = buildEmail(kinderOhneFeher, montag);
-  assert(body.includes('8C'), '8C fehlt');
-  assert(body.includes('5D'), '5D fehlt');
+test('body contains the class name in uppercase', () => {
+  const { body } = buildEmail(childrenNoError, monday);
+  assert(body.includes('8C'), '8C is missing');
+  assert(body.includes('5D'), '5D is missing');
 });
 
-test('Fehlerhinweis im Body wenn Fehler', () => {
-  const kinderMitFehler = [
+test('error note in the body when there is an error', () => {
+  const childrenWithError = [
     { kind: { name: 'Mia', klasse: '8c' }, stunden: [], lunch: '', fehler: 'Timeout' },
   ];
-  const { body } = buildEmail(kinderMitFehler, montag);
-  assert(body.includes('Datenabruf fehlgeschlagen'), 'Fehlerhinweis fehlt');
-  assert(body.includes('Timeout'), 'Fehlertext fehlt');
+  const { body } = buildEmail(childrenWithError, monday);
+  assert(body.includes('Datenabruf fehlgeschlagen'), 'error note is missing');
+  assert(body.includes('Timeout'), 'error text is missing');
 });
 
-test('Body endet mit Signatur', () => {
-  const { body } = buildEmail(kinderOhneFeher, montag);
-  assert(body.includes('Deine Heute Schule App'), 'Signatur fehlt');
+test('body ends with the signature', () => {
+  const { body } = buildEmail(childrenNoError, monday);
+  assert(body.includes('Deine Heute Schule App'), 'signature is missing');
 });
 
-// ── Proxy: Ziel-Host-Validierung (SSRF-Schutz) ─────────────────────────────
+// ── Proxy: target-host validation (SSRF protection) ─────────────────────
 
-function assertWirft(fn, teilDerMeldung) {
-  let geworfen = null;
-  try { fn(); } catch (e) { geworfen = e; }
-  if (!geworfen) throw new Error('Es wurde kein Fehler geworfen, aber einer erwartet');
-  if (teilDerMeldung && !geworfen.message.includes(teilDerMeldung)) {
-    throw new Error(`Fehlermeldung passt nicht.\n    Erwartet enthält: ${teilDerMeldung}\n    Erhalten:  ${geworfen.message}`);
+function assertWirft(fn, expectedSubstring) {
+  let thrown = null;
+  try { fn(); } catch (e) { thrown = e; }
+  if (!thrown) throw new Error('No error was thrown, but one was expected');
+  if (expectedSubstring && !thrown.message.includes(expectedSubstring)) {
+    throw new Error(`Error message doesn't match.\n    Expected to contain: ${expectedSubstring}\n    Got:  ${thrown.message}`);
   }
 }
 
@@ -605,84 +607,84 @@ forAll(
 
 console.log('\nbuildCacheKeyMaterial()');
 
-const wuBasis = { server: 'x.webuntis.com', user: 'Klasse-9c', klasse: '9c', password: 'richtig' };
-const lunchBasis = { provider: 'mensamax', base: 'https://parentsmensa.de', projekt: 'P', einrichtung: 'E', username: 'u', password: 'geheim' };
+const webuntisBase = { server: 'x.webuntis.com', user: 'Klasse-9c', klasse: '9c', password: 'richtig' };
+const lunchBase = { provider: 'mensamax', base: 'https://parentsmensa.de', projekt: 'P', einrichtung: 'E', username: 'u', password: 'geheim' };
 
-test('REGRESSION: anderes WebUntis-Passwort ⇒ anderer Schlüssel', () => {
-  const a = buildCacheKeyMaterial('20260827', wuBasis, lunchBasis);
-  const b = buildCacheKeyMaterial('20260827', { ...wuBasis, password: 'falsch' }, lunchBasis);
-  assert(a !== b, 'Schlüssel identisch trotz anderem Passwort — Cache liefert fremde Daten ohne Login aus!');
+test('REGRESSION: different WebUntis password ⇒ different key', () => {
+  const a = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
+  const b = buildCacheKeyMaterial('20260827', { ...webuntisBase, password: 'falsch' }, lunchBase);
+  assert(a !== b, 'key is identical despite a different password — cache would serve someone else\'s data without a login!');
 });
 
-test('REGRESSION: anderes Mensamax-Passwort ⇒ anderer Schlüssel', () => {
-  const a = buildCacheKeyMaterial('20260827', wuBasis, lunchBasis);
-  const b = buildCacheKeyMaterial('20260827', wuBasis, { ...lunchBasis, password: 'falsch' });
-  assert(a !== b, 'Schlüssel identisch trotz anderem Mensamax-Passwort');
+test('REGRESSION: different Mensamax password ⇒ different key', () => {
+  const a = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
+  const b = buildCacheKeyMaterial('20260827', webuntisBase, { ...lunchBase, password: 'falsch' });
+  assert(a !== b, 'key is identical despite a different Mensamax password');
 });
 
-test('REGRESSION: andere ccCampus-PIN ⇒ anderer Schlüssel', () => {
-  const mitPin = (pin) => buildCacheKeyMaterial('20260827', wuBasis,
-    { ...lunchBasis, provider: 'cccampus', cccampus: { base: 'https://c.mbs5online.de', kundennummer: '1', pin } });
-  assert(mitPin('1111') !== mitPin('2222'), 'Schlüssel identisch trotz anderer PIN');
+test('REGRESSION: different ccCampus PIN ⇒ different key', () => {
+  const withPin = (pin) => buildCacheKeyMaterial('20260827', webuntisBase,
+    { ...lunchBase, provider: 'cccampus', cccampus: { base: 'https://c.mbs5online.de', kundennummer: '1', pin } });
+  assert(withPin('1111') !== withPin('2222'), 'key is identical despite a different PIN');
 });
 
-test('identische Eingaben ⇒ identischer Schlüssel (Cache funktioniert überhaupt)', () => {
-  const a = buildCacheKeyMaterial('20260827', wuBasis, lunchBasis);
-  const b = buildCacheKeyMaterial('20260827', { ...wuBasis }, { ...lunchBasis });
+test('identical inputs ⇒ identical key (the cache can work at all)', () => {
+  const a = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
+  const b = buildCacheKeyMaterial('20260827', { ...webuntisBase }, { ...lunchBase });
   assertEqual(a, b);
 });
 
-test('anderer Tag ⇒ anderer Schlüssel', () => {
-  const a = buildCacheKeyMaterial('20260827', wuBasis, lunchBasis);
-  const b = buildCacheKeyMaterial('20260828', wuBasis, lunchBasis);
-  assert(a !== b, 'Schlüssel identisch trotz anderem Datum');
+test('a different day ⇒ different key', () => {
+  const a = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
+  const b = buildCacheKeyMaterial('20260828', webuntisBase, lunchBase);
+  assert(a !== b, 'key is identical despite a different date');
 });
 
-test('anderes Kind derselben Familie ⇒ anderer Schlüssel', () => {
-  const a = buildCacheKeyMaterial('20260827', wuBasis, lunchBasis);
-  const b = buildCacheKeyMaterial('20260827', { ...wuBasis, klasse: '6d' }, lunchBasis);
-  assert(a !== b, 'Schlüssel identisch trotz anderer Klasse');
+test('a different child of the same family ⇒ different key', () => {
+  const a = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
+  const b = buildCacheKeyMaterial('20260827', { ...webuntisBase, klasse: '6d' }, lunchBase);
+  assert(a !== b, 'key is identical despite a different class');
 });
 
-test('Passwörter stehen im Material (wird gehasht, nie roh gespeichert)', () => {
-  const m = buildCacheKeyMaterial('20260827', wuBasis, lunchBasis);
-  assert(m.includes('richtig'), 'WebUntis-Passwort fehlt im Schlüsselmaterial');
-  assert(m.includes('geheim'), 'Mensamax-Passwort fehlt im Schlüsselmaterial');
+test('passwords are present in the key material (gets hashed, never stored raw)', () => {
+  const m = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
+  assert(m.includes('richtig'), 'WebUntis password missing from the key material');
+  assert(m.includes('geheim'), 'Mensamax password missing from the key material');
 });
 
-test('fehlende Konfiguration wirft nicht', () => {
+test('missing config does not throw', () => {
   buildCacheKeyMaterial('20260827');
   buildCacheKeyMaterial('20260827', {}, {});
 });
 
-// ── ccCampus-Domain-Allowlist: index.html und _headers müssen übereinstimmen ─
+// ── ccCampus domain allowlist: index.html and _headers must agree ────────
 //
-// Zwei unabhängige Mechanismen prüfen dieselbe Domain-Liste: die CSP
-// (connect-src in web/_headers, blockiert auf Browser-Ebene) und
-// CCCAMPUS_ERLAUBTE_DOMAINS in web/index.html (zeigt die verständliche
-// Fehlermeldung, statt es an der CSP scheitern zu lassen). Eine Domain nur
-// an einer Stelle einzutragen reicht nicht — genau dieser Bug wäre mit den
-// bisherigen Tests unsichtbar geblieben, da beide Dateien nie gegeneinander
-// geprüft wurden.
+// Two independent mechanisms check the same domain list: the CSP
+// (connect-src in web/_headers, blocks at the browser level) and
+// CCCAMPUS_ERLAUBTE_DOMAINS in web/index.html (shows the understandable
+// error message instead of letting it fail against the CSP). Listing a
+// domain in only one place isn't enough — exactly this bug would have
+// stayed invisible to the previous tests, since neither file was ever
+// checked against the other.
 
-console.log('\nccCampus-Domain-Allowlist (index.html vs. _headers)');
+console.log('\nccCampus domain allowlist (index.html vs. _headers)');
 
-test('CCCAMPUS_ERLAUBTE_DOMAINS und CSP connect-src listen dieselben Domains', () => {
+test('CCCAMPUS_ERLAUBTE_DOMAINS and the CSP connect-src list the same domains', () => {
   const indexHtml = readFileSync(new URL('./web/index.html', import.meta.url), 'utf-8');
   const headers = readFileSync(new URL('./web/_headers', import.meta.url), 'utf-8');
 
   const jsMatch = indexHtml.match(/CCCAMPUS_ERLAUBTE_DOMAINS\s*=\s*\[([^\]]*)\]/);
-  assert(jsMatch, 'CCCAMPUS_ERLAUBTE_DOMAINS nicht in index.html gefunden — Test selbst kaputt?');
-  const ausJs = jsMatch[1].match(/'\.([a-z0-9.-]+)'/g).map(s => s.slice(2, -1)).sort();
+  assert(jsMatch, 'CCCAMPUS_ERLAUBTE_DOMAINS not found in index.html — test itself broken?');
+  const fromJs = jsMatch[1].match(/'\.([a-z0-9.-]+)'/g).map(s => s.slice(2, -1)).sort();
 
-  // Nicht einfach nach "connect-src" suchen — das Wort steht auch in der
-  // Erklär-Kommentarzeile davor und würde die falsche Zeile treffen.
+  // Don't just search for "connect-src" — the word also appears in the
+  // explanatory comment line above it and would match the wrong line.
   const cspMatch = headers.match(/^\s*Content-Security-Policy:[^\n]*/m);
-  assert(cspMatch, 'Content-Security-Policy nicht in _headers gefunden — Test selbst kaputt?');
-  const ausCsp = [...cspMatch[0].matchAll(/https:\/\/\*\.([a-z0-9.-]*mbs5[a-z0-9.-]*)/g)]
+  assert(cspMatch, 'Content-Security-Policy not found in _headers — test itself broken?');
+  const fromCsp = [...cspMatch[0].matchAll(/https:\/\/\*\.([a-z0-9.-]*mbs5[a-z0-9.-]*)/g)]
     .map(m => m[1]).sort();
 
-  assertEqual(JSON.stringify(ausJs), JSON.stringify(ausCsp));
+  assertEqual(JSON.stringify(fromJs), JSON.stringify(fromCsp));
 });
 
 console.log('\nlastWeekAsRange() (analytics-report)');

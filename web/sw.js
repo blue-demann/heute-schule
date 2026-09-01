@@ -1,15 +1,15 @@
-// App-Shell-Cache für die PWA — Netzwerk zuerst, Cache nur als Rückfall-
-// ebene für den Offline-Fall. Wichtig: NICHT "Cache first", sonst bekommen
-// Nutzer:innen nie automatisch die neueste Version, auch nicht nach einem
-// harten Browser-Reload — ein Service Worker sitzt vor dem normalen
-// HTTP-Cache und wird von "Cache umgehen"-Reloads nicht mit erfasst.
-// Bewusst KEIN Caching der /api/status-Antworten — die Daten sollen bei
-// jedem Öffnen frisch vom Proxy kommen.
+// App-shell cache for the PWA — network first, cache only as a fallback
+// layer for the offline case. Important: NOT "cache first", or users
+// never automatically get the newest version, not even after a hard
+// browser reload — a service worker sits in front of the normal HTTP
+// cache and isn't caught by "bypass cache" reloads.
+// Deliberately NO caching of /api/status responses — that data should
+// come fresh from the proxy on every open.
 
 const CACHE = 'heute-schule-v4';
-// Impressum/Datenschutz/Über sind bewusst mit drin: Es sind Seiten mit
-// gesetzlicher Vorhaltepflicht, und ohne Vorab-Caching wären sie offline nur
-// erreichbar, wenn sie vorher schon einmal geöffnet wurden.
+// Impressum/Datenschutz/Über are deliberately included: they're pages
+// with a legal obligation to be available, and without pre-caching they'd
+// only be reachable offline if they'd already been opened once before.
 const SHELL = [
   './', './index.html', './theme.css', './manifest.webmanifest', './icon.svg',
   './impressum.html', './datenschutz.html', './ueber.html',
@@ -31,15 +31,15 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // API-Calls immer live vom Netzwerk, nie aus dem Cache.
+  // API calls always live from the network, never from the cache.
   if (url.pathname.startsWith('/api/')) return;
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     fetch(event.request)
       .then((resp) => {
-        // Erfolgreiche Antwort zusätzlich im Cache ablegen, für den
-        // Offline-Fall — aber nie statt der frischen Antwort ausliefern.
+        // Also store a successful response in the cache, for the offline
+        // case — but never serve it instead of a fresh response.
         const copy = resp.clone();
         caches.open(CACHE).then((c) => c.put(event.request, copy));
         return resp;
