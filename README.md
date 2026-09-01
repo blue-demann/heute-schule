@@ -16,9 +16,6 @@ Stundenplan der Kinder heute aus (WebUntis), und gibt's Schulessen
   Mensamax stellt (die senden keine CORS-Freigabe, ein Browser darf sie
   also nicht direkt fragen). ccCampus läuft strukturell umgekehrt und
   deshalb ohne Proxy direkt im Browser.
-- **`analytics-report/`** — optionaler, unabhängiger Worker für eine
-  wöchentliche Aufruf-Statistik per Mail, auf Basis von Cloudflares
-  eigenen Analytics-Daten, kein zusätzliches Tracking.
 
 Ausführliche Architektur, Entscheidungs-Log und Sicherheitsmodell:
 **[PROJEKT.md](PROJEKT.md)**. Was gerade noch offen ist, ehrlich
@@ -34,15 +31,14 @@ npm run lint           # ESLint
 ```
 
 Details zu den einzelnen Teilen: [web/README.md](web/README.md),
-[proxy/README.md](proxy/README.md), [analytics-report/README.md](analytics-report/README.md).
+[proxy/README.md](proxy/README.md).
 
 ## Deployen
 
 ```bash
-./deploy.sh             # Standard: Tests, Lint, dann Proxy + Website + Analytics-Report
-./deploy.sh proxy       # nur der Haupt-Proxy
-./deploy.sh web         # nur die Website
-./deploy.sh analytics   # nur der Analytics-Report-Worker
+./deploy.sh          # Standard: Tests, Lint, dann Proxy + Website
+./deploy.sh proxy    # nur der Proxy
+./deploy.sh web      # nur die Website
 ```
 
 Lässt bei fehlschlagenden Tests oder Lint-Fehlern nichts deployen.
