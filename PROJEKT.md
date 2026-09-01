@@ -317,7 +317,7 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | Testgruppe | Datei unter Test | Fokus |
 |---|---|---|
 | `pad()`, Cookie-Extraktion, `parseLunchStatus()`, `buildStundenListe()`, `formatStunden()`, `buildEmail()` | `stundenplan.js` | Geerbte Logik aus der ursprünglichen Apps-Script-Automation |
-| `istPrivatesOderLokalesZiel()`, `pruefeSicherenHostname()`, `pruefeSichereHttpsUrl()` | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link) |
+| `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link) |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 
 **Was die Testsuite bewusst nicht abdeckt:** UI-Verhalten im Browser (dafür

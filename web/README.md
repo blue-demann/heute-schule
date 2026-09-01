@@ -165,7 +165,7 @@ Zu klären, bevor der Kreis weiter wächst:
   Peer-Review gefunden: Die Mensamax-`base` hatte diese zusätzliche
   Domain-Beschränkung noch nicht — jede öffentliche HTTPS-Domain wurde
   akzeptiert. Nachgezogen mit derselben wachsbaren Allowlist wie bei
-  ccCampus (`MENSAMAX_ERLAUBTE_DOMAINS` in `worker.js`, aktuell nur
+  ccCampus (`MENSAMAX_ALLOWED_DOMAINS` in `worker.js`, aktuell nur
   `parentsmensa.de`). Mit Tests abgesichert, siehe Abschnitt "Tests" oben.
 - **Security-Header:** CSP, `Strict-Transport-Security`, `X-Frame-Options`
   u. a. über `_headers` (Cloudflare Pages). Die CSP erlaubt `unsafe-inline`

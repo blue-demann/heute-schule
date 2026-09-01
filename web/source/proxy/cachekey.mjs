@@ -1,29 +1,35 @@
-// Cache-Schlüssel für den Proxy.
+// Cache key for the proxy.
 //
-// ⚠ Sicherheitskritisch: Die Zugangsdaten sind Teil des Schlüsselmaterials.
-// Ein Cache-Treffer wird ausgeliefert, BEVOR ein Login stattfindet — der
-// Schlüssel muss also selbst sicherstellen, dass nur mit den richtigen
-// Zugangsdaten an eine zwischengespeicherte Antwort zu kommen ist.
-// server/user/klasse allein reichen dafür nicht: Bei einem WebUntis-
-// Klassensammellogin ("Klasse-9c") sind diese Felder innerhalb der Schule
-// praktisch öffentlich.
+// ⚠ Security-critical: the credentials are part of the key material. A
+// cache hit is served BEFORE any login happens — so the key itself has to
+// guarantee that only the right credentials can reach a cached response.
+// server/user/klasse alone are not enough for that: with a WebUntis class-
+// wide shared login ("Klasse-9c") those fields are effectively public
+// within the school.
 //
-// Die Zugangsdaten werden nie im Klartext gespeichert — das Material geht
-// durch SHA-256, nur der Digest landet im Cache-Schlüssel. Falsches
-// Passwort ⇒ anderer Digest ⇒ kein Treffer ⇒ echter Login-Versuch.
+// Credentials are never stored in plaintext — the material goes through
+// SHA-256, only the digest ends up in the cache key. Wrong password ⇒
+// different digest ⇒ no hit ⇒ a real login attempt.
 //
-// Bewusst in eigener Datei, damit das ohne Cloudflare-Runtime testbar ist
-// (siehe ../run-tests.mjs).
+// Deliberately a separate file so this is testable without the Cloudflare
+// runtime (see ../run-tests.mjs).
+//
+// Field names below (webuntis, server, klasse, lunch, cccampus, ...) match
+// the shared config-object shape used by web/index.html and proxy/worker.js
+// — and, for the families already using this, their saved localStorage
+// data. Deliberately NOT translated to English along with the rest of this
+// file: renaming them would be a breaking change for real, already-
+// configured users, not just an internal refactor.
 
 export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
   const cc = lunchCfg.cccampus || {};
-  const relevant = {
+  const keyFields = {
     datum,
     webuntis: {
       server: webuntisCfg.server,
       user: webuntisCfg.user,
       klasse: webuntisCfg.klasse,
-      // Muss rein — siehe Kommentar oben. Nicht "aufräumen".
+      // Must stay in — see comment above. Do not "clean this up".
       password: webuntisCfg.password,
     },
     lunch: {
@@ -33,10 +39,10 @@ export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
       einrichtung: lunchCfg.einrichtung,
       username: lunchCfg.username,
       password: lunchCfg.password,
-      // ccCampus läuft zwar im Browser, kann aber theoretisch mitkommen —
-      // dann darf es den Schlüssel ebenfalls beeinflussen.
+      // ccCampus runs in the browser, but could in theory be sent along
+      // anyway — if so, it must also be able to affect the key.
       cccampus: { base: cc.base, kundennummer: cc.kundennummer, pin: cc.pin },
     },
   };
-  return JSON.stringify(relevant);
+  return JSON.stringify(keyFields);
 }

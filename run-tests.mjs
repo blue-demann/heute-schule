@@ -7,9 +7,9 @@
 
 import { readFileSync } from 'node:fs';
 import stundenplan from './stundenplan.js';
-import { istPrivatesOderLokalesZiel, pruefeSicherenHostname, pruefeSichereHttpsUrl } from './proxy/hostcheck.mjs';
+import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
-import { letzteWocheAlsZeitraum, formatiereMailText } from './analytics-report/worker.js';
+import { lastWeekAsRange, formatEmailText } from './analytics-report/worker.js';
 
 const {
   pad,
@@ -363,129 +363,239 @@ function assertWirft(fn, teilDerMeldung) {
   }
 }
 
-console.log('\nistPrivatesOderLokalesZiel()');
-test('localhost',            () => assert(istPrivatesOderLokalesZiel('localhost')));
-test('127.0.0.1 (Loopback)', () => assert(istPrivatesOderLokalesZiel('127.0.0.1')));
-test('10.x (RFC1918)',       () => assert(istPrivatesOderLokalesZiel('10.1.2.3')));
-test('172.16.x (RFC1918)',   () => assert(istPrivatesOderLokalesZiel('172.16.0.1')));
-test('172.31.x (RFC1918)',   () => assert(istPrivatesOderLokalesZiel('172.31.255.254')));
-test('172.32.x ist öffentlich (Grenzfall)', () => assert(!istPrivatesOderLokalesZiel('172.32.0.1')));
-test('192.168.x (RFC1918)',  () => assert(istPrivatesOderLokalesZiel('192.168.0.1')));
-test('169.254.169.254 (Cloud-Metadata)', () => assert(istPrivatesOderLokalesZiel('169.254.169.254')));
-test('::1 (IPv6 Loopback)',  () => assert(istPrivatesOderLokalesZiel('::1')));
-test('fd00: (IPv6 ULA)',     () => assert(istPrivatesOderLokalesZiel('fd00::1')));
-test('.local-Domain',        () => assert(istPrivatesOderLokalesZiel('nas.local')));
-test('echte Domain ist nicht privat', () => assert(!istPrivatesOderLokalesZiel('lg-norderstedt.webuntis.com')));
-test('öffentliche IP ist nicht privat', () => assert(!istPrivatesOderLokalesZiel('8.8.8.8')));
+console.log('\nisPrivateOrLocalTarget()');
+test('localhost',            () => assert(isPrivateOrLocalTarget('localhost')));
+test('127.0.0.1 (loopback)', () => assert(isPrivateOrLocalTarget('127.0.0.1')));
+test('10.x (RFC1918)',       () => assert(isPrivateOrLocalTarget('10.1.2.3')));
+test('172.16.x (RFC1918)',   () => assert(isPrivateOrLocalTarget('172.16.0.1')));
+test('172.31.x (RFC1918)',   () => assert(isPrivateOrLocalTarget('172.31.255.254')));
+test('172.32.x is public (boundary case)', () => assert(!isPrivateOrLocalTarget('172.32.0.1')));
+test('192.168.x (RFC1918)',  () => assert(isPrivateOrLocalTarget('192.168.0.1')));
+test('169.254.169.254 (cloud metadata)', () => assert(isPrivateOrLocalTarget('169.254.169.254')));
+test('::1 (IPv6 loopback)',  () => assert(isPrivateOrLocalTarget('::1')));
+test('fd00: (IPv6 ULA)',     () => assert(isPrivateOrLocalTarget('fd00::1')));
+test('.local domain',        () => assert(isPrivateOrLocalTarget('nas.local')));
+test('real domain is not private', () => assert(!isPrivateOrLocalTarget('lg-norderstedt.webuntis.com')));
+test('public IP is not private', () => assert(!isPrivateOrLocalTarget('8.8.8.8')));
 
-console.log('\npruefeSicherenHostname()');
-test('gültiger WebUntis-Server geht durch', () => {
-  assertEqual(pruefeSicherenHostname('lg-norderstedt.webuntis.com', { pflichtSuffix: '.webuntis.com' }), 'lg-norderstedt.webuntis.com');
+console.log('\ncheckSafeHostname()');
+test('valid WebUntis server passes', () => {
+  assertEqual(checkSafeHostname('lg-norderstedt.webuntis.com', { requiredSuffix: '.webuntis.com' }), 'lg-norderstedt.webuntis.com');
 });
-test('Großschreibung wird normalisiert', () => {
-  assertEqual(pruefeSicherenHostname('LG-Norderstedt.WebUntis.com', { pflichtSuffix: '.webuntis.com' }), 'lg-norderstedt.webuntis.com');
+test('capitalization is normalized', () => {
+  assertEqual(checkSafeHostname('LG-Norderstedt.WebUntis.com', { requiredSuffix: '.webuntis.com' }), 'lg-norderstedt.webuntis.com');
 });
-test('pflichtSuffixe (Liste) lässt eine der mehreren erlaubten Domains durch', () => {
+test('requiredSuffixes (list) lets any one of several allowed domains through', () => {
   assertEqual(
-    pruefeSicherenHostname('parentsmensa.de', { pflichtSuffixe: ['.parentsmensa.de', '.andere-schule.de'] }),
+    checkSafeHostname('parentsmensa.de', { requiredSuffixes: ['.parentsmensa.de', '.andere-schule.de'] }),
     'parentsmensa.de'
   );
   assertEqual(
-    pruefeSicherenHostname('portal.andere-schule.de', { pflichtSuffixe: ['.parentsmensa.de', '.andere-schule.de'] }),
+    checkSafeHostname('portal.andere-schule.de', { requiredSuffixes: ['.parentsmensa.de', '.andere-schule.de'] }),
     'portal.andere-schule.de'
   );
 });
-test('pflichtSuffixe (Liste) lehnt Domain ab, die zu keinem Eintrag passt', () => {
+test('requiredSuffixes (list) rejects a domain matching none of the entries', () => {
   assertWirft(
-    () => pruefeSicherenHostname('angreifer.example', { pflichtSuffixe: ['.parentsmensa.de', '.andere-schule.de'] }),
+    () => checkSafeHostname('angreifer.example', { requiredSuffixes: ['.parentsmensa.de', '.andere-schule.de'] }),
     'muss auf'
   );
 });
-test('fremde Domain wird abgelehnt', () => {
-  assertWirft(() => pruefeSicherenHostname('angreifer.example', { pflichtSuffix: '.webuntis.com' }), 'muss auf');
+test('foreign domain is rejected', () => {
+  assertWirft(() => checkSafeHostname('angreifer.example', { requiredSuffix: '.webuntis.com' }), 'muss auf');
 });
-test('Suffix-Trickserei wird abgelehnt (webuntis.com.angreifer.example)', () => {
-  assertWirft(() => pruefeSicherenHostname('webuntis.com.angreifer.example', { pflichtSuffix: '.webuntis.com' }), 'muss auf');
+test('suffix trick is rejected (webuntis.com.angreifer.example)', () => {
+  assertWirft(() => checkSafeHostname('webuntis.com.angreifer.example', { requiredSuffix: '.webuntis.com' }), 'muss auf');
 });
-test('Loopback wird abgelehnt, auch ohne Pflicht-Suffix', () => {
-  assertWirft(() => pruefeSicherenHostname('127.0.0.1'), 'internes/lokales Ziel');
+test('loopback is rejected, even without a required suffix', () => {
+  assertWirft(() => checkSafeHostname('127.0.0.1'), 'internes/lokales Ziel');
 });
-test('Cloud-Metadata-IP wird abgelehnt', () => {
-  assertWirft(() => pruefeSicherenHostname('169.254.169.254'), 'internes/lokales Ziel');
+test('cloud-metadata IP is rejected', () => {
+  assertWirft(() => checkSafeHostname('169.254.169.254'), 'internes/lokales Ziel');
 });
-test('Zugangsdaten im Hostnamen werden abgelehnt', () => {
-  assertWirft(() => pruefeSicherenHostname('user@evil.example'), 'Ungültiger Server-Hostname');
+test('credentials in the hostname are rejected', () => {
+  assertWirft(() => checkSafeHostname('user@evil.example'), 'Ungültiger Server-Hostname');
 });
-test('Pfad im Hostnamen wird abgelehnt', () => {
-  assertWirft(() => pruefeSicherenHostname('webuntis.com/../evil'), 'Ungültiger Server-Hostname');
+test('path in the hostname is rejected', () => {
+  assertWirft(() => checkSafeHostname('webuntis.com/../evil'), 'Ungültiger Server-Hostname');
 });
-test('leerer Hostname wird abgelehnt', () => {
-  assertWirft(() => pruefeSicherenHostname(''), 'Ungültiger Server-Hostname');
+test('empty hostname is rejected', () => {
+  assertWirft(() => checkSafeHostname(''), 'Ungültiger Server-Hostname');
 });
-test('REGRESSION: komplette aus der Adresszeile kopierte WebUntis-URL wird akzeptiert', () => {
-  // Deckt den Fall ab, dass jemand die volle URL aus der Adresszeile ins
-  // Server-Feld einfügt statt nur den Hostnamen.
+test('REGRESSION: a full WebUntis URL copied from the address bar is accepted', () => {
+  // Covers someone pasting the whole address-bar URL into the server field
+  // instead of just the hostname.
   assertEqual(
-    pruefeSicherenHostname('https://schule.webuntis.com/WebUntis/#/basic/login', { pflichtSuffix: '.webuntis.com' }),
+    checkSafeHostname('https://schule.webuntis.com/WebUntis/#/basic/login', { requiredSuffix: '.webuntis.com' }),
     'schule.webuntis.com'
   );
 });
-test('WebUntis-URL ohne Pfad wird akzeptiert', () => {
+test('WebUntis URL without a path is accepted', () => {
   assertEqual(
-    pruefeSicherenHostname('https://schule.webuntis.com/', { pflichtSuffix: '.webuntis.com' }),
+    checkSafeHostname('https://schule.webuntis.com/', { requiredSuffix: '.webuntis.com' }),
     'schule.webuntis.com'
   );
 });
-test('URL zu einer fremden Domain bleibt abgelehnt (kein Freifahrtschein durchs URL-Parsing)', () => {
-  assertWirft(() => pruefeSicherenHostname('https://angreifer.example/x', { pflichtSuffix: '.webuntis.com' }), 'muss auf');
+test('a URL to a foreign domain stays rejected (URL parsing is not a free pass)', () => {
+  assertWirft(() => checkSafeHostname('https://angreifer.example/x', { requiredSuffix: '.webuntis.com' }), 'muss auf');
 });
-test('URL zu einer internen Adresse bleibt abgelehnt', () => {
-  assertWirft(() => pruefeSicherenHostname('https://169.254.169.254/pfad'), 'internes/lokales Ziel');
+test('a URL to an internal address stays rejected', () => {
+  assertWirft(() => checkSafeHostname('https://169.254.169.254/pfad'), 'internes/lokales Ziel');
 });
 
-console.log('\npruefeSichereHttpsUrl()');
-test('Mensamax-Basis-URL geht durch', () => {
-  assertEqual(pruefeSichereHttpsUrl('https://parentsmensa.de').hostname, 'parentsmensa.de');
+console.log('\ncheckSafeHttpsUrl()');
+test('Mensamax base URL passes', () => {
+  assertEqual(checkSafeHttpsUrl('https://parentsmensa.de').hostname, 'parentsmensa.de');
 });
-test('ccCampus-Basis-URL mit Pfad geht durch', () => {
-  assertEqual(pruefeSichereHttpsUrl('https://cccampus.mbs5online.de/ordering').hostname, 'cccampus.mbs5online.de');
+test('ccCampus base URL with a path passes', () => {
+  assertEqual(checkSafeHttpsUrl('https://cccampus.mbs5online.de/ordering').hostname, 'cccampus.mbs5online.de');
 });
-test('http:// wird abgelehnt', () => {
-  assertWirft(() => pruefeSichereHttpsUrl('http://parentsmensa.de'), 'Nur https');
+test('http:// is rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('http://parentsmensa.de'), 'Nur https');
 });
-test('file:// wird abgelehnt', () => {
-  assertWirft(() => pruefeSichereHttpsUrl('file:///etc/passwd'), 'Nur https');
+test('file:// is rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('file:///etc/passwd'), 'Nur https');
 });
-test('Zugangsdaten in der URL werden abgelehnt', () => {
-  assertWirft(() => pruefeSichereHttpsUrl('https://user:pw@parentsmensa.de'), 'keine Zugangsdaten');
+test('credentials in the URL are rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('https://user:pw@parentsmensa.de'), 'keine Zugangsdaten');
 });
-test('interne Adresse als Basis-URL wird abgelehnt', () => {
-  assertWirft(() => pruefeSichereHttpsUrl('https://192.168.1.1/admin'), 'internes/lokales Ziel');
+test('an internal address as the base URL is rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('https://192.168.1.1/admin'), 'internes/lokales Ziel');
 });
-test('Cloud-Metadata als Basis-URL wird abgelehnt', () => {
-  assertWirft(() => pruefeSichereHttpsUrl('https://169.254.169.254/latest/meta-data/'), 'internes/lokales Ziel');
+test('cloud metadata as the base URL is rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('https://169.254.169.254/latest/meta-data/'), 'internes/lokales Ziel');
 });
-test('Unsinn wird abgelehnt', () => {
-  assertWirft(() => pruefeSichereHttpsUrl('nicht mal eine url'), 'Ungültige Basis-URL');
+test('garbage input is rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('nicht mal eine url'), 'Ungültige Basis-URL');
 });
-test('REGRESSION: Mensamax-Allowlist lässt die bekannte Domain durch', () => {
+test('REGRESSION: the Mensamax allowlist lets the known domain through', () => {
   assertEqual(
-    pruefeSichereHttpsUrl('https://parentsmensa.de', { pflichtSuffixe: ['.parentsmensa.de'] }).hostname,
+    checkSafeHttpsUrl('https://parentsmensa.de', { requiredSuffixes: ['.parentsmensa.de'] }).hostname,
     'parentsmensa.de'
   );
 });
-test('REGRESSION: Mensamax-Allowlist lehnt beliebige fremde Domain ab', () => {
+test('REGRESSION: the Mensamax allowlist rejects any unrelated domain', () => {
   assertWirft(
-    () => pruefeSichereHttpsUrl('https://angreifer.example', { pflichtSuffixe: ['.parentsmensa.de'] }),
+    () => checkSafeHttpsUrl('https://angreifer.example', { requiredSuffixes: ['.parentsmensa.de'] }),
     'muss auf'
   );
 });
-test('REGRESSION: Suffix-Trick auf die Mensamax-Allowlist bleibt abgelehnt', () => {
+test('REGRESSION: a suffix trick against the Mensamax allowlist stays rejected', () => {
   assertWirft(
-    () => pruefeSichereHttpsUrl('https://parentsmensa.de.angreifer.example', { pflichtSuffixe: ['.parentsmensa.de'] }),
+    () => checkSafeHttpsUrl('https://parentsmensa.de.angreifer.example', { requiredSuffixes: ['.parentsmensa.de'] }),
     'muss auf'
   );
 });
+
+// ── Property-based tests for the security-critical hostname checks ─────────
+//
+// Prompted by review feedback: hand-picked example values (like the ones
+// above) don't show *why* those particular numbers/strings were chosen —
+// nothing stops an implementation (or an AI writing the test) from being
+// shaped to pass exactly those examples without actually satisfying the
+// underlying property. Generating many inputs from an explicitly named
+// equivalence class and checking the property holds for all of them is
+// much harder to satisfy by accident.
+//
+// Deterministic PRNG (mulberry32) instead of Math.random(), so a failure
+// is reproducible from the printed seed and CI runs are not flaky.
+function mulberry32(seed) {
+  return function next() {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const PROPERTY_TEST_SEED = 20260901;
+const PROPERTY_TEST_ITERATIONS = 200;
+
+function forAll(name, generator, property) {
+  test(`${name} (${PROPERTY_TEST_ITERATIONS} generated cases, seed ${PROPERTY_TEST_SEED})`, () => {
+    const random = mulberry32(PROPERTY_TEST_SEED);
+    for (let i = 0; i < PROPERTY_TEST_ITERATIONS; i++) {
+      const input = generator(random);
+      try {
+        property(input);
+      } catch (e) {
+        throw new Error(`case ${i} (input: ${JSON.stringify(input)}, seed: ${PROPERTY_TEST_SEED}): ${e.message}`, { cause: e });
+      }
+    }
+  });
+}
+
+function randomInt(random, min, max) {
+  return min + Math.floor(random() * (max - min + 1));
+}
+
+function randomLabel(random, minLen = 1, maxLen = 10) {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const len = randomInt(random, minLen, maxLen);
+  let label = '';
+  for (let i = 0; i < len; i++) label += alphabet[randomInt(random, 0, alphabet.length - 1)];
+  return label;
+}
+
+console.log('\nProperty: isPrivateOrLocalTarget()');
+
+// Equivalence class: any address inside 10.0.0.0/8 (all of RFC1918's
+// largest private block) — every single one must be flagged private,
+// not just the one example (10.1.2.3) used above.
+forAll(
+  'random 10.0.0.0/8 address is always private',
+  (random) => `10.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}`,
+  (ip) => assert(isPrivateOrLocalTarget(ip), `${ip} should have been classified as private/internal`)
+);
+
+// Equivalence class: 192.168.0.0/16.
+forAll(
+  'random 192.168.0.0/16 address is always private',
+  (random) => `192.168.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}`,
+  (ip) => assert(isPrivateOrLocalTarget(ip), `${ip} should have been classified as private/internal`)
+);
+
+// Equivalence class: public IPv4 space, deliberately built by picking a
+// first octet outside every reserved range this function checks for
+// (0, 10, 100 [CGNAT], 127, 169, 172, 192) — so every generated address is,
+// by construction, a real public-space example, not a coincidence. Some of
+// these octets (e.g. 172.32.x.x, covered by an explicit boundary test
+// above) are actually public too; excluding the whole octet here just
+// keeps the generator simple, it does not narrow what the property means.
+const RESERVED_FIRST_OCTETS = new Set([0, 10, 100, 127, 169, 172, 192]);
+function randomPublicFirstOctet(random) {
+  let octet;
+  do { octet = randomInt(random, 1, 223); } while (RESERVED_FIRST_OCTETS.has(octet));
+  return octet;
+}
+forAll(
+  'random public-space IPv4 address is never private',
+  (random) => `${randomPublicFirstOctet(random)}.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}`,
+  (ip) => assert(!isPrivateOrLocalTarget(ip), `${ip} should NOT have been classified as private/internal`)
+);
+
+console.log('\nProperty: checkSafeHostname() with a fixed allowlist');
+
+const ALLOWED_TEST_SUFFIX = '.parentsmensa.de';
+
+// Equivalence class: any hostname that genuinely ends in the allowed
+// suffix, built from a random label of random length — not just the one
+// hand-picked example ("parentsmensa.de") used above.
+forAll(
+  'random subdomain of the allowed suffix is always accepted',
+  (random) => `${randomLabel(random)}${ALLOWED_TEST_SUFFIX}`,
+  (host) => assertEqual(checkSafeHostname(host, { requiredSuffixes: [ALLOWED_TEST_SUFFIX] }), host)
+);
+
+// Equivalence class: random domains built from an unrelated TLD, so by
+// construction they cannot end in the allowed suffix — the property under
+// test is "anything outside the allowlist is rejected", not "this one
+// attacker domain is rejected".
+forAll(
+  'random domain outside the allowlist is always rejected',
+  (random) => `${randomLabel(random)}.${randomLabel(random, 2, 6)}.example`,
+  (host) => assertWirft(() => checkSafeHostname(host, { requiredSuffixes: [ALLOWED_TEST_SUFFIX] }), 'muss auf')
+);
 
 // ── Proxy: Cache-Schlüssel ─────────────────────────────────────────────────
 //
@@ -575,89 +685,95 @@ test('CCCAMPUS_ERLAUBTE_DOMAINS und CSP connect-src listen dieselben Domains', (
   assertEqual(JSON.stringify(ausJs), JSON.stringify(ausCsp));
 });
 
-console.log('\nletzteWocheAlsZeitraum() (analytics-report)');
+console.log('\nlastWeekAsRange() (analytics-report)');
 
-test('liefert genau 7 volle Tage, endend am Vortag (UTC)', () => {
-  const jetzt = new Date('2026-09-08T10:00:00Z'); // ein Dienstag
-  const { von, bis } = letzteWocheAlsZeitraum(jetzt);
-  assertEqual(von, '2026-09-01T00:00:00.000Z');
-  assertEqual(bis, '2026-09-08T00:00:00.000Z');
+test('returns exactly 7 full days, ending the day before (UTC)', () => {
+  const now = new Date('2026-09-08T10:00:00Z'); // a Tuesday
+  const { since, until } = lastWeekAsRange(now);
+  assertEqual(since, '2026-09-01T00:00:00.000Z');
+  assertEqual(until, '2026-09-08T00:00:00.000Z');
 });
 
-test('Monatswechsel wird korrekt behandelt', () => {
-  const jetzt = new Date('2026-09-03T00:00:00Z');
-  const { von } = letzteWocheAlsZeitraum(jetzt);
-  assertEqual(von, '2026-08-27T00:00:00.000Z');
+test('handles a month boundary correctly', () => {
+  const now = new Date('2026-09-03T00:00:00Z');
+  const { since } = lastWeekAsRange(now);
+  assertEqual(since, '2026-08-27T00:00:00.000Z');
 });
 
-console.log('\nformatiereMailText() (analytics-report)');
+console.log('\nformatEmailText() (analytics-report)');
 
-test('vollständige Zahlen werden ausgegeben', () => {
-  const text = formatiereMailText({
-    von: '2026-09-01T00:00:00.000Z',
-    bis: '2026-09-08T00:00:00.000Z',
-    besuche: 42,
-    proxyAnfragen: 17,
+test('full numbers are printed', () => {
+  const text = formatEmailText({
+    since: '2026-09-01T00:00:00.000Z',
+    until: '2026-09-08T00:00:00.000Z',
+    visits: 42,
+    proxyRequests: 17,
   });
-  assert(text.includes('2026-09-01 bis 2026-09-08'), 'Zeitraum fehlt im Text');
-  assert(text.includes('Website-Besuche: 42'), 'Besuchszahl fehlt im Text');
-  assert(text.includes('Proxy-Anfragen (WebUntis/Mensamax): 17'), 'Proxy-Zahl fehlt im Text');
+  assert(text.includes('2026-09-01 bis 2026-09-08'), 'date range missing from the text');
+  assert(text.includes('Website-Besuche: 42'), 'visit count missing from the text');
+  assert(text.includes('Proxy-Anfragen (WebUntis/Mensamax): 17'), 'proxy count missing from the text');
 });
 
-test('fehlende Werte werden als "nicht verfügbar" markiert, nicht verschwiegen', () => {
-  const text = formatiereMailText({
-    von: '2026-09-01T00:00:00.000Z',
-    bis: '2026-09-08T00:00:00.000Z',
-    besuche: null,
-    proxyAnfragen: 5,
+test('missing values are marked "nicht verfügbar", not silently dropped', () => {
+  const text = formatEmailText({
+    since: '2026-09-01T00:00:00.000Z',
+    until: '2026-09-08T00:00:00.000Z',
+    visits: null,
+    proxyRequests: 5,
   });
-  assert(text.includes('Website-Besuche: nicht verfügbar'), 'fehlender Wert wird nicht als solcher markiert');
+  assert(text.includes('Website-Besuche: nicht verfügbar'), 'missing value is not marked as such');
 });
 
-// ── Keine Journal Comments im Code ──────────────────────────────────────────
+// ── No journal comments in the code ─────────────────────────────────────────
 //
-// Kommentare erklären den aktuellen Stand, nicht die Änderungshistorie
-// dahin — das gehört in Commit-Nachrichten oder die Design-Doku
-// (PROJEKT.md), nicht in den Code (siehe Clean Code, Kapitel "Comments" —
-// "Journal Comments" als benanntes Anti-Pattern).
-// Dokumentationsdateien (*.md) sind bewusst ausgenommen: Dort gehört
-// Zeitbezug hin.
+// Comments explain the current state, not the history of changes that led
+// to it — that belongs in commit messages or the design doc (PROJEKT.md),
+// not in the code (see Clean Code, chapter "Comments" — "Journal Comments"
+// as a named anti-pattern).
+// Documentation files (*.md) are deliberately excluded: that's exactly
+// where a time reference belongs.
+//
+// Signal words are checked in both German and English: most of the
+// codebase is being moved to English identifiers/comments, but some files
+// (and the frozen, point-in-time audit reports) are still German — this
+// check needs to catch journal-style comments in either language.
 
-console.log('\nKeine Journal Comments im Code');
+console.log('\nNo journal comments in the code');
 
-test('keine Datums-/Historie-Signalwörter in Code-Kommentaren', () => {
-  // Prüft zwei Kommentar-Formen getrennt, weil eine reine Zeilenanfang-
-  // Prüfung (frühere Fassung dieses Tests) mehrzeilige /* */-Blöcke ohne
-  // führendes "*" je Fortsetzungszeile übersehen hat — genau der Fall, der
-  // in web/index.html unentdeckt blieb, bis eine externe Prüfung ihn fand.
-  const dateien = [
+test('no date/history signal words in code comments', () => {
+  // Checks two comment forms separately, because a plain line-start check
+  // (an earlier version of this test) missed multi-line /* */ blocks
+  // whose continuation lines don't each start with "*" — exactly the case
+  // that stayed undetected in web/index.html until an external review
+  // found it.
+  const files = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
     'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
     'analytics-report/worker.js',
     'web/index.html', 'web/_headers',
   ];
-  const signalwoerter = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert/;
-  const treffer = [];
-  for (const datei of dateien) {
-    const inhalt = readFileSync(new URL(`./${datei}`, import.meta.url), 'utf-8');
+  const signalWords = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert|fix from|beta test \(|for months|has happened since|confirmed \(\d|verified \(\d|\bwas fixed\b|changed later/;
+  const hits = [];
+  for (const file of files) {
+    const content = readFileSync(new URL(`./${file}`, import.meta.url), 'utf-8');
 
-    // Form 1: einzeilige //- und #-Kommentare, zeilenweise geprüft.
-    inhalt.split('\n').forEach((zeile, i) => {
-      if (/^\s*(\/\/|#)/.test(zeile) && signalwoerter.test(zeile)) {
-        treffer.push(`${datei}:${i + 1}: ${zeile.trim()}`);
+    // Form 1: single-line // and # comments, checked line by line.
+    content.split('\n').forEach((line, i) => {
+      if (/^\s*(\/\/|#)/.test(line) && signalWords.test(line)) {
+        hits.push(`${file}:${i + 1}: ${line.trim()}`);
       }
     });
 
-    // Form 2: /* ... */-Blöcke als Ganzes, unabhängig davon, ob jede
-    // Fortsetzungszeile mit "*" beginnt.
-    for (const block of inhalt.matchAll(/\/\*[\s\S]*?\*\//g)) {
-      if (signalwoerter.test(block[0])) {
-        const zeile = inhalt.slice(0, block.index).split('\n').length;
-        treffer.push(`${datei}:${zeile}: ${block[0].split('\n')[0].trim()}…`);
+    // Form 2: /* ... */ blocks as a whole, regardless of whether every
+    // continuation line starts with "*".
+    for (const block of content.matchAll(/\/\*[\s\S]*?\*\//g)) {
+      if (signalWords.test(block[0])) {
+        const line = content.slice(0, block.index).split('\n').length;
+        hits.push(`${file}:${line}: ${block[0].split('\n')[0].trim()}…`);
       }
     }
   }
-  assert(treffer.length === 0, 'Journal-Comment-Signalwörter gefunden:\n    ' + treffer.join('\n    '));
+  assert(hits.length === 0, 'Found journal-comment signal words:\n    ' + hits.join('\n    '));
 });
 
 // ── Ergebnis ───────────────────────────────────────────────────────────────

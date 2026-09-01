@@ -66,7 +66,7 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   `https://` sein, darf keine Zugangsdaten in der URL selbst enthalten und
   darf nicht auf ein privates/Loopback/Link-lokales Ziel zeigen (deckt
   u. a. den 169.254.169.254-Cloud-Metadata-Trick ab) — plus eine
-  wachsbare Domain-Allowlist (`MENSAMAX_ERLAUBTE_DOMAINS` in `worker.js`,
+  wachsbare Domain-Allowlist (`MENSAMAX_ALLOWED_DOMAINS` in `worker.js`,
   aktuell nur `parentsmensa.de`), damit der Proxy nicht als Relay gegen
   beliebige öffentliche Hosts missbraucht werden kann. Nutzt eine Schule
   Mensamax unter einer anderen Domain, dort ergänzen.
