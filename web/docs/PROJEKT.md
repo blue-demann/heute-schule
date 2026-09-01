@@ -302,7 +302,9 @@ offen benannt statt verschwiegen.
 Testframework-Abhängigkeit (`node --test` wäre möglich gewesen, für die
 Projektgröße nicht nötig).
 
-**Umfang, Stand 28.08.2026: 85 Tests, 0 Abhängigkeiten.**
+**Umfang: 0 Abhängigkeiten, aktuelle Anzahl per `node run-tests.mjs`**
+(bewusst keine feste Zahl hier — genau ein eingefrorener Wert dieser Art
+lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 
 | Testgruppe | Datei unter Test | Fokus |
 |---|---|---|
@@ -320,13 +322,16 @@ laufen und bricht bei einem Fehlschlag ab (siehe Abschnitt 10) — eingeführt,
 nachdem der Cache-Bypass-Fehler zeigte, dass „ich hab's im Kopf" als
 Absicherung nicht reicht.
 
-**Verweis auf die Testergebnisse der beiden Audit-Runden:**
-- [`QA-Bericht-2026-08-27-v0.1.1.md`](QA-Bericht-2026-08-27-v0.1.1.md) —
+**Verweis auf die Testergebnisse der Audit-Runden.** Links zu den beiden
+älteren Berichten (27.08.) zeigen bewusst auf GitHub statt auf eine relative
+Datei — sie sind nicht Teil des `web/docs/`-Dumps (siehe unten) und ein
+relativer Link würde dort ins Leere laufen:
+- [`QA-Bericht-2026-08-27-v0.1.1.md`](https://github.com/blue-demann/heute-schule/blob/main/QA-Bericht-2026-08-27-v0.1.1.md) —
   c't-Stil-Analyse, Runde 1 (26 Kritikpunkte über 10 Kategorien) und
   Runde 2 (Verifikation der Fixes gegen die Live-Umgebung, zwei neue Funde)
-- [`PEER-REVIEW-2026-08-27.md`](PEER-REVIEW-2026-08-27.md) — unabhängige
-  Gegenprüfung dazu, fand den Cache-Bypass-Fehler und weitere Lücken, die
-  der erste Bericht übersehen hatte
+- [`PEER-REVIEW-2026-08-27.md`](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-27.md) —
+  unabhängige Gegenprüfung dazu, fand den Cache-Bypass-Fehler und weitere
+  Lücken, die der erste Bericht übersehen hatte
 - [`QA-Bericht-2026-08-31.md`](QA-Bericht-2026-08-31.md) — dritte Runde,
   ausgeführt von einer frischen Sitzung ohne Vorwissen über frühere
   Projektstände; kein 🔴-Befund, bestätigte alle vorherigen 🔴-Fixes live
@@ -334,10 +339,15 @@ Absicherung nicht reicht.
   frische Sitzung, fand die zu enge Mensamax-Domain-Beschränkung (behoben,
   siehe Entscheidungs-Log/Sicherheitsmodell) und die uneinheitliche
   Haushaltsausnahme-Formulierung in vier Dokumenten (ebenfalls korrigiert)
+- [`DOKU-KONSISTENZ-CHECK-2026-09-01.md`](https://github.com/blue-demann/heute-schule/blob/main/DOKU-KONSISTENZ-CHECK-2026-09-01.md) —
+  vierte Runde, gezielt auf Doku-Konsistenz statt den vollen Kriterienkatalog;
+  fand zwei 🔴-Funde (private Adresse in einer Prompt-Kopie, Code-Kommentar
+  widersprach der eigenen Projekt-Doku), beide behoben
 
-Auf der Website ([`ueber.html`](web/ueber.html), Abschnitt „Technische
-Details") sind bewusst nur die beiden aktuellsten Berichte verlinkt — die
-Website zeigt den aktuellen Stand, nicht die Historie. Die früheren Runden
+Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
+Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
+c't-Stil-/Peer-Review-Berichte verlinkt — die Website zeigt den aktuellen
+Stand, nicht die Historie. Die früheren Runden
 bleiben hier im Repository nachvollziehbar.
 
 **Methodik — wichtig für die Einordnung:** Keine der vier Audit-Runden
@@ -458,7 +468,7 @@ Wird nicht dupliziert — siehe:
 - [`OFFEN-naechste-Fixes.md`](OFFEN-naechste-Fixes.md) — technische und
   rechtliche Punkte, aktuell im Kern die juristische Prüfung vor weiterer
   Ausweitung.
-- [`web/README.md`](web/README.md), Abschnitt „Neue Ideen" — Feature-
+- [`web/README.md`](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), Abschnitt „Neue Ideen" — Feature-
   Vorschläge (z. B. Custom-Termine), noch nicht bewertet.
 
 ## 13. Verantwortlichkeit

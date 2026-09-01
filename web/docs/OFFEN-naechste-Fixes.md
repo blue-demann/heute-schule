@@ -4,12 +4,17 @@
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
-[QA-Bericht-2026-08-27-v0.1.1.md](QA-Bericht-2026-08-27-v0.1.1.md) und
-[PEER-REVIEW-2026-08-27.md](PEER-REVIEW-2026-08-27.md). Eine dritte
-Prüfrunde am 31.08. (frische Sitzungen, kein Vorwissen) ergänzt zwei weitere
-Befunde, siehe [QA-Bericht-2026-08-31.md](QA-Bericht-2026-08-31.md) und
-[PEER-REVIEW-2026-08-31.md](PEER-REVIEW-2026-08-31.md). Alle vier Berichte
-bleiben als Zeitpunkt-Momentaufnahmen unverändert.
+[QA-Bericht-2026-08-27-v0.1.1.md](https://github.com/blue-demann/heute-schule/blob/main/QA-Bericht-2026-08-27-v0.1.1.md)
+und [PEER-REVIEW-2026-08-27.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-27.md)
+(Links zeigen auf GitHub statt eine relative Datei — beide Berichte sind
+nicht Teil des `web/docs/`-Dumps, ein relativer Link würde von dort aus
+ins Leere laufen). Eine dritte Prüfrunde am 31.08. (frische Sitzungen,
+kein Vorwissen) ergänzt zwei weitere Befunde, siehe
+[QA-Bericht-2026-08-31.md](QA-Bericht-2026-08-31.md) und
+[PEER-REVIEW-2026-08-31.md](PEER-REVIEW-2026-08-31.md). Eine vierte Runde
+am 01.09. prüfte gezielt die Doku-Konsistenz, siehe
+[DOKU-KONSISTENZ-CHECK-2026-09-01.md](https://github.com/blue-demann/heute-schule/blob/main/DOKU-KONSISTENZ-CHECK-2026-09-01.md).
+Alle Berichte bleiben als Zeitpunkt-Momentaufnahmen unverändert.
 
 ## Erledigt seit dem Peer-Review
 
@@ -47,5 +52,5 @@ bleiben als Zeitpunkt-Momentaufnahmen unverändert.
    durchgängig **WCAG 2.2** referenzieren, mit Level (A/AA/AAA).
 
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
-von [web/README.md](web/README.md), nicht hier — das sind Vorschläge, keine
+von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

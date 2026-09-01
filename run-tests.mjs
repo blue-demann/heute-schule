@@ -586,6 +586,10 @@ test('CCCAMPUS_ERLAUBTE_DOMAINS und CSP connect-src listen dieselben Domains', (
 console.log('\nKeine Journal Comments im Code');
 
 test('keine Datums-/Historie-Signalwörter in Code-Kommentaren', () => {
+  // Prüft zwei Kommentar-Formen getrennt, weil eine reine Zeilenanfang-
+  // Prüfung (frühere Fassung dieses Tests) mehrzeilige /* */-Blöcke ohne
+  // führendes "*" je Fortsetzungszeile übersehen hat — genau der Fall, der
+  // in web/index.html unentdeckt blieb, bis eine externe Prüfung ihn fand.
   const dateien = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
     'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
@@ -595,11 +599,22 @@ test('keine Datums-/Historie-Signalwörter in Code-Kommentaren', () => {
   const treffer = [];
   for (const datei of dateien) {
     const inhalt = readFileSync(new URL(`./${datei}`, import.meta.url), 'utf-8');
+
+    // Form 1: einzeilige //- und #-Kommentare, zeilenweise geprüft.
     inhalt.split('\n').forEach((zeile, i) => {
-      if (/^\s*(\/\/|#|\*)/.test(zeile) && signalwoerter.test(zeile)) {
+      if (/^\s*(\/\/|#)/.test(zeile) && signalwoerter.test(zeile)) {
         treffer.push(`${datei}:${i + 1}: ${zeile.trim()}`);
       }
     });
+
+    // Form 2: /* ... */-Blöcke als Ganzes, unabhängig davon, ob jede
+    // Fortsetzungszeile mit "*" beginnt.
+    for (const block of inhalt.matchAll(/\/\*[\s\S]*?\*\//g)) {
+      if (signalwoerter.test(block[0])) {
+        const zeile = inhalt.slice(0, block.index).split('\n').length;
+        treffer.push(`${datei}:${zeile}: ${block[0].split('\n')[0].trim()}…`);
+      }
+    }
   }
   assert(treffer.length === 0, 'Journal-Comment-Signalwörter gefunden:\n    ' + treffer.join('\n    '));
 });

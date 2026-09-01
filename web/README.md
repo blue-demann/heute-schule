@@ -218,7 +218,11 @@ Zu klären, bevor der Kreis weiter wächst:
   in `../PROJEKT.md`, Abschnitt 5. Entscheidung offen, ob das noch weiter
   gehärtet wird (siehe nächster Punkt).
 
-### Idee (27.08., noch nicht umgesetzt): Verschlüsselung ohne Master-Passwort
+### Geprüft und verworfen: Verschlüsselung ohne Master-Passwort
+
+Diese Idee wurde durchdacht, aber bewusst nicht umgesetzt — Details und
+Begründung in [`../PROJEKT.md`](https://github.com/blue-demann/heute-schule/blob/main/PROJEKT.md),
+Abschnitt 5. Hier nur zur Vollständigkeit, was geprüft wurde:
 
 Statt Klartext: Config vor dem Speichern mit einem **nicht extrahierbaren**
 AES-Schlüssel (Web Crypto API, `extractable: false`) verschlüsseln, Schlüssel

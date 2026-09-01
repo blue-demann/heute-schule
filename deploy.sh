@@ -78,6 +78,13 @@ fi
 
 if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "web" ]; then
   echo "▶ Website deployen…"
+  # .deploy-commit trägt den aktuellen HEAD-Hash mit hoch (gitignored,
+  # bei jedem Deploy neu erzeugt) — Grundlage für den Live-vs-HEAD-
+  # Abgleich direkt im Anschluss. Löst genau die Lücke aus dem
+  # QA-Bericht vom 31.08.: Das Konsistenz-Gate oben prüft nur web/source
+  # bzw. web/docs gegen die lokalen Originale, nicht den tatsächlich
+  # ausgelieferten Live-Stand gegen den Git-HEAD.
+  git rev-parse HEAD > web/.deploy-commit
   # --branch=production explizit setzen, NICHT weglassen: wrangler pages
   # deploy erkennt sonst automatisch den lokalen Git-Branch (hier "main")
   # und behandelt den Deploy als Branch-Preview (landet auf
@@ -85,6 +92,20 @@ if [ "$ZIEL" = "alles" ] || [ "$ZIEL" = "web" ]; then
   # Cloudflare hinterlegte Produktions-Branch heißt "production", nicht
   # "main" (per `wrangler pages deployment list` prüfbar).
   ( cd web && npx wrangler pages deploy . --project-name=heute-schule --branch=production )
+  echo ""
+
+  echo "▶ Live-Stand gegen HEAD prüfen…"
+  sleep 3
+  LIVE_COMMIT="$(curl -s https://heute-schule.pages.dev/.deploy-commit || true)"
+  HEAD_COMMIT="$(git rev-parse HEAD)"
+  if [ "$LIVE_COMMIT" = "$HEAD_COMMIT" ]; then
+    echo "  ✓ Live-Stand entspricht HEAD ($HEAD_COMMIT)"
+  else
+    echo "  ⚠ Live-Stand ($LIVE_COMMIT) weicht von HEAD ($HEAD_COMMIT) ab —"
+    echo "    entweder ist der Cache noch nicht durchgezogen (kurz warten,"
+    echo "    erneut prüfen: curl https://heute-schule.pages.dev/.deploy-commit)"
+    echo "    oder der Deploy ist nicht wie erwartet gelaufen."
+  fi
   echo ""
 fi
 

@@ -39,3 +39,8 @@ web/datenschutz.html
 # gedacht (siehe Kopfzeile der Datei selbst). Bleibt lokal vorhanden, nur
 # nicht versioniert.
 Verarbeitungsverzeichnis-INTERN.md
+
+# Von deploy.sh bei jedem Deploy neu erzeugt (aktueller Git-HEAD-Hash) —
+# Grundlage für den Live-vs-HEAD-Abgleich nach dem Website-Deploy. Kein
+# eigenständiger Inhalt, nichts zu versionieren.
+web/.deploy-commit
