@@ -111,7 +111,7 @@ Vergessenes missverstanden werden:
 └─────────────┘
 ```
 
-**Zwei Komponenten:**
+**Drei Komponenten:**
 
 - **`web/`** — statische PWA auf Cloudflare Pages. Eine `index.html` für die
   App, drei Rechtstext-Seiten (`impressum.html`, `datenschutz.html`,
@@ -121,6 +121,14 @@ Vergessenes missverstanden werden:
   Mensamax-Anfragen serverseitig stellt (löst deren fehlende
   CORS-Freigabe), plus `hostcheck.mjs` (Ziel-Host-Validierung) und
   `cachekey.mjs` (Cache-Schlüssel-Bildung) als ausgelagerte, testbare Module.
+- **`analytics-report/`** — eigenständiger Cloudflare Worker mit
+  Cron-Trigger (wöchentlich), fragt Cloudflares eigene Analytics-Daten
+  (Web Analytics + Workers-Invocations) über die GraphQL Analytics API ab
+  und verschickt eine kurze Zusammenfassung per Mail über Resend. Kein
+  zusätzliches Tracking, keine Cookies — nutzt nur Daten, die Cloudflare
+  für Pages/Workers ohnehin erhebt. Läuft unabhängig vom Hauptproxy, eigene
+  `wrangler.toml`. Einrichtung (Konten/Tokens, die nur Björn selbst anlegen
+  kann) in `analytics-report/README.md`.
 
 **Warum zwei verschiedene Wege für strukturell ähnliche Anbieter:**
 WebUntis und Mensamax senden keine `Access-Control-Allow-Origin`-Header —

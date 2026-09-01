@@ -69,6 +69,12 @@ Zeitpunkt-Momentaufnahmen unverändert.
    `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
    SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
    Besonders relevant wegen des geplanten eigenen Wechsels auf iPhone.
+5. **Wartet auf manuelle Einrichtung:** `analytics-report/` (wöchentliche
+   Aufruf-Statistik per Mail) ist fertig gebaut, aber noch nicht live —
+   braucht drei Schritte, die nur Björn selbst machen kann (Web-Analytics-
+   Site anlegen, Cloudflare-API-Token, Resend-Konto). Details in
+   `analytics-report/README.md`. Die GraphQL-Query ist nach Dokumentation
+   gebaut, aber noch nicht gegen einen echten Account getestet.
 
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine

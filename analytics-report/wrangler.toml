@@ -1,0 +1,23 @@
+name = "heute-schule-analytics-report"
+main = "worker.js"
+compatibility_date = "2026-08-25"
+
+# Montags 07:00 UTC (= 08:00/09:00 MEZ/MESZ je nach Jahreszeit).
+[triggers]
+crons = ["0 7 * * 1"]
+
+[vars]
+# Cloudflare-Account-ID — nicht geheim, siehe README.md.
+CF_ACCOUNT_TAG = ""
+# Site-Tag aus dem Web-Analytics-Beacon-Snippet — ebenfalls nicht geheim,
+# steckt ohnehin öffentlich sichtbar im HTML jeder Seite.
+CF_WEB_ANALYTICS_SITE_TAG = ""
+CF_PROXY_SCRIPT_NAME = "stundenplan-proxy"
+MAIL_ABSENDER = "onboarding@resend.dev"
+MAIL_EMPFAENGER = ""
+
+# Echte Geheimnisse NICHT hier eintragen, sondern per
+# `npx wrangler secret put <NAME>` setzen (siehe README.md):
+#   CF_API_TOKEN    — Cloudflare-API-Token, Scope "Account Analytics: Read"
+#   RESEND_API_KEY  — Resend-API-Key
+#   TEST_SECRET     — selbst ausgedachter Zufallswert für den Testaufruf

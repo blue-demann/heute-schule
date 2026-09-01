@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import stundenplan from './stundenplan.js';
 import { istPrivatesOderLokalesZiel, pruefeSicherenHostname, pruefeSichereHttpsUrl } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
+import { letzteWocheAlsZeitraum, formatiereMailText } from './analytics-report/worker.js';
 
 const {
   pad,
@@ -574,6 +575,45 @@ test('CCCAMPUS_ERLAUBTE_DOMAINS und CSP connect-src listen dieselben Domains', (
   assertEqual(JSON.stringify(ausJs), JSON.stringify(ausCsp));
 });
 
+console.log('\nletzteWocheAlsZeitraum() (analytics-report)');
+
+test('liefert genau 7 volle Tage, endend am Vortag (UTC)', () => {
+  const jetzt = new Date('2026-09-08T10:00:00Z'); // ein Dienstag
+  const { von, bis } = letzteWocheAlsZeitraum(jetzt);
+  assertEqual(von, '2026-09-01T00:00:00.000Z');
+  assertEqual(bis, '2026-09-08T00:00:00.000Z');
+});
+
+test('Monatswechsel wird korrekt behandelt', () => {
+  const jetzt = new Date('2026-09-03T00:00:00Z');
+  const { von } = letzteWocheAlsZeitraum(jetzt);
+  assertEqual(von, '2026-08-27T00:00:00.000Z');
+});
+
+console.log('\nformatiereMailText() (analytics-report)');
+
+test('vollständige Zahlen werden ausgegeben', () => {
+  const text = formatiereMailText({
+    von: '2026-09-01T00:00:00.000Z',
+    bis: '2026-09-08T00:00:00.000Z',
+    besuche: 42,
+    proxyAnfragen: 17,
+  });
+  assert(text.includes('2026-09-01 bis 2026-09-08'), 'Zeitraum fehlt im Text');
+  assert(text.includes('Website-Besuche: 42'), 'Besuchszahl fehlt im Text');
+  assert(text.includes('Proxy-Anfragen (WebUntis/Mensamax): 17'), 'Proxy-Zahl fehlt im Text');
+});
+
+test('fehlende Werte werden als "nicht verfügbar" markiert, nicht verschwiegen', () => {
+  const text = formatiereMailText({
+    von: '2026-09-01T00:00:00.000Z',
+    bis: '2026-09-08T00:00:00.000Z',
+    besuche: null,
+    proxyAnfragen: 5,
+  });
+  assert(text.includes('Website-Besuche: nicht verfügbar'), 'fehlender Wert wird nicht als solcher markiert');
+});
+
 // ── Keine Journal Comments im Code ──────────────────────────────────────────
 //
 // Kommentare erklären den aktuellen Stand, nicht die Änderungshistorie
@@ -593,6 +633,7 @@ test('keine Datums-/Historie-Signalwörter in Code-Kommentaren', () => {
   const dateien = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
     'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
+    'analytics-report/worker.js',
     'web/index.html', 'web/_headers',
   ];
   const signalwoerter = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert/;

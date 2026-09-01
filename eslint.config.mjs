@@ -19,7 +19,7 @@ export default [
 
   // Gemeinsame Google-Style-Regeln für den gesamten JS-Code außer web/.
   {
-    files: ['proxy/**/*.{js,mjs}', 'run-tests.mjs', 'stundenplan.js', 'eslint.config.mjs', 'web/sw.js'],
+    files: ['proxy/**/*.{js,mjs}', 'analytics-report/**/*.{js,mjs}', 'run-tests.mjs', 'stundenplan.js', 'eslint.config.mjs', 'web/sw.js'],
     rules: {
       indent: ['error', 2, { SwitchCase: 1 }],
       quotes: ['error', 'single', { avoidEscape: true }],
@@ -31,11 +31,11 @@ export default [
     },
   },
 
-  // proxy/* und web/sw.js: laufen als Service Worker bzw. in der Cloudflare-
-  // Workers-Runtime, nicht in Node — andere Globals (fetch, caches, crypto
-  // u. a. wie im Service-Worker-Standard).
+  // proxy/*, analytics-report/* und web/sw.js: laufen als Service Worker
+  // bzw. in der Cloudflare-Workers-Runtime, nicht in Node — andere Globals
+  // (fetch, caches, crypto u. a. wie im Service-Worker-Standard).
   {
-    files: ['proxy/**/*.{js,mjs}', 'web/sw.js'],
+    files: ['proxy/**/*.{js,mjs}', 'analytics-report/**/*.{js,mjs}', 'web/sw.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
