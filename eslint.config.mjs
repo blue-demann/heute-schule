@@ -3,20 +3,23 @@
 // statt über das Paket "eslint-config-google", das seit 2019 nicht mehr
 // gepflegt wird und nicht zu aktuellem ESLint (Flat Config) passt.
 //
-// Eine Regel weicht bewusst vom Guide ab: web/index.html bleibt bei `var`
-// statt `const`/`let`, weil die Seite absichtlich in ES5-Syntax gebaut ist
-// (Alt-Geräte-Kompatibilität als Ziel, kein Build-Schritt). Diese Ausnahme
-// gilt ausschließlich für diese eine Datei.
+// web/index.html bekommt einen eigenen, bewusst schwächeren Regelsatz: das
+// Inline-Script bleibt absichtlich bei `var` statt `const`/`let` (Alt-
+// Geräte-Kompatibilität als Ziel, kein Build-Schritt). Geprüft wird die
+// Datei trotzdem — über eslint-plugin-html, das das <script>-Inline-JS für
+// ESLint extrahiert. Diese Lockerung gilt ausschließlich für diese eine
+// Datei.
 
 import js from '@eslint/js';
 import globals from 'globals';
+import html from 'eslint-plugin-html';
 
 export default [
   js.configs.recommended,
 
   // Gemeinsame Google-Style-Regeln für den gesamten JS-Code außer web/.
   {
-    files: ['proxy/**/*.{js,mjs}', 'run-tests.mjs', 'stundenplan.js', 'eslint.config.mjs'],
+    files: ['proxy/**/*.{js,mjs}', 'run-tests.mjs', 'stundenplan.js', 'eslint.config.mjs', 'web/sw.js'],
     rules: {
       indent: ['error', 2, { SwitchCase: 1 }],
       quotes: ['error', 'single', { avoidEscape: true }],
@@ -28,10 +31,11 @@ export default [
     },
   },
 
-  // proxy/*: läuft in der Cloudflare-Workers-Runtime, nicht in Node — andere
-  // Globals (fetch, caches, crypto u. a. wie im Service-Worker-Standard).
+  // proxy/* und web/sw.js: laufen als Service Worker bzw. in der Cloudflare-
+  // Workers-Runtime, nicht in Node — andere Globals (fetch, caches, crypto
+  // u. a. wie im Service-Worker-Standard).
   {
-    files: ['proxy/**/*.{js,mjs}'],
+    files: ['proxy/**/*.{js,mjs}', 'web/sw.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -59,11 +63,38 @@ export default [
     },
   },
 
-  // web/index.html enthält Inline-JavaScript, kein eigenständiges .js-File —
-  // ESLint prüft hier bewusst nicht (siehe Kommentar oben). Der Journal-
-  // Comments-Check in run-tests.mjs deckt diese Datei trotzdem ab, weil er
-  // rein textbasiert arbeitet, nicht auf ESLint angewiesen ist.
+  // web/index.html und web/ueber.html: Inline-<script> über eslint-plugin-
+  // html extrahiert und geprüft. `var` bleibt hier bewusst erlaubt (siehe
+  // Kommentar oben), deshalb kein no-var/prefer-const in diesem Block —
+  // sonst identisch zum übrigen Projekt-Stil.
   {
-    ignores: ['web/**', 'node_modules/**', '.wrangler/**'],
+    files: ['web/index.html', 'web/ueber.html'],
+    plugins: { html },
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: { ...globals.browser },
+    },
+    rules: {
+      indent: ['error', 2, { SwitchCase: 1 }],
+      quotes: ['error', 'single', { avoidEscape: true }],
+      semi: ['error', 'always'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'one-var': ['error', 'never'],
+      'no-unused-vars': 'warn',
+    },
+  },
+
+  // Alles andere unter web/ (Rechtstexte, Beispiel-HTML, gespiegelte Doku-
+  // Kopien) bleibt ungeprüft — kein eigener JS-Code dort.
+  {
+    ignores: [
+      'web/impressum*.html',
+      'web/datenschutz*.html',
+      'web/docs/**',
+      'web/source/**',
+      'node_modules/**',
+      '.wrangler/**',
+    ],
   },
 ];

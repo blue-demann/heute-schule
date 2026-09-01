@@ -413,7 +413,7 @@
         }
       });
       return parsed;
-    } catch (e) {
+    } catch {
       return { proxyUrl: PROXY_URL, children: [] };
     }
   }
@@ -494,7 +494,7 @@
   function extrahiereWebUntisHostname(eingabe){
     var wert = String(eingabe || '').trim();
     if (/^https?:\/\//i.test(wert)){
-      try { return new URL(wert).hostname; } catch (e) { /* fällt durch */ }
+      try { return new URL(wert).hostname; } catch { /* fällt durch */ }
     }
     // Auch ohne Protokoll eingefügt (z. B. "schule.webuntis.com/WebUntis/...")
     return wert.split('/')[0].split('#')[0].split('?')[0];
@@ -561,8 +561,8 @@
     // Klasse "active" ist rein visuell — aria-pressed sagt dasselbe auch
     // Screenreadern, sonst klingen alle drei Knöpfe identisch.
     [[btnTagHeute, activeOffset === 0],
-     [btnTagA, activeOffset === offsetA],
-     [btnTagB, activeOffset === offsetB]].forEach(function(paar){
+      [btnTagA, activeOffset === offsetA],
+      [btnTagB, activeOffset === offsetB]].forEach(function(paar){
       paar[0].classList.toggle('active', paar[1]);
       paar[0].setAttribute('aria-pressed', paar[1] ? 'true' : 'false');
     });
@@ -736,7 +736,7 @@
 
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch (e) {
+    } catch {
       // Privater Modus o. Ä. — der Zustand im Speicher wird trotzdem geleert.
     }
     cfg = { proxyUrl: PROXY_URL, children: [] };
@@ -854,7 +854,7 @@
     var einrichtung = lunchProvider2 === 'cccampus' ? 'ccCampus' : ((child.lunch && child.lunch.einrichtung) || '');
     lunchEl.className = 'lunch' +
       (/fehlgeschlagen|nicht verfügbar|nicht gefunden|fehler beim abrufen/i.test(lunchText) ? ' err' :
-       /kein menü|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
+        /kein menü|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
     lunchEl.textContent = '🍽 ' + (einrichtung ? einrichtung + ': ' : '') + lunchText;
 
     var stunden = data.stunden || [];
@@ -941,7 +941,7 @@
     return str
       .replace(/&#(\d+);/g, function(_, dec){ return String.fromCodePoint(parseInt(dec, 10)); })
       .replace(/&#x([0-9a-fA-F]+);/g, function(_, hex){ return String.fromCodePoint(parseInt(hex, 16)); })
-      .replace(/&([a-zA-Z]+);/g, function(m, name){ return map.hasOwnProperty(name) ? map[name] : m; });
+      .replace(/&([a-zA-Z]+);/g, function(m, name){ return Object.prototype.hasOwnProperty.call(map, name) ? map[name] : m; });
   }
 
   // Muss mit connect-src in web/_headers übereinstimmen. Wird eine ccCampus-
@@ -963,7 +963,7 @@
       return CCCAMPUS_ERLAUBTE_DOMAINS.some(function(d){
         return host === d.slice(1) || host.endsWith(d);
       });
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -995,7 +995,7 @@
       .then(function(loginText){
         var loginJson;
         try { loginJson = JSON.parse(loginText); } catch(e){
-          throw new Error('ccCampus-Login: unerwartete Antwort');
+          throw new Error('ccCampus-Login: unerwartete Antwort', { cause: e });
         }
         if (loginJson && loginJson.errorMessage){
           return { lunch: 'Schulessen: Login fehlgeschlagen', lunchFehler: null };
@@ -1009,7 +1009,7 @@
             return planResp.text().then(function(planText){
               var isoDatum = datumStr.slice(0, 4) + '-' + datumStr.slice(4, 6) + '-' + datumStr.slice(6, 8);
               var statusNodeRe = /<div class="status-node[^>]*>/g;
-              var match, titel = null;
+              var match; var titel = null;
               while ((match = statusNodeRe.exec(planText)) !== null){
                 var tag = match[0];
                 if (tag.indexOf('data-date="' + isoDatum + '"') !== -1){
