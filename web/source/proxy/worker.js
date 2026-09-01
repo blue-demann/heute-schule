@@ -238,7 +238,7 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
 
 // A growable list instead of a single hard-coded domain, because other
 // schools can run other Mensamax portal domains of the same provider type
-// — same approach as CCCAMPUS_ERLAUBTE_DOMAINS in web/index.html. If a new
+// — same approach as CCCAMPUS_ALLOWED_DOMAINS in web/index.html. If a new
 // school shows up with a different Mensamax domain, add it here.
 const MENSAMAX_ALLOWED_DOMAINS = ['.parentsmensa.de'];
 
@@ -382,7 +382,7 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
 // HTTP 403 (verified — even with correct credentials), but lets real
 // browser requests through (open CORS headers: Access-Control-Allow-
 // Origin: *). The whole ccCampus flow therefore runs directly in the
-// browser — see the function holeCcCampusEssen in web/index.html. That's
+// browser — see the function fetchCcCampusLunch in web/index.html. That's
 // the mirror image of WebUntis/Mensamax, which are CORS-blocked the other
 // way round and need this proxy because of it.
 //

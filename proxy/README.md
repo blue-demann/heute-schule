@@ -36,7 +36,7 @@ Dann z. B. mit curl gegen `http://localhost:8787/api/status` testen
 HTTP 403 (verifiziert — auch mit korrekten Zugangsdaten), lässt aber echte
 Browser-Anfragen durch (offene CORS-Header: `Access-Control-Allow-Origin: *`).
 Der komplette ccCampus-Ablauf läuft deshalb direkt im Browser, siehe
-`holeCcCampusEssen` in `web/index.html` — spiegelbildlich zu WebUntis/
+`fetchCcCampusLunch` in `web/index.html` — spiegelbildlich zu WebUntis/
 Mensamax, die umgekehrt CORS-blockiert sind und deswegen den Proxy brauchen.
 
 Mit echten Zugangsdaten verifizierter Ablauf (Stand 27.08.):
