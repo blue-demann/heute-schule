@@ -41,16 +41,16 @@ die Tests laufen und bricht bei einem Fehlschlag ab:
 ./deploy.sh web      # nur Website
 ```
 
-## Deploy-Reihenfolge
+## Deploy
 
-1. **Proxy zuerst deployen** — siehe [`../proxy/README.md`](../proxy/README.md).
-   Die Worker-URL ist fest im Code hinterlegt (`PROXY_URL` in `index.html`),
-   bei einer neuen Proxy-URL dort anpassen.
-2. Diese `web/`-Dateien auf Cloudflare Pages deployen:
-   `npx wrangler pages deploy web --project-name=heute-schule`
-3. Website öffnen → Kinder anlegen (Zugangsdaten) → Speichern.
-4. Auf dem Handy: Website öffnen → "Zum Home-Bildschirm hinzufügen" →
-   fühlt sich danach wie eine App an, Login bleibt erhalten (localStorage).
+Nicht mehr von Hand, siehe oben — `../deploy.sh` deployt Proxy und Website in
+der richtigen Reihenfolge (Proxy zuerst), inklusive Test-/Lint-/Konsistenz-
+Gate. Die Worker-URL ist fest im Code hinterlegt (`PROXY_URL` in
+`index.html`), bei einer neuen Proxy-URL dort anpassen.
+
+Nach dem ersten Deploy: Website öffnen → Kinder anlegen (Zugangsdaten) →
+Speichern. Auf dem Handy: Website öffnen → "Zum Home-Bildschirm hinzufügen" →
+fühlt sich danach wie eine App an, Login bleibt erhalten (localStorage).
 
 ## Status: umgesetzt seit MVP
 
@@ -86,10 +86,12 @@ die Tests laufen und bricht bei einem Fehlschlag ab:
 - Wochenplan im Rasterformat statt Listenansicht
 - Echte PNG-App-Icons (aktuell nur ein SVG-Platzhalter — reicht für Android/
   Chrome, iOS-Homescreen-Icon ggf. später als PNG nachziehen)
-- Getrennte WebUntis-Logins pro Kind werden unterstützt (Formular fragt sie
-  pro Kind ab), falls ihr aber weiterhin einen gemeinsamen
-  Klassen-Sammellogin nutzt, einfach bei allen Kindern dieselben
-  WebUntis-Zugangsdaten eintragen — nur die "Klasse" unterscheidet sich.
+
+**Hinweis zu WebUntis-Logins:** Das Formular fragt Zugangsdaten pro Kind
+einzeln ab — getrennte Logins pro Kind sind also möglich. Nutzt ihr
+weiterhin einen gemeinsamen Klassen-Sammellogin, einfach bei allen Kindern
+dieselben WebUntis-Zugangsdaten eintragen, nur die "Klasse" unterscheidet
+sich.
 
 ### Neue Ideen (25.08., noch nicht bewertet/umgesetzt)
 
@@ -140,9 +142,9 @@ dokumentierte technische/organisatorische Maßnahmen (Art. 32).
 Zu klären, bevor der Kreis weiter wächst:
 
 - [ ] Einschätzung durch jemanden mit juristischem Hintergrund einholen
-- [ ] Prüfen, ob der in der Datenschutzerklärung behauptete **AVV mit
-      Cloudflare** tatsächlich geschlossen/akzeptiert ist — eine unbelegte
-      Behauptung in einem Rechtstext ist unnötig riskant
+- [x] AVV mit Cloudflare verifiziert (28.08.2026, im Konto bestätigt, nicht
+      nur angenommen) — Details in `Verarbeitungsverzeichnis-INTERN.md`
+      Abschnitt 4
 - [ ] Überlegen, ob „Demo-Website" die richtige Formulierung bleibt, wenn
       fremde Eltern echte Zugangsdaten ihrer Kinder eingeben
 
@@ -234,5 +236,6 @@ für gespeicherte Passwörter, nur eben Browser-intern statt OS-Ebene).
   von synchron auf asynchron umgebaut werden, da Web Crypto/IndexedDB
   asynchrone APIs sind.
 - Bewusst **kein** Master-Passwort-Ansatz (klassische Verschlüsselung mit
-  einem von Nutzer:innen gemerkten Passwort) — genau das wollten wir
-  vermeiden, siehe Chat-Verlauf.
+  einem von Nutzer:innen gemerkten Passwort) — zusätzliche Hürde für eine
+  nicht-technische Zielgruppe, die genau vermieden werden sollte (siehe
+  Entscheidungs-Log in `../PROJEKT.md`, Abschnitt 5).

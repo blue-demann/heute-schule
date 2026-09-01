@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-**Stand: 28.08.2026 · Version 0.2.0**
+**Stand: 01.09.2026 · Version 0.3.0**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -411,20 +411,41 @@ Projektverlauf und Dateiständen (keine exakten Zeitstempel, da kein Git):
 7. **27.08.2026 — `git init`:** Erster Commit, Version 0.2.0. Ab hier
    nachvollziehbare Historie.
 
-**Ab Git — Commit-Log (`git log --oneline`):**
+**Ab Git:** Vollständiger, maschinenlesbarer Verlauf über `git log --oneline`
+im Repository — wird hier bewusst nicht als Momentaufnahme eingefroren
+(genau ein solcher eingefrorener Ausschnitt lief hier zuvor über mehrere
+Commits hinweg unbemerkt auseinander). Stattdessen die inhaltlichen
+Meilensteine seit dem ersten Commit (27.08.2026):
 
-```
-876d8e4  Heute Schule v0.2.0 — Ausgangsstand unter Versionsverwaltung
-e3a229f  Server-Feld-Bereinigung, DSGVO-Ergänzung, Verarbeitungsverzeichnis
-ddc875b  deploy.sh: Branch explizit auf production setzen
-```
+- **Betatests mit der zweiten Familie:** komplette Browser-URL statt
+  Hostname im WebUntis-Server-Feld (Client + Proxy bereinigen das jetzt
+  automatisch); ccCampus-Instanz unter der kürzeren Domain `mbs5.de` statt
+  `mbs5online.de` (Allowlist erweitert).
+- **AVV mit Cloudflare verifiziert** — im Konto bestätigt, nicht nur
+  angenommen.
+- **Style Guide festgelegt** (Google JavaScript Style Guide + Clean Codes
+  „keine Journal Comments"-Regel) und rückwirkend angewendet: ESLint
+  konfiguriert und ins Deploy-Gate aufgenommen, ein automatisierter Check
+  gegen Datums-/Historie-Kommentare im Code ergänzt, bestehende Funde
+  bereinigt.
+- **Code auf GitHub veröffentlicht** — privates Repository, Commit-Historie
+  vorab mit `git-filter-repo` von echten Kontaktdaten und der echten
+  Commit-Autor-Identität bereinigt. Rechtstexte mit personenbezogenen
+  Daten bewusst nicht mit hochgeladen (siehe `.gitignore`).
+- **Statischer Quellcode-/Doku-Dump auf der Website** (`web/ueber.html`,
+  Abschnitt „Technische Details") — löst das Transparenz-Versprechen ein,
+  ohne einen GitHub-Account vorauszusetzen. Dabei ein zweiter, bereits
+  live exponierter Datenschutzfund: Code-Kommentare enthielten die reale
+  Schul-Subdomain der zweiten Familie — behoben und deployed.
+- **Dritte, vierte Prüfrunde** (31.08.2026) — zwei genuin unabhängige,
+  frische Sitzungen ohne Vorwissen über frühere Projektstände: kein neuer
+  🔴-Befund, alle vorherigen 🔴-Fixes live bestätigt. Zwei 🟡-Funde
+  behoben: Mensamax-Basis-URL ohne Domain-Beschränkung (jetzt wachsbare
+  Allowlist wie bei ccCampus) und eine an vier Stellen uneinheitliche
+  Haushaltsausnahme-Formulierung (Zukunftsbedingung statt bereits
+  eingetretenem Zustand).
 
-**28.08.2026 — Betatest:** Erste externe Beta-Nutzerin (ccCampus-Familie)
-meldet einen Bedienfall — komplette Browser-URL statt Hostname ins
-Server-Feld eingefügt. Naheliegende Handlung, kein Nutzerfehler; auf beiden
-Ebenen (Client, Proxy) korrigiert.
-
-**Release-Bulletin-Konvention ab hier:** Versionsnummer in `web/ueber.html`
+**Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen
 Änderungen erhöht (aktuell `x.y.z` informell, kein festes SemVer-Schema).
 Die Commit-Nachrichten selbst dienen als Release-Bulletin — ausführlich
@@ -435,8 +456,8 @@ genug gehalten, um ohne Rückfrage zu verstehen, *was* und *warum*.
 Wird nicht dupliziert — siehe:
 
 - [`OFFEN-naechste-Fixes.md`](OFFEN-naechste-Fixes.md) — technische und
-  rechtliche Punkte, aktuell die juristische Prüfung vor weiterer
-  Ausweitung sowie die GitHub-Veröffentlichung des Quellcodes.
+  rechtliche Punkte, aktuell im Kern die juristische Prüfung vor weiterer
+  Ausweitung.
 - [`web/README.md`](web/README.md), Abschnitt „Neue Ideen" — Feature-
   Vorschläge (z. B. Custom-Termine), noch nicht bewertet.
 
@@ -445,8 +466,9 @@ Wird nicht dupliziert — siehe:
 Ein-Personen-Projekt. Björn Lüdemann ist alleiniger Maintainer und
 DSGVO-Verantwortlicher (siehe Impressum/Datenschutzerklärung für
 Kontaktdaten). Bus-Factor bewusst benannt statt verschwiegen: Bei Ausfall
-gibt es aktuell keine zweite Person mit Zugriff auf Cloudflare-Konto oder
-Projektwissen. Teilweise gemildert durch: offenen Quellcode (MIT), dieses
-Dokument, und seit 27.08.2026 eine nachvollziehbare Git-Historie — noch
-nicht gemildert durch ein Remote-Repository oder eine zweite
-zugriffsberechtigte Person.
+gibt es aktuell keine zweite Person mit Zugriff auf Cloudflare-Konto,
+GitHub-Konto oder Projektwissen. Gemildert durch: offenen Quellcode (MIT),
+dieses Dokument, eine nachvollziehbare Git-Historie seit 27.08.2026 und
+ein Remote-Repository (GitHub, privat) seit 31.08.2026 — Code und Historie
+liegen damit nicht mehr ausschließlich auf Björns eigenem Rechner. Noch
+nicht gemildert: eine zweite zugriffsberechtigte Person.

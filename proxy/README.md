@@ -60,12 +60,16 @@ beliebige https-Ziele. Validierung liegt in `hostcheck.mjs` (bewusst
 ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
 `../run-tests.mjs`):
 
-- `server` muss auf `.webuntis.com` enden.
-- `base` muss `https://` sein, darf keine Zugangsdaten in der URL selbst
-  enthalten und darf nicht auf ein privates/Loopback/Link-lokales Ziel
-  zeigen (deckt u. a. den 169.254.169.254-Cloud-Metadata-Trick ab). Bewusst
-  **nicht** auf eine feste Domain begrenzt, da andere Schulen/Familien
-  andere Mensamax-/ccCampus-Portal-Domains nutzen könnten.
+- `server` (WebUntis) muss auf `.webuntis.com` enden.
+- `base` (Mensamax — die einzige Basis-URL, die den Proxy tatsächlich
+  erreicht; ccCampus läuft komplett im Browser, siehe unten) muss
+  `https://` sein, darf keine Zugangsdaten in der URL selbst enthalten und
+  darf nicht auf ein privates/Loopback/Link-lokales Ziel zeigen (deckt
+  u. a. den 169.254.169.254-Cloud-Metadata-Trick ab) — plus eine
+  wachsbare Domain-Allowlist (`MENSAMAX_ERLAUBTE_DOMAINS` in `worker.js`,
+  aktuell nur `parentsmensa.de`), damit der Proxy nicht als Relay gegen
+  beliebige öffentliche Hosts missbraucht werden kann. Nutzt eine Schule
+  Mensamax unter einer anderen Domain, dort ergänzen.
 
 ## Offene Punkte
 

@@ -1,6 +1,6 @@
 # Offene Punkte
 
-**Stand: 31.08.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 01.09.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in

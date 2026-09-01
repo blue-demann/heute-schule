@@ -1,6 +1,6 @@
 {
   "name": "heute-schule",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Stundenplan- und Schulessen-Übersicht für mehrere Kinder (Web-App + Cloudflare-Worker-Proxy).",
   "type": "commonjs",
