@@ -43,4 +43,4 @@ Verarbeitungsverzeichnis-INTERN.md
 # Von deploy.sh bei jedem Deploy neu erzeugt (aktueller Git-HEAD-Hash) —
 # Grundlage für den Live-vs-HEAD-Abgleich nach dem Website-Deploy. Kein
 # eigenständiger Inhalt, nichts zu versionieren.
-web/.deploy-commit
+web/deploy-commit.txt
