@@ -317,13 +317,37 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | Testgruppe | Datei unter Test | Fokus |
 |---|---|---|
 | `pad()`, Cookie-Extraktion, `parseLunchStatus()`, `buildLessonList()`, `formatLessons()`, `buildEmail()` | `stundenplan.js` | Geerbte Logik aus der ursprünglichen Apps-Script-Automation |
-| `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link) |
+| `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` (Beispielwerte + Property-Tests, s. u.) | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link) |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
+| `lastWeekAsRange()`, `formatEmailText()` | `analytics-report/worker.js` | Reine Formatierungs-/Datumslogik der Wochenstatistik-Mail |
+
+**Property-based Tests** (`proxy/hostcheck.mjs`, seit 01.09.2026): Neben den
+Beispielwerten oben zusätzlich Tests, die über benannte Äquivalenzklassen
+zufällig generierte Eingaben prüfen (z. B. „200 zufällige `10.0.0.0/8`-
+Adressen sind immer privat", „200 zufällige Subdomains der Mensamax-
+Allowlist werden immer akzeptiert") statt nur handverlesene Einzelwerte —
+macht sichtbar, *warum* ein Testwert gewählt wurde, und ist schwerer
+versehentlich (oder durch eine KI) auf die Implementierung zuzuschneiden,
+statt die eigentliche Eigenschaft zu prüfen. Fester Seed (`mulberry32`,
+kein neues Paket) für reproduzierbare Fehlschläge.
+
+**Code Coverage** (`c8`, seit 01.09.2026): `npm run test:coverage` bzw. als
+Info-Zeile in `deploy.sh` (bricht den Deploy nicht ab). Miss nur, was
+`run-tests.mjs` tatsächlich lädt — `proxy/*`, `stundenplan.js`,
+`analytics-report/*`; `web/index.html` läuft im Browser und taucht bewusst
+nicht auf (siehe `.c8rc.json`, `include`-Liste). `hostcheck.mjs`/
+`cachekey.mjs`/`stundenplan.js` liegen bei 100 % Statement-Coverage,
+`proxy/worker.js` bei 0 % — der HTTP-Handler selbst (Rate-Limit,
+Request-Parsing, Response-Bau) ist nicht direkt getestet, nur die daraus
+ausgelagerten reinen Funktionen. Kein Mindestwert erzwungen
+(`check-coverage: false`) — eine erzwungene Zahl hätte hier wenig Aussage,
+da die App-Logik in `web/index.html` ohnehin außerhalb der Messung liegt.
 
 **Was die Testsuite bewusst nicht abdeckt:** UI-Verhalten im Browser (dafür
 wurden in den QA-Runden gezielte, manuelle Browser-Tests gegen echte oder
 gemockte Daten gefahren, aber nicht automatisiert), Lighthouse/axe-Core,
-Last-/Zeitverhalten des Rate-Limits unter echter Nebenläufigkeit.
+Last-/Zeitverhalten des Rate-Limits unter echter Nebenläufigkeit, der
+HTTP-Handler in `proxy/worker.js` selbst (s. Coverage-Zahl oben).
 
 **Test-Gate vor Deploy:** `deploy.sh` lässt die Suite vor jedem Deploy
 laufen und bricht bei einem Fehlschlag ab (siehe Abschnitt 10) — eingeführt,

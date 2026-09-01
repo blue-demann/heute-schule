@@ -75,6 +75,13 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Site anlegen, Cloudflare-API-Token, Resend-Konto). Details in
    `analytics-report/README.md`. Die GraphQL-Query ist nach Dokumentation
    gebaut, aber noch nicht gegen einen echten Account getestet.
+6. **Testlücke, durch Code-Coverage-Einführung sichtbar geworden:**
+   `proxy/worker.js` liegt bei 0 % Statement-Coverage — der HTTP-Handler
+   selbst (Rate-Limit, Request-Parsing, Response-Bau) ist nicht direkt
+   getestet, nur die daraus ausgelagerten reinen Funktionen
+   (`hostcheck.mjs`/`cachekey.mjs`). Kein akuter Sicherheitsfund, aber ein
+   echter blinder Fleck — am ehesten mit `wrangler dev` + gezielten
+   `fetch()`-Tests gegen `export default { fetch }` zu schließen.
 
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine

@@ -1,0 +1,17 @@
+{
+  "all": true,
+  "include": [
+    "proxy/**/*.{js,mjs}",
+    "stundenplan.js",
+    "analytics-report/**/*.{js,mjs}"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "run-tests.mjs",
+    "eslint.config.mjs",
+    "coverage/**"
+  ],
+  "reporter": ["text", "text-summary", "html"],
+  "reports-dir": "coverage",
+  "check-coverage": false
+}

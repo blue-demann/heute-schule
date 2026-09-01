@@ -24,8 +24,15 @@ cd "$(dirname "$0")"
 
 TARGET="${1:-alles}"
 
-echo "▶ Testsuite läuft…"
-if ! node run-tests.mjs; then
+# Über c8 gelaufen statt nacktem "node run-tests.mjs" — liefert die Coverage-
+# Zusammenfassung als Nebenprodukt desselben Laufs, kein zweiter Testdurchgang
+# nötig. Rein informativ: eine niedrige Zahl bricht den Deploy nicht ab, dafür
+# gibt es keinen sinnvollen Schwellwert (c8 misst nur, was run-tests.mjs
+# tatsächlich lädt — proxy/*, stundenplan.js, analytics-report/*;
+# web/index.html läuft im Browser und taucht bewusst nicht auf, siehe
+# .c8rc.json). Ausführliche Zahlen inkl. HTML-Report: npm run test:coverage.
+echo "▶ Testsuite läuft (mit Code-Coverage)…"
+if ! npx c8 --reporter=text-summary node run-tests.mjs; then
   echo ""
   echo "✗ Tests fehlgeschlagen — Deploy abgebrochen."
   exit 1
