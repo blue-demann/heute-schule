@@ -661,7 +661,7 @@ test('missing config does not throw', () => {
 //
 // Two independent mechanisms check the same domain list: the CSP
 // (connect-src in web/_headers, blocks at the browser level) and
-// CCCAMPUS_ERLAUBTE_DOMAINS in web/index.html (shows the understandable
+// CCCAMPUS_ALLOWED_DOMAINS in web/index.html (shows the understandable
 // error message instead of letting it fail against the CSP). Listing a
 // domain in only one place isn't enough — exactly this bug would have
 // stayed invisible to the previous tests, since neither file was ever
@@ -669,12 +669,12 @@ test('missing config does not throw', () => {
 
 console.log('\nccCampus domain allowlist (index.html vs. _headers)');
 
-test('CCCAMPUS_ERLAUBTE_DOMAINS and the CSP connect-src list the same domains', () => {
+test('CCCAMPUS_ALLOWED_DOMAINS and the CSP connect-src list the same domains', () => {
   const indexHtml = readFileSync(new URL('./web/index.html', import.meta.url), 'utf-8');
   const headers = readFileSync(new URL('./web/_headers', import.meta.url), 'utf-8');
 
-  const jsMatch = indexHtml.match(/CCCAMPUS_ERLAUBTE_DOMAINS\s*=\s*\[([^\]]*)\]/);
-  assert(jsMatch, 'CCCAMPUS_ERLAUBTE_DOMAINS not found in index.html — test itself broken?');
+  const jsMatch = indexHtml.match(/CCCAMPUS_ALLOWED_DOMAINS\s*=\s*\[([^\]]*)\]/);
+  assert(jsMatch, 'CCCAMPUS_ALLOWED_DOMAINS not found in index.html — test itself broken?');
   const fromJs = jsMatch[1].match(/'\.([a-z0-9.-]+)'/g).map(s => s.slice(2, -1)).sort();
 
   // Don't just search for "connect-src" — the word also appears in the

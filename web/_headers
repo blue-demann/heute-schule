@@ -14,7 +14,7 @@
 # (WebUntis + Mensamax laufen über ihn) und ccCampus (läuft technisch bedingt
 # direkt aus dem Browser). ccCampus läuft unter mehreren Domains desselben
 # Anbieters (gleiche Software, gleicher Pfad "/ordering/") — mbs5online.de
-# und das kürzere mbs5.de. Diese Liste muss mit CCCAMPUS_ERLAUBTE_DOMAINS in
+# und das kürzere mbs5.de. Diese Liste muss mit CCCAMPUS_ALLOWED_DOMAINS in
 # web/index.html übereinstimmen — eine Domain nur hier oder nur dort
 # einzutragen reicht nicht, beide Prüfungen müssen sie kennen. Weitere
 # Domains desselben Anbieters sind nicht ausgeschlossen; taucht wieder eine

@@ -11,9 +11,9 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="theme.css">
 <style>
-  /* Design-Tokens (Farben, Schrift, Fokus-Ring) kommen aus theme.css und
-     werden von allen Seiten geteilt. Hier stehen nur noch die Regeln, die
-     ausschließlich diese App-Ansicht braucht. */
+  /* Design tokens (colors, type, focus ring) come from theme.css and are
+     shared across all pages. Only the rules that this app view alone
+     needs live here. */
   body{ padding-bottom:3rem; }
   header{
     position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between;
@@ -63,9 +63,9 @@
   table.stunden tr:first-child td{border-top:none;}
   table.stunden td.zeit{color:var(--muted); white-space:nowrap; width:5.2rem;}
   table.stunden td.aktion{width:auto; white-space:nowrap; text-align:right;}
-  /* opacity .6 statt niedriger: dezent, aber für eingeschränktes
-     Sehvermögen noch auffindbar (WCAG 2.2 SC 1.4.11 verlangt 3:1 für
-     Bedienelemente); bei Hover/Fokus voll deckend. */
+  /* opacity .6 rather than lower: subtle, but still findable for limited
+     vision (WCAG 2.2 SC 1.4.11 requires 3:1 for UI components); fully
+     opaque on hover/focus. */
   .hide-fach{
     background:none; border:none; cursor:pointer; font-size:.85rem; opacity:.6;
     min-width:24px; min-height:24px; padding:.1rem .2rem;
@@ -138,8 +138,9 @@
     display:inline-flex; align-items:center; justify-content:center; gap:.4rem;
     padding:.75rem 1rem; border-radius:10px; border:none; font-size:.95rem; cursor:pointer;
   }
-  /* color: var(--accent-text), nicht #fff — im Dunkelmodus ergäbe Weiß auf dem
-     hellen Akzentgrün nur 2,44:1 (WCAG 2.2 SC 1.4.3 AA verlangt 4,5:1). */
+  /* color: var(--accent-text), not #fff — in dark mode, white on the
+     light accent green would only give 2.44:1 (WCAG 2.2 SC 1.4.3 AA
+     requires 4.5:1). */
   .btn-primary{background:var(--accent); color:var(--accent-text); width:100%;}
   .btn-secondary{background:none; border:1px dashed var(--border); color:var(--text); width:100%;}
   .btn-danger{background:none; border:1px solid var(--danger); color:var(--danger); width:100%;}
@@ -159,8 +160,8 @@
     display:inline-flex; align-items:center; gap:.3rem; background:var(--bg); border:1px solid var(--border);
     border-radius:999px; padding:.25rem .3rem .25rem .65rem; font-size:.82rem;
   }
-  /* min-width/height 24px: WCAG 2.5.8 (AA) fordert mindestens 24×24 CSS-Pixel
-     für Bedienelemente. */
+  /* min-width/height 24px: WCAG 2.5.8 (AA) requires at least 24×24 CSS
+     pixels for UI components. */
   .chip-x{
     background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; line-height:1;
     min-width:24px; min-height:24px; padding:0 .2rem;
@@ -194,10 +195,10 @@
       <button type="button" class="tag-btn" data-slot="a" aria-pressed="false"></button>
       <button type="button" class="tag-btn" data-slot="b" aria-pressed="false"></button>
     </div>
-    <!-- aria-live: die Karten werden nach dem Abruf asynchron gefüllt. Ohne
-         Live-Region merken Screenreader-Nutzer:innen nicht, dass aus den
-         "–"-Platzhaltern inzwischen echte Daten geworden sind. "polite",
-         damit es die aktuelle Vorlesestelle nicht unterbricht. -->
+    <!-- aria-live: the cards fill in asynchronously after the fetch.
+         Without a live region, screen-reader users wouldn't notice that
+         the "–" placeholders turned into real data. "polite" so it
+         doesn't interrupt whatever's currently being read out. -->
     <div id="childCards" aria-live="polite" aria-busy="false"></div>
     <p id="dashboardEmptyHint" class="empty-hint hidden">Noch keine Kinder eingerichtet — tippe oben rechts auf ⚙️.</p>
     <p id="dashboardLegend" class="legend hidden">
@@ -246,10 +247,11 @@
       <button class="btn btn-primary" id="btnSave" type="button">Speichern &amp; anzeigen</button>
     </div>
 
-    <!-- Löschen war vorher nur über die Browser-Einstellungen möglich ("Website-
-         daten löschen"). Für einen Teil der Zielgruppe ist das praktisch eine
-         Sackgasse — damit bleibt das Auskunfts-/Löschrecht theoretisch. Ein
-         Knopf macht daraus etwas tatsächlich Ausführbares. -->
+    <!-- Without this button, deleting data is only possible through the
+         browser's own settings ("clear website data"). For part of the
+         target audience that's practically a dead end — the right to
+         erasure would stay theoretical. A button makes it something
+         actually usable. -->
     <div class="danger-zone">
       <h2>Daten auf diesem Gerät</h2>
       <p>
@@ -272,8 +274,9 @@
 
 <template id="childSetupTemplate">
   <div class="child-setup" data-child>
-    <!-- h2, nicht h3: darüber steht nur die h1 im Header. Eine übersprungene
-         Ebene macht die Gliederung für Screenreader unnötig krumm. -->
+    <!-- h2, not h3: the only heading above this is the h1 in the header.
+         A skipped level makes the outline needlessly crooked for screen
+         readers. -->
     <div class="child-setup-head">
       <h2 data-kind-titel>Kind</h2>
       <button class="link-btn" data-remove type="button">Entfernen</button>
@@ -389,10 +392,10 @@
   'use strict';
 
   var STORAGE_KEY = 'heute-schule-config';
-  var WOCHENTAGE = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+  var WEEKDAYS = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
-  // Fest vorgegeben, kein Nutzer-Setting: der Proxy ist feste Infrastruktur,
-  // niemand außer Björn muss die URL je kennen oder ändern können.
+  // Fixed, not a user setting: the proxy is fixed infrastructure, nobody
+  // but Björn ever needs to know or change the URL.
   var PROXY_URL = 'https://stundenplan-proxy.bluedemann.workers.dev';
 
   function loadConfig(){
@@ -401,9 +404,9 @@
       if (!raw) return { proxyUrl: PROXY_URL, children: [] };
       var parsed = JSON.parse(raw);
       if (!Array.isArray(parsed.children)) parsed.children = [];
-      parsed.proxyUrl = PROXY_URL; // überschreibt evtl. veraltete/leere gespeicherte Werte
-      // Back-compat: ältere gespeicherte Configs kennen hiddenFaecher und
-      // den Mehr-Anbieter-Support beim Schulessen noch nicht.
+      parsed.proxyUrl = PROXY_URL; // overwrites any stale/empty stored value
+      // Back-compat: older stored configs don't yet know about
+      // hiddenFaecher or multi-provider support for school lunch.
       parsed.children.forEach(function(c){
         if (!Array.isArray(c.hiddenFaecher)) c.hiddenFaecher = [];
         if (!c.lunch) c.lunch = {};
@@ -419,8 +422,8 @@
   }
 
   function saveConfig(cfg){
-    // Darf nie eine laufende Aktion blockieren — manche Vorschau-/Sandbox-
-    // Umgebungen (z. B. data:-URLs) verbieten localStorage komplett.
+    // Must never block an in-progress action — some preview/sandbox
+    // environments (e.g. data: URLs) forbid localStorage entirely.
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
       return true;
@@ -434,22 +437,23 @@
     return 'k' + Math.random().toString(36).slice(2, 9);
   }
 
-  // Ohne Vorlage: Startwerte, die für die erste Nutzergruppe (Lessing-Schule)
-  // meistens ohnehin stimmen — bewusst vorausgefüllt statt nur als grauer
-  // Platzhalter, damit man sie nur bei Bedarf ändern statt eintippen muss.
-  // Mit Vorlage (zweites/weiteres Kind): übernimmt die schulweiten Angaben
-  // (Server/Login/Mensa-Einrichtung) vom ersten Kind — die sind bei
-  // Geschwistern i. d. R. identisch, nur Klasse & Mensa-Login sind pro Kind
-  // unterschiedlich und bleiben deshalb leer.
-  function neuesKind(vorlage){
-    if (vorlage){
+  // Without a template: starting values that are usually already correct
+  // for the first user group (Lessing school) — deliberately pre-filled
+  // instead of just a grey placeholder, so they only need changing, not
+  // typing from scratch.
+  // With a template (second/further child): takes over the school-wide
+  // details (server/login/lunch institution) from the first child —
+  // siblings usually share those, only class & lunch login differ per
+  // child and are therefore left blank.
+  function newChild(template){
+    if (template){
       return {
         id: uid(), name: '',
-        webuntis: { server: vorlage.webuntis.server, user: vorlage.webuntis.user, password: vorlage.webuntis.password, klasse: '' },
+        webuntis: { server: template.webuntis.server, user: template.webuntis.user, password: template.webuntis.password, klasse: '' },
         lunch: {
-          provider: vorlage.lunch.provider || 'mensamax',
-          base: vorlage.lunch.base, projekt: vorlage.lunch.projekt, einrichtung: vorlage.lunch.einrichtung, username: '', password: '',
-          cccampus: { base: (vorlage.lunch.cccampus && vorlage.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
+          provider: template.lunch.provider || 'mensamax',
+          base: template.lunch.base, projekt: template.lunch.projekt, einrichtung: template.lunch.einrichtung, username: '', password: '',
+          cccampus: { base: (template.lunch.cccampus && template.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
         },
         hiddenFaecher: [],
       };
@@ -466,9 +470,9 @@
     };
   }
 
-  function datumStrFuer(tagOffset){
+  function dateStrFor(dayOffset){
     var d = new Date();
-    d.setDate(d.getDate() + tagOffset);
+    d.setDate(d.getDate() + dayOffset);
     return '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
   }
 
@@ -486,32 +490,32 @@
     return path.split('.').reduce(function(o, k){ return (o || {})[k]; }, obj);
   }
 
-  // Das Server-Feld akzeptiert auch die komplette aus der Adresszeile
-  // kopierte URL (z. B. "https://schule.webuntis.com/WebUntis/#/basic/login")
-  // statt nur den Hostnamen — naheliegend, wenn man gerade in WebUntis
-  // eingeloggt ist. Wird automatisch auf den Hostnamen bereinigt, statt
-  // nur mit einem Fehler zu quittieren.
-  function extrahiereWebUntisHostname(eingabe){
-    var wert = String(eingabe || '').trim();
-    if (/^https?:\/\//i.test(wert)){
-      try { return new URL(wert).hostname; } catch { /* fällt durch */ }
+  // The server field also accepts the full URL copied from the address bar
+  // (e.g. "https://schule.webuntis.com/WebUntis/#/basic/login") instead of
+  // just the hostname — an obvious thing to paste if you're currently
+  // logged into WebUntis. Gets automatically cleaned up to the hostname
+  // instead of just failing with an error.
+  function extractWebUntisHostname(input){
+    var value = String(input || '').trim();
+    if (/^https?:\/\//i.test(value)){
+      try { return new URL(value).hostname; } catch { /* falls through */ }
     }
-    // Auch ohne Protokoll eingefügt (z. B. "schule.webuntis.com/WebUntis/...")
-    return wert.split('/')[0].split('#')[0].split('?')[0];
+    // Also pasted without a protocol (e.g. "schule.webuntis.com/WebUntis/...")
+    return value.split('/')[0].split('#')[0].split('?')[0];
   }
 
   var cfg = loadConfig();
-  var activeOffset = 0;  // 0 = heute, sonst Tages-Offset ab heute
-  var fensterIndex = 1;  // linke Datums-Fläche = n-ter kommender Schultag
+  var activeOffset = 0;  // 0 = today, otherwise the day offset from today
+  var windowIndex = 1;  // left date tile = the nth upcoming school day
 
-  // ── Elemente ──
+  // ── Elements ──
   var dashboard = document.getElementById('dashboard');
   var setup = document.getElementById('setup');
   var childCards = document.getElementById('childCards');
   var childrenSetup = document.getElementById('childrenSetup');
   var dashboardEmptyHint = document.getElementById('dashboardEmptyHint');
   var dashboardLegend = document.getElementById('dashboardLegend');
-  var tagToggle = document.getElementById('tagToggle');
+  var dayToggle = document.getElementById('tagToggle');
   var btnRefresh = document.getElementById('btnRefresh');
   var btnSettings = document.getElementById('btnSettings');
   var btnAddChild = document.getElementById('btnAddChild');
@@ -519,82 +523,83 @@
   var childSetupTpl = document.getElementById('childSetupTemplate');
   var childCardTpl = document.getElementById('childCardTemplate');
 
-  function renderDatumAnzeige(){
+  function renderDateDisplay(){
     var d = new Date();
     d.setDate(d.getDate() + activeOffset);
     document.getElementById('datumAnzeige').textContent =
-      WOCHENTAGE[d.getDay()] + ', ' + d.toLocaleDateString('de-DE');
+      WEEKDAYS[d.getDay()] + ', ' + d.toLocaleDateString('de-DE');
   }
 
-  function kurzDatum(offset){
+  function shortDate(offset){
     var d = new Date();
     d.setDate(d.getDate() + offset);
-    return WOCHENTAGE[d.getDay()].slice(0, 2) + ' ' + d.getDate() + '.' + (d.getMonth() + 1) + '.';
+    return WEEKDAYS[d.getDay()].slice(0, 2) + ' ' + d.getDate() + '.' + (d.getMonth() + 1) + '.';
   }
 
-  var btnTagHeute = tagToggle.querySelector('[data-slot="heute"]');
-  var btnTagA = tagToggle.querySelector('[data-slot="a"]');
-  var btnTagB = tagToggle.querySelector('[data-slot="b"]');
+  var btnDayToday = dayToggle.querySelector('[data-slot="heute"]');
+  var btnDayA = dayToggle.querySelector('[data-slot="a"]');
+  var btnDayB = dayToggle.querySelector('[data-slot="b"]');
 
-  // Offset (in Kalendertagen ab heute) des n-ten kommenden Schultags.
-  // Wochenenden werden übersprungen: Für einen Stundenplan ist ein Samstag
-  // eine garantierte Leermeldung und würde eine der nur drei Flächen
-  // verschenken. "Heute" bleibt davon unberührt — wenn heute Samstag ist,
-  // zeigt die Seite auch ehrlich den Samstag.
-  function schultagOffset(n){
+  // Offset (in calendar days from today) of the nth upcoming school day.
+  // Weekends are skipped: for a timetable, a Saturday is a guaranteed
+  // empty result and would waste one of only three tiles. "Today" stays
+  // unaffected by this — if today is a Saturday, the page honestly shows
+  // Saturday too.
+  function schoolDayOffset(n){
     var d = new Date();
     var offset = 0;
-    for (var gefunden = 0; gefunden < n; ){
+    for (var found = 0; found < n; ){
       offset++;
       d.setDate(d.getDate() + 1);
-      var wt = d.getDay();
-      if (wt !== 0 && wt !== 6) gefunden++;
+      var weekday = d.getDay();
+      if (weekday !== 0 && weekday !== 6) found++;
     }
     return offset;
   }
 
-  function renderTagToggle(){
-    var offsetA = schultagOffset(fensterIndex);
-    var offsetB = schultagOffset(fensterIndex + 1);
-    btnTagA.textContent = kurzDatum(offsetA);
-    btnTagB.textContent = kurzDatum(offsetB);
-    // Klasse "active" ist rein visuell — aria-pressed sagt dasselbe auch
-    // Screenreadern, sonst klingen alle drei Knöpfe identisch.
-    [[btnTagHeute, activeOffset === 0],
-      [btnTagA, activeOffset === offsetA],
-      [btnTagB, activeOffset === offsetB]].forEach(function(paar){
-      paar[0].classList.toggle('active', paar[1]);
-      paar[0].setAttribute('aria-pressed', paar[1] ? 'true' : 'false');
+  function renderDayToggle(){
+    var offsetA = schoolDayOffset(windowIndex);
+    var offsetB = schoolDayOffset(windowIndex + 1);
+    btnDayA.textContent = shortDate(offsetA);
+    btnDayB.textContent = shortDate(offsetB);
+    // The "active" class is purely visual — aria-pressed says the same
+    // thing to screen readers too, otherwise all three buttons would
+    // sound identical.
+    [[btnDayToday, activeOffset === 0],
+      [btnDayA, activeOffset === offsetA],
+      [btnDayB, activeOffset === offsetB]].forEach(function(pair){
+      pair[0].classList.toggle('active', pair[1]);
+      pair[0].setAttribute('aria-pressed', pair[1] ? 'true' : 'false');
     });
   }
 
-  function waehleTagIndex(index){
-    // Rechte Fläche verschiebt das Zwei-Tage-Fenster einen Schultag weiter
-    // nach vorn (dann steht dort der jeweils nächste); linke Fläche wählt
-    // nur innerhalb des aktuellen Fensters, ohne es zu verschieben — das
-    // ist automatisch der "einen Tag zurück"-Schritt von der rechten Fläche.
-    var offset = schultagOffset(index);
-    if (index === fensterIndex + 1) fensterIndex += 1;
+  function selectDayIndex(index){
+    // The right tile moves the two-day window one school day forward
+    // (so it then shows the next one after that); the left tile only
+    // selects within the current window, without moving it — that
+    // automatically becomes the "one day back" step from the right tile.
+    var offset = schoolDayOffset(index);
+    if (index === windowIndex + 1) windowIndex += 1;
     activeOffset = offset;
-    renderTagToggle();
-    renderDatumAnzeige();
+    renderDayToggle();
+    renderDateDisplay();
     refreshAll();
   }
 
-  btnTagHeute.addEventListener('click', function(){
-    fensterIndex = 1;
+  btnDayToday.addEventListener('click', function(){
+    windowIndex = 1;
     activeOffset = 0;
-    renderTagToggle();
-    renderDatumAnzeige();
+    renderDayToggle();
+    renderDateDisplay();
     refreshAll();
   });
-  btnTagA.addEventListener('click', function(){ waehleTagIndex(fensterIndex); });
-  btnTagB.addEventListener('click', function(){ waehleTagIndex(fensterIndex + 1); });
+  btnDayA.addEventListener('click', function(){ selectDayIndex(windowIndex); });
+  btnDayB.addEventListener('click', function(){ selectDayIndex(windowIndex + 1); });
 
-  renderTagToggle();
-  renderDatumAnzeige();
+  renderDayToggle();
+  renderDateDisplay();
 
-  // ── Setup-Ansicht rendern ──
+  // ── Render the setup view ──
   function renderSetup(){
     childrenSetup.innerHTML = '';
     cfg.children.forEach(renderChildSetup);
@@ -603,66 +608,67 @@
   function renderChildSetup(child){
     var node = childSetupTpl.content.firstElementChild.cloneNode(true);
     node.dataset.id = child.id;
-    var kindTitel = node.querySelector('[data-kind-titel]');
-    var entfernenBtn = node.querySelector('[data-remove]');
+    var childTitle = node.querySelector('[data-kind-titel]');
+    var removeBtn = node.querySelector('[data-remove]');
 
-    // Bei mehreren Kindern heißen sonst alle Entfernen-Knöpfe gleich —
-    // "Entfernen", "Entfernen", "Entfernen". Der sichtbare Text bleibt kurz,
-    // der vorgelesene Name wird eindeutig.
-    function setzeKindName(name){
-      var angezeigt = name || 'Kind';
-      kindTitel.textContent = angezeigt;
-      entfernenBtn.setAttribute('aria-label', angezeigt + ' entfernen');
+    // With several children, every remove button would otherwise be
+    // labeled the same — "Entfernen", "Entfernen", "Entfernen". The
+    // visible text stays short, the name read out loud becomes unique.
+    function setChildName(name){
+      var displayed = name || 'Kind';
+      childTitle.textContent = displayed;
+      removeBtn.setAttribute('aria-label', displayed + ' entfernen');
     }
-    setzeKindName(child.name);
+    setChildName(child.name);
 
     node.querySelectorAll('[data-field]').forEach(function(input){
       input.value = getDeep(child, input.dataset.field) || '';
       input.addEventListener('input', function(){
         setDeep(child, input.dataset.field, input.value);
-        if (input.dataset.field === 'name') setzeKindName(input.value);
+        if (input.dataset.field === 'name') setChildName(input.value);
       });
-      // Jedes Feld bekommt eine pro Kind eindeutige id, das direkt davor
-      // stehende <label> ein passendes for — sonst können Screenreader
-      // Label und Feld nicht einander zuordnen (v. a. bei mehreren Kindern
-      // mit sonst identischen Feldnamen).
-      var feldId = 'feld-' + child.id + '-' + input.dataset.field.replace(/\./g, '-');
-      input.id = feldId;
-      var zugehoerigesLabel = input.previousElementSibling;
-      if (zugehoerigesLabel && zugehoerigesLabel.tagName === 'LABEL'){
-        zugehoerigesLabel.setAttribute('for', feldId);
+      // Every field gets an id unique per child, and the <label>
+      // directly before it a matching for — otherwise screen readers
+      // can't associate the label with the field (especially with
+      // several children whose field names would otherwise be
+      // identical).
+      var fieldId = 'feld-' + child.id + '-' + input.dataset.field.replace(/\./g, '-');
+      input.id = fieldId;
+      var matchingLabel = input.previousElementSibling;
+      if (matchingLabel && matchingLabel.tagName === 'LABEL'){
+        matchingLabel.setAttribute('for', fieldId);
       }
 
       if (input.dataset.field === 'webuntis.server'){
         input.addEventListener('blur', function(){
-          var bereinigt = extrahiereWebUntisHostname(input.value);
-          if (bereinigt && bereinigt !== input.value){
-            input.value = bereinigt;
-            setDeep(child, 'webuntis.server', bereinigt);
-            toast('Server-Adresse bereinigt: „' + bereinigt + '"');
+          var cleaned = extractWebUntisHostname(input.value);
+          if (cleaned && cleaned !== input.value){
+            input.value = cleaned;
+            setDeep(child, 'webuntis.server', cleaned);
+            toast('Server-Adresse bereinigt: „' + cleaned + '"');
           }
         });
       }
     });
-    entfernenBtn.addEventListener('click', function(){
+    removeBtn.addEventListener('click', function(){
       cfg.children = cfg.children.filter(function(c){ return c.id !== child.id; });
       node.remove();
     });
 
-    var anbieterSelect = node.querySelector('[data-provider-select]');
-    function zeigeAnbieterFelder(){
-      // Bewusst vom <select>-Element selbst lesen, nicht vom Datenmodell —
-      // unabhängig davon, ob der generische input-Listener (setDeep) schon
-      // gelaufen ist oder nicht.
-      var gewaehlt = (anbieterSelect ? anbieterSelect.value : child.lunch.provider) || 'mensamax';
+    var providerSelect = node.querySelector('[data-provider-select]');
+    function showProviderFields(){
+      // Deliberately read from the <select> element itself, not from the
+      // data model — works regardless of whether the generic input
+      // listener (setDeep) has already run or not.
+      var selected = (providerSelect ? providerSelect.value : child.lunch.provider) || 'mensamax';
       node.querySelectorAll('[data-provider-fields]').forEach(function(div){
-        div.classList.toggle('hidden', div.dataset.providerFields !== gewaehlt);
+        div.classList.toggle('hidden', div.dataset.providerFields !== selected);
       });
     }
-    zeigeAnbieterFelder();
-    if (anbieterSelect){
-      anbieterSelect.addEventListener('change', zeigeAnbieterFelder);
-      anbieterSelect.addEventListener('input', zeigeAnbieterFelder);
+    showProviderFields();
+    if (providerSelect){
+      providerSelect.addEventListener('change', showProviderFields);
+      providerSelect.addEventListener('input', showProviderFields);
     }
 
     renderHiddenChips(node, child);
@@ -683,25 +689,25 @@
   function renderHiddenChips(node, child){
     var wrap = node.querySelector('[data-hidden-chips]');
     wrap.innerHTML = '';
-    var liste = child.hiddenFaecher || [];
-    if (!liste.length){
+    var list = child.hiddenFaecher || [];
+    if (!list.length){
       var hint = document.createElement('span');
       hint.className = 'chips-hint';
       hint.textContent = 'Keine ausgeblendeten Fächer.';
       wrap.appendChild(hint);
       return;
     }
-    liste.forEach(function(fach){
+    list.forEach(function(subject){
       var chip = document.createElement('span');
       chip.className = 'chip';
       var label = document.createElement('span');
-      label.textContent = fach;
+      label.textContent = subject;
       var x = document.createElement('button');
       x.type = 'button'; x.className = 'chip-x'; x.textContent = '×';
-      x.title = '"' + fach + '" wieder einblenden';
-      x.setAttribute('aria-label', fach + ' wieder einblenden');
+      x.title = '"' + subject + '" wieder einblenden';
+      x.setAttribute('aria-label', subject + ' wieder einblenden');
       x.addEventListener('click', function(){
-        child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== fach; });
+        child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== subject; });
         renderHiddenChips(node, child);
       });
       chip.appendChild(label); chip.appendChild(x);
@@ -710,34 +716,34 @@
   }
 
   btnAddChild.addEventListener('click', function(){
-    var child = neuesKind(cfg.children[0]);
+    var child = newChild(cfg.children[0]);
     cfg.children.push(child);
     renderChildSetup(child);
   });
 
   btnSave.addEventListener('click', function(){
-    var gespeichert = saveConfig(cfg);
+    var saved = saveConfig(cfg);
     showDashboard();
-    if (!gespeichert){
+    if (!saved){
       toast('⚠ Konnte nicht dauerhaft gespeichert werden (Speicher in dieser Vorschau gesperrt). Auf der echten Seite funktioniert das normal.');
     }
   });
 
-  // Vollständiges Löschen aller lokal gespeicherten Daten. Bewusst mit
-  // Rückfrage: Der Knopf steht in den Einstellungen, wo auch versehentlich
-  // hingetippt wird, und die Aktion ist nicht rückgängig zu machen.
+  // Fully deletes all locally stored data. Deliberately with a
+  // confirmation: the button lives in settings, where accidental taps
+  // happen too, and the action can't be undone.
   var btnDeleteAll = document.getElementById('btnDeleteAll');
   btnDeleteAll.addEventListener('click', function(){
-    var anzahl = cfg.children.length;
-    var frage = anzahl === 1
+    var count = cfg.children.length;
+    var question = count === 1
       ? 'Wirklich alle Daten von 1 Kind auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.'
-      : 'Wirklich alle Daten von ' + anzahl + ' Kindern auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.';
-    if (!window.confirm(frage)) return;
+      : 'Wirklich alle Daten von ' + count + ' Kindern auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.';
+    if (!window.confirm(question)) return;
 
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
-      // Privater Modus o. Ä. — der Zustand im Speicher wird trotzdem geleert.
+      // Private mode or similar — the in-memory state gets cleared either way.
     }
     cfg = { proxyUrl: PROXY_URL, children: [] };
     cardsById = {};
@@ -747,7 +753,7 @@
     toast('Alle Daten auf diesem Gerät wurden gelöscht.');
   });
 
-  // ── Dashboard-Ansicht ──
+  // ── Dashboard view ──
   var cardsById = {};
   var lastDataById = {};
 
@@ -766,12 +772,12 @@
     cfg.children.forEach(function(child){
       var node = childCardTpl.content.firstElementChild.cloneNode(true);
       node.querySelector('[data-name]').textContent = child.name || 'Kind';
-      var schule = ((child.webuntis && child.webuntis.server) || '').replace(/\.webuntis\.com$/i, '');
-      var klasse = (child.webuntis && child.webuntis.klasse) || '';
-      var subTeile = [];
-      if (schule) subTeile.push(schule);
-      if (klasse) subTeile.push('Klasse ' + klasse);
-      node.querySelector('[data-sub]').textContent = subTeile.join(' · ');
+      var school = ((child.webuntis && child.webuntis.server) || '').replace(/\.webuntis\.com$/i, '');
+      var schoolClass = (child.webuntis && child.webuntis.klasse) || '';
+      var subParts = [];
+      if (school) subParts.push(school);
+      if (schoolClass) subParts.push('Klasse ' + schoolClass);
+      node.querySelector('[data-sub]').textContent = subParts.join(' · ');
       var lunchLink = node.querySelector('[data-mensa-link]');
       var lunchProvider = (child.lunch && child.lunch.provider) || 'mensamax';
       if (lunchProvider === 'cccampus'){
@@ -797,8 +803,8 @@
 
   function renderHiddenHint(el, child, card){
     el.innerHTML = '';
-    var liste = child.hiddenFaecher || [];
-    if (!liste.length){
+    var list = child.hiddenFaecher || [];
+    if (!list.length){
       el.classList.add('hidden');
       return;
     }
@@ -807,19 +813,19 @@
     label.className = 'hidden-hint-label';
     label.textContent = '🙈 Ausgeblendet:';
     el.appendChild(label);
-    liste.forEach(function(fach){
+    list.forEach(function(subject){
       var chip = document.createElement('span');
       chip.className = 'chip chip-restore';
       var span = document.createElement('span');
-      span.textContent = fach;
+      span.textContent = subject;
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'chip-x';
       btn.textContent = '👁';
-      btn.title = '"' + fach + '" wieder einblenden';
-      btn.setAttribute('aria-label', fach + ' wieder einblenden');
+      btn.title = '"' + subject + '" wieder einblenden';
+      btn.setAttribute('aria-label', subject + ' wieder einblenden');
       btn.addEventListener('click', function(){
-        child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== fach; });
+        child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== subject; });
         saveConfig(cfg);
         renderChildResult(card, child, lastDataById[child.id], null);
       });
@@ -833,63 +839,64 @@
     var lunchEl = card.querySelector('[data-lunch]');
     var tableEl = card.querySelector('[data-stunden]');
     var emptyEl = card.querySelector('[data-empty]');
-    var fehlerEl = card.querySelector('[data-fehler]');
+    var errorEl = card.querySelector('[data-fehler]');
     var hiddenHintEl = card.querySelector('[data-hidden-hint]');
 
     tableEl.innerHTML = '';
     emptyEl.classList.add('hidden');
-    fehlerEl.classList.add('hidden');
+    errorEl.classList.add('hidden');
     renderHiddenHint(hiddenHintEl, child, card);
 
     if (requestError){
       lunchEl.className = 'lunch err';
       lunchEl.textContent = '⚠ Keine Daten';
-      fehlerEl.textContent = requestError;
-      fehlerEl.classList.remove('hidden');
+      errorEl.textContent = requestError;
+      errorEl.classList.remove('hidden');
       return;
     }
 
     var lunchText = data.lunch || '–';
-    var lunchProvider2 = (child.lunch && child.lunch.provider) || 'mensamax';
-    var einrichtung = lunchProvider2 === 'cccampus' ? 'ccCampus' : ((child.lunch && child.lunch.einrichtung) || '');
+    var lunchProvider = (child.lunch && child.lunch.provider) || 'mensamax';
+    var institution = lunchProvider === 'cccampus' ? 'ccCampus' : ((child.lunch && child.lunch.einrichtung) || '');
     lunchEl.className = 'lunch' +
       (/fehlgeschlagen|nicht verfügbar|nicht gefunden|fehler beim abrufen/i.test(lunchText) ? ' err' :
         /kein menü|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
-    lunchEl.textContent = '🍽 ' + (einrichtung ? einrichtung + ': ' : '') + lunchText;
+    lunchEl.textContent = '🍽 ' + (institution ? institution + ': ' : '') + lunchText;
 
-    var stunden = data.stunden || [];
+    var lessons = data.stunden || [];
     var hidden = child.hiddenFaecher || [];
-    var sichtbar = stunden.filter(function(s){ return hidden.indexOf(s.fach) === -1; });
+    var visible = lessons.filter(function(s){ return hidden.indexOf(s.fach) === -1; });
 
-    if (!stunden.length){
+    if (!lessons.length){
       emptyEl.classList.remove('hidden');
       emptyEl.textContent = 'Heute keine Stunden / schulfrei.';
-    } else if (!sichtbar.length){
+    } else if (!visible.length){
       emptyEl.classList.remove('hidden');
       emptyEl.textContent = 'Alle heutigen Fächer sind ausgeblendet.';
     } else {
-      // Nach Startzeit gruppieren: zeitgleiche Stunden (z. B. Gruppenteilung)
-      // landen wie im ursprünglichen E-Mail-Format in einer Zeile, mit "/"
-      // getrennt, statt als verwirrende doppelte Zeitzeile.
-      var gruppen = [];
-      var byZeit = {};
-      sichtbar.forEach(function(s){
+      // Group by start time: lessons at the same time (e.g. a split
+      // group) land on one line, separated by "/", just like the
+      // original email format — instead of a confusing duplicate time
+      // row.
+      var groups = [];
+      var byTime = {};
+      visible.forEach(function(s){
         var key = s.start + '|' + s.ende;
-        if (!byZeit[key]) { byZeit[key] = []; gruppen.push(byZeit[key]); }
-        byZeit[key].push(s);
+        if (!byTime[key]) { byTime[key] = []; groups.push(byTime[key]); }
+        byTime[key].push(s);
       });
 
-      gruppen.forEach(function(gruppe){
+      groups.forEach(function(group){
         var tr = document.createElement('tr');
-        var tdZeit = document.createElement('td');
-        tdZeit.className = 'zeit';
-        tdZeit.textContent = gruppe[0].start + '–' + gruppe[0].ende;
-        var tdFach = document.createElement('td');
+        var tdTime = document.createElement('td');
+        tdTime.className = 'zeit';
+        tdTime.textContent = group[0].start + '–' + group[0].ende;
+        var tdSubject = document.createElement('td');
         var tdAction = document.createElement('td');
         tdAction.className = 'aktion';
 
-        gruppe.forEach(function(s, idx){
-          if (idx > 0) tdFach.appendChild(document.createTextNode(' / '));
+        group.forEach(function(s, idx){
+          if (idx > 0) tdSubject.appendChild(document.createTextNode(' / '));
           var span = document.createElement('span');
           span.textContent = s.fach + ' · ' + s.raum;
           if (s.vertretung){
@@ -898,14 +905,15 @@
             badge.textContent = 'Vertretung';
             span.appendChild(badge);
           }
-          tdFach.appendChild(span);
+          tdSubject.appendChild(span);
 
           var hideBtn = document.createElement('button');
           hideBtn.type = 'button';
           hideBtn.className = 'hide-fach';
           hideBtn.title = '"' + s.fach + '" ausblenden';
-          // Ohne aria-label wäre der vorgelesene Name das nackte Emoji
-          // ("Verbotsschild") — mit Fachname ist klar, was ausgeblendet wird.
+          // Without aria-label, the name read out loud would be the bare
+          // emoji ("no entry sign") — with the subject name it's clear
+          // what's being hidden.
           hideBtn.setAttribute('aria-label', s.fach + ' ausblenden');
           hideBtn.textContent = '🚫';
           hideBtn.addEventListener('click', function(){
@@ -916,26 +924,26 @@
           tdAction.appendChild(hideBtn);
         });
 
-        tr.appendChild(tdZeit); tr.appendChild(tdFach); tr.appendChild(tdAction);
+        tr.appendChild(tdTime); tr.appendChild(tdSubject); tr.appendChild(tdAction);
         tableEl.appendChild(tr);
       });
     }
 
-    var fehlerTeile = [];
-    if (data.stundenFehler) fehlerTeile.push('Stundenplan: ' + data.stundenFehler);
-    if (data.lunchFehler) fehlerTeile.push('Schulessen: ' + data.lunchFehler);
-    if (fehlerTeile.length){
-      fehlerEl.textContent = '⚠ ' + fehlerTeile.join(' · ');
-      fehlerEl.classList.remove('hidden');
+    var errorParts = [];
+    if (data.stundenFehler) errorParts.push('Stundenplan: ' + data.stundenFehler);
+    if (data.lunchFehler) errorParts.push('Schulessen: ' + data.lunchFehler);
+    if (errorParts.length){
+      errorEl.textContent = '⚠ ' + errorParts.join(' · ');
+      errorEl.classList.remove('hidden');
     }
   }
 
-  // ── ccCampus (mbs5online.de / mbs5.de) — bewusst NICHT über den Proxy ──
-  // ccCampus blockiert Anfragen von Server-Infrastruktur (Cloudflare
-  // Workers) mit 403, lässt echte Browser-Anfragen aber durch (offene
-  // CORS-Header). Deswegen läuft das hier direkt im Browser, anders als
-  // WebUntis/Mensamax, die genau umgekehrt CORS-blockiert sind und den
-  // Proxy brauchen.
+  // ── ccCampus (mbs5online.de / mbs5.de) — deliberately NOT via the proxy ──
+  // ccCampus blocks requests from server infrastructure (Cloudflare
+  // Workers) with 403, but lets real browser requests through (open CORS
+  // headers). That's why this runs directly in the browser here, unlike
+  // WebUntis/Mensamax, which are CORS-blocked the other way round and
+  // need the proxy.
   function decodeHtmlEntitiesClient(str){
     var map = {amp:'&', lt:'<', gt:'>', quot:'"', apos:"'", nbsp:' '};
     return str
@@ -944,23 +952,23 @@
       .replace(/&([a-zA-Z]+);/g, function(m, name){ return Object.prototype.hasOwnProperty.call(map, name) ? map[name] : m; });
   }
 
-  // Muss mit connect-src in web/_headers übereinstimmen. Wird eine ccCampus-
-  // Instanz unter einer anderen Domain eingetragen, blockiert die CSP den
-  // Abruf — und zwar nur mit einem nackten "Failed to fetch", das für
-  // Nutzer:innen nicht von einem Netzausfall zu unterscheiden ist. Deswegen
-  // hier vorab prüfen und stattdessen sagen, was wirklich los ist.
+  // Must match connect-src in web/_headers. If a ccCampus instance is
+  // entered under a different domain, the CSP blocks the fetch — with
+  // nothing but a bare "Failed to fetch", which is indistinguishable from
+  // a network outage for users. So this checks in advance and says
+  // instead what's actually going on.
   //
-  // Liste statt Einzelwert, weil derselbe Anbieter (gleiche Software,
-  // gleicher Pfad "/ordering/") unter mehreren Domains läuft —
-  // mbs5online.de und das kürzere mbs5.de. Beide müssen auch in
-  // web/_headers (connect-src) eingetragen sein, sonst blockiert die CSP
-  // trotz Freischaltung hier.
-  var CCCAMPUS_ERLAUBTE_DOMAINS = ['.mbs5online.de', '.mbs5.de'];
+  // A list instead of a single value, because the same provider (same
+  // software, same "/ordering/" path) runs under several domains —
+  // mbs5online.de and the shorter mbs5.de. Both also need to be entered
+  // in web/_headers (connect-src), or the CSP blocks it despite being
+  // allowed here.
+  var CCCAMPUS_ALLOWED_DOMAINS = ['.mbs5online.de', '.mbs5.de'];
 
-  function ccCampusDomainErlaubt(baseUrl){
+  function ccCampusDomainAllowed(baseUrl){
     try {
       var host = new URL(baseUrl).hostname.toLowerCase();
-      return CCCAMPUS_ERLAUBTE_DOMAINS.some(function(d){
+      return CCCAMPUS_ALLOWED_DOMAINS.some(function(d){
         return host === d.slice(1) || host.endsWith(d);
       });
     } catch {
@@ -968,17 +976,17 @@
     }
   }
 
-  function holeCcCampusEssen(cfg, datumStr){
-    var base = (cfg.base || 'https://cccampus.mbs5online.de/ordering').replace(/\/$/, '');
-    if (!cfg.kundennummer || !cfg.pin){
+  function fetchCcCampusLunch(providerCfg, datumStr){
+    var base = (providerCfg.base || 'https://cccampus.mbs5online.de/ordering').replace(/\/$/, '');
+    if (!providerCfg.kundennummer || !providerCfg.pin){
       return Promise.resolve({ lunch: null, lunchFehler: 'ccCampus-Konfiguration unvollständig (Kundennummer/PIN)' });
     }
-    if (!ccCampusDomainErlaubt(base)){
+    if (!ccCampusDomainAllowed(base)){
       return Promise.resolve({
         lunch: null,
         lunchFehler: 'Diese ccCampus-Adresse ist auf dieser Seite noch nicht freigeschaltet '
           + '(erlaubt sind aktuell nur Adressen unter '
-          + CCCAMPUS_ERLAUBTE_DOMAINS.map(function(d){ return d.slice(1); }).join(' oder ') + '). '
+          + CCCAMPUS_ALLOWED_DOMAINS.map(function(d){ return d.slice(1); }).join(' oder ') + '). '
           + 'Bitte melde Dich beim Betreiber — es ist eine einmalige Freischaltung nötig.',
       });
     }
@@ -989,7 +997,7 @@
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
       },
-      body: 'identifierValue=' + encodeURIComponent(cfg.kundennummer) + '&secretValue=' + encodeURIComponent(cfg.pin) + '&identifierType=0&secretType=0',
+      body: 'identifierValue=' + encodeURIComponent(providerCfg.kundennummer) + '&secretValue=' + encodeURIComponent(providerCfg.pin) + '&identifierType=0&secretType=0',
     })
       .then(function(resp){ return resp.text(); })
       .then(function(loginText){
@@ -1007,24 +1015,24 @@
           .then(function(planResp){
             if (!planResp.ok) return { lunch: 'Schulessen: Daten nicht verfügbar', lunchFehler: null };
             return planResp.text().then(function(planText){
-              var isoDatum = datumStr.slice(0, 4) + '-' + datumStr.slice(4, 6) + '-' + datumStr.slice(6, 8);
+              var isoDate = datumStr.slice(0, 4) + '-' + datumStr.slice(4, 6) + '-' + datumStr.slice(6, 8);
               var statusNodeRe = /<div class="status-node[^>]*>/g;
-              var match; var titel = null;
+              var match; var title = null;
               while ((match = statusNodeRe.exec(planText)) !== null){
                 var tag = match[0];
-                if (tag.indexOf('data-date="' + isoDatum + '"') !== -1){
+                if (tag.indexOf('data-date="' + isoDate + '"') !== -1){
                   var titleMatch = tag.match(/title="([^"]*)"/);
-                  titel = titleMatch ? decodeHtmlEntitiesClient(titleMatch[1]).trim() : '';
+                  title = titleMatch ? decodeHtmlEntitiesClient(titleMatch[1]).trim() : '';
                   break;
                 }
               }
               var text;
-              if (titel === null) text = 'Schulessen: Status für heute nicht gefunden';
-              else if (titel === '') text = 'Kein Menü bestellt';
-              else if (titel === 'kein Liefertag') text = 'Kein Schulessen heute';
-              else if (titel === 'Abwesend') text = 'Abwesend gemeldet (kein Essen)';
-              else if (titel === 'abgelaufen') text = 'Bestellfrist abgelaufen';
-              else text = 'Essen bestellt: ' + titel;
+              if (title === null) text = 'Schulessen: Status für heute nicht gefunden';
+              else if (title === '') text = 'Kein Menü bestellt';
+              else if (title === 'kein Liefertag') text = 'Kein Schulessen heute';
+              else if (title === 'Abwesend') text = 'Abwesend gemeldet (kein Essen)';
+              else if (title === 'abgelaufen') text = 'Bestellfrist abgelaufen';
+              else text = 'Essen bestellt: ' + title;
               return { lunch: text, lunchFehler: null };
             });
           });
@@ -1041,18 +1049,18 @@
       return Promise.resolve();
     }
     setCardLoading(card);
-    var datum = datumStrFuer(activeOffset);
-    var lunchIstCcCampus = child.lunch && child.lunch.provider === 'cccampus';
+    var date = dateStrFor(activeOffset);
+    var lunchIsCcCampus = child.lunch && child.lunch.provider === 'cccampus';
 
     var proxyPromise = fetch(cfg.proxyUrl + '/api/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         webuntis: child.webuntis,
-        // Bei ccCampus keine echten Zugangsdaten an den Proxy schicken —
-        // der wird dort ohnehin blockiert, das läuft separat im Browser.
-        lunch: lunchIstCcCampus ? { provider: 'cccampus', cccampus: {} } : child.lunch,
-        datum: datum,
+        // Don't send real credentials to the proxy for ccCampus — it gets
+        // blocked there anyway, this runs separately in the browser.
+        lunch: lunchIsCcCampus ? { provider: 'cccampus', cccampus: {} } : child.lunch,
+        datum: date,
       }),
     })
       .then(function(resp){
@@ -1060,8 +1068,8 @@
         return resp.json();
       });
 
-    var lunchPromise = lunchIstCcCampus
-      ? holeCcCampusEssen(child.lunch.cccampus, datum)
+    var lunchPromise = lunchIsCcCampus
+      ? fetchCcCampusLunch(child.lunch.cccampus, date)
       : Promise.resolve(null);
 
     return Promise.all([proxyPromise, lunchPromise])
@@ -1087,14 +1095,14 @@
     if (!cfg.children.length) return;
     btnRefresh.classList.add('spin');
     childCards.setAttribute('aria-busy', 'true');
-    // Nacheinander statt parallel: mehrere Kinder nutzen oft denselben
-    // gemeinsamen WebUntis-Login (Klassen-Sammellogin) — zwei fast
-    // zeitgleiche Logins vom selben Konto können sich bei WebUntis
-    // gegenseitig die Session kaputt machen. Sequenziell abrufen vermeidet
-    // das zuverlässig, kostet nur etwas Zeit beim Refresh.
+    // Sequential rather than parallel: several children often share the
+    // same WebUntis login (a class-wide shared account) — two nearly
+    // simultaneous logins from the same account can break each other's
+    // session on WebUntis. Fetching sequentially avoids that reliably, at
+    // the cost of a bit of time on refresh.
     cfg.children
-      .reduce(function(kette, child){
-        return kette.then(function(){ return fetchChild(child); });
+      .reduce(function(chain, child){
+        return chain.then(function(){ return fetchChild(child); });
       }, Promise.resolve())
       .finally(function(){
         btnRefresh.classList.remove('spin');
@@ -1105,13 +1113,13 @@
   btnRefresh.addEventListener('click', refreshAll);
 
   // ── Navigation ──
-  // showDashboard() lädt bewusst IMMER auch die Daten nach. Vorher stand an
-  // jeder Aufrufstelle von Hand "showDashboard(); refreshAll();" — an einer
-  // davon (Klick auf den Titel) fehlte das refreshAll(), und die Karten
-  // blieben mit lauter "–" stehen. Solange beides getrennt ist, ist genau
-  // dieser Fehler jederzeit wieder einbaubar; zusammengelegt nicht mehr.
-  // renderDashboard() baut die Karten neu auf (mit "–"-Platzhaltern),
-  // refreshAll() füllt sie — die Reihenfolge muss so bleiben.
+  // showDashboard() deliberately ALWAYS reloads the data too. Every call
+  // site used to spell out "showDashboard(); refreshAll();" by hand — one
+  // of them (clicking the title) was missing the refreshAll(), leaving
+  // the cards stuck showing nothing but "–". As long as the two stay
+  // separate, that mistake can always creep back in; merged, it can't.
+  // renderDashboard() rebuilds the cards (with "–" placeholders),
+  // refreshAll() fills them in — the order has to stay this way.
   function showDashboard(){
     setup.classList.add('hidden');
     dashboard.classList.remove('hidden');
@@ -1130,8 +1138,8 @@
   var btnSettingsBottom = document.getElementById('btnSettingsBottom');
   if (btnSettingsBottom) btnSettingsBottom.addEventListener('click', showSetup);
 
-  // Titel oben links führt immer zurück zur Übersicht (dem Stundenplan),
-  // egal ob man gerade in den Einstellungen ist.
+  // The title top-left always leads back to the overview (the timetable),
+  // regardless of whether you're currently in settings.
   var titleHome = document.getElementById('titleHome');
   titleHome.addEventListener('click', showDashboard);
 
@@ -1155,10 +1163,10 @@
     showSetup();
   }
 
-  // PWA: Service Worker registrieren (App-Shell-Cache, optional)
+  // PWA: register the service worker (app-shell cache, optional)
   if ('serviceWorker' in navigator){
     window.addEventListener('load', function(){
-      navigator.serviceWorker.register('sw.js').catch(function(){ /* egal, kein Blocker */ });
+      navigator.serviceWorker.register('sw.js').catch(function(){ /* fine, not a blocker */ });
     });
   }
 })();
