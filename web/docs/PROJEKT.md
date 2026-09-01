@@ -431,6 +431,18 @@ werden kann; der zugehörige Quellcode-Stand lässt sich seit 27.08.2026
 zusätzlich über die Git-Historie nachvollziehen (davor nicht, siehe
 Abschnitt 11).
 
+**CI** (`.github/workflows/ci.yml`, seit 02.09.2026): Läuft bei jedem Push
+auf `main` — Tests (mit Coverage-Ausgabe), Lint, `npm audit
+--audit-level=high`. Bewusst **kein** PR-Zwang und **kein** Blockieren
+(keine Branch Protection / Required Status Checks) — Ein-Personen-Projekt,
+direkt auf `main` committet statt über Pull Requests; ein roter ✗ ist eine
+Benachrichtigung (GitHub-Mail, rot im Commit-Verlauf), kein Merge-Gate.
+`./deploy.sh` bleibt die eigentliche Bremse, die kaputten Code am Live-Gehen
+hindert. GitHub-eigenes Secret-Scanning zusätzlich versucht zu aktivieren —
+auf diesem Plan für private Repos nicht verfügbar (braucht GitHub Advanced
+Security), würde bei einer späteren Veröffentlichung automatisch mit
+dazukommen.
+
 ## 11. Release-Historie
 
 **Vor Git (bis 27.08.2026):** Keine Versionsverwaltung — Entwicklung direkt

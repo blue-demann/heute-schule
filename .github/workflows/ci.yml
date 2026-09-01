@@ -1,0 +1,39 @@
+# Runs on every push to main. Deliberately no pull_request trigger and no
+# required status check / branch protection — this is a one-person project
+# committing straight to main, not a PR workflow. A red ✗ here is a
+# notification (GitHub emails on a failed run, shows red in the commit
+# history), not a merge gate; ./deploy.sh remains the actual gate that
+# keeps broken code from going live.
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Same command deploy.sh uses locally — one run gives both the pass/
+      # fail signal and the coverage summary, no separate step needed.
+      - name: Tests (with coverage)
+        run: npx c8 --reporter=text-summary node run-tests.mjs
+
+      - name: Lint
+        run: npm run lint
+
+      # High/critical only: Dependabot already tracks every severity on
+      # its own weekly schedule (see .github/dependabot.yml) — this step
+      # is a coarse per-push signal, not the primary vulnerability feed,
+      # so it stays quiet on low-severity noise.
+      - name: Security audit
+        run: npm audit --audit-level=high
