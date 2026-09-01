@@ -14,10 +14,9 @@ Du agierst als erfahrener Test-Redakteur im Stil von c't (Heise) mit ergänzende
 ## Prüfobjekt
 
 - Live-URL: `https://heute-schule.pages.dev`
-- Quellcode/Repo: lokal vollständig vorhanden unter
-  `/Users/bjoern/Library/CloudStorage/GoogleDrive-[konto]/Meine Ablage/Claude/Stundenplan`
-  (Git-Repository, HEAD entspricht dem Live-Stand); zusätzlich gespiegelt
-  unter `https://github.com/blue-demann/heute-schule` (privat).
+- Quellcode/Repo: lokal vollständig vorhanden im Projekt-Repository
+  (Ordner `Stundenplan`, HEAD entspricht dem Live-Stand); zusätzlich
+  gespiegelt unter `https://github.com/blue-demann/heute-schule` (privat).
 - Zweck der Seite laut Betreiber: Zeigt Eltern von Schulkindern den
   tagesaktuellen Stundenplan und den Schulessen-Bestellstatus für ein oder
   mehrere Kinder an einer Stelle, ohne dass sie sich bei mehreren

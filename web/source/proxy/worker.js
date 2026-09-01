@@ -12,15 +12,12 @@
  * Produktions-Code des bestehenden Apps-Script-Agents), nur UrlFetchApp durch
  * fetch() ersetzt.
  *
- * ⚠ Unverifizierte Annahme aus der Architektur-Diskussion: WebUntis und
- * Mensamax senden vermutlich keine Access-Control-Allow-Origin-Header
- * (deswegen der Proxy). War zum Zeitpunkt der Konzeption nicht empirisch
- * getestet — falls sich das als falsch herausstellt, wäre der Proxy
- * eigentlich gar nicht nötig gewesen, schadet aber auch nicht.
+ * WebUntis und Mensamax senden keine Access-Control-Allow-Origin-Header —
+ * deswegen der Proxy: direkte Browser-Anfragen an diese Anbieter sind
+ * technisch nicht möglich (siehe ../PROJEKT.md, Abschnitt 5).
  *
- * ⚠ Mensamax-Cookie-Handling: response.headers.getSetCookie() wird von der
- * Cloudflare-Workers-Runtime unterstützt. Vor dem ersten echten Einsatz mit
- * `wrangler dev` gegen die echten Logins testen (siehe README.md).
+ * Mensamax-Cookie-Handling nutzt response.headers.getSetCookie(), von der
+ * Cloudflare-Workers-Runtime unterstützt.
  *
  * Setup: siehe README.md in diesem Ordner.
  *
