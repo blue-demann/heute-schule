@@ -7,22 +7,12 @@ für den Zusammenhang mit den Ergebnisdokumenten.
 
 ## Verfügbar
 
+- [`ct-stil-analyse.md`](ct-stil-analyse.md) — der Prompt für die
+  c't-Stil-Analyse (Ergebnis: `QA-Bericht-*.md`). Verbatim archiviert (der
+  Wortlaut der ersten Fassung vom 27.08. war durch eine Kontext-
+  Kompaktierung zwischenzeitlich nicht mehr rekonstruierbar — am 31.08.
+  von Björn erneut bereitgestellt und hier mit den für diesen Lauf
+  ausgefüllten Platzhaltern abgelegt).
 - [`peer-review-bester-freund.md`](peer-review-bester-freund.md) — der
   Prompt für die unabhängige Gegenprüfung (`PEER-REVIEW-2026-08-27.md`).
   Verbatim archiviert.
-
-## Fehlt: der ursprüngliche c't-Stil-Analyse-Prompt
-
-Der Prompt für den ersten QA-Bericht ("Kritische Website-Analyse (c't-Stil)",
-Ergebnis: `QA-Bericht-2026-08-27-v0.1.1.md`, beide Runden) lässt sich **nicht
-verlässlich verbatim rekonstruieren**. Er wurde früh in einer langen
-Session eingegeben; als die Session später aus Platzgründen komprimiert
-wurde, blieb davon nur eine Zusammenfassung seiner Struktur erhalten
-(Kategorien, Format-Vorgaben, Regeln zu Belegpflicht), nicht der exakte
-Wortlaut. Eine KI-Rekonstruktion aus der Erinnerung als "Original"
-auszugeben wäre genau die Art Behauptung-statt-Beleg, vor der dieses
-Projekt an anderer Stelle selbst gewarnt hat (siehe Entscheidungs-Log in
-`PROJEKT.md`) — deshalb bewusst nicht getan.
-
-**Falls Björn den ursprünglichen Prompt noch hat** (z. B. in einer anderen
-Kopie des Chatverlaufs), lohnt es sich, ihn hier nachzutragen.

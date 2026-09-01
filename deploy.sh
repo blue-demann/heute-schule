@@ -47,7 +47,12 @@ for PAAR in \
   "proxy/hostcheck.mjs:web/source/proxy/hostcheck.mjs" \
   "proxy/cachekey.mjs:web/source/proxy/cachekey.mjs" \
   "PROJEKT.md:web/docs/PROJEKT.md" \
-  "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md"; do
+  "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md" \
+  "QA-Bericht-2026-08-31.md:web/docs/QA-Bericht-2026-08-31.md" \
+  "PEER-REVIEW-2026-08-31.md:web/docs/PEER-REVIEW-2026-08-31.md" \
+  "prompts/README.md:web/docs/prompts/README.md" \
+  "prompts/ct-stil-analyse.md:web/docs/prompts/ct-stil-analyse.md" \
+  "prompts/peer-review-bester-freund.md:web/docs/prompts/peer-review-bester-freund.md"; do
   ORIGINAL="${PAAR%%:*}"
   KOPIE="${PAAR##*:}"
   if ! diff -q "$ORIGINAL" "$KOPIE" >/dev/null 2>&1; then

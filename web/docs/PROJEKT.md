@@ -325,22 +325,35 @@ Absicherung nicht reicht.
   c't-Stil-Analyse, Runde 1 (26 Kritikpunkte über 10 Kategorien) und
   Runde 2 (Verifikation der Fixes gegen die Live-Umgebung, zwei neue Funde)
 - [`PEER-REVIEW-2026-08-27.md`](PEER-REVIEW-2026-08-27.md) — unabhängige
-  Gegenprüfung des QA-Berichts, fand den Cache-Bypass-Fehler und weitere
-  Lücken, die der erste Bericht übersehen hatte
+  Gegenprüfung dazu, fand den Cache-Bypass-Fehler und weitere Lücken, die
+  der erste Bericht übersehen hatte
+- [`QA-Bericht-2026-08-31.md`](QA-Bericht-2026-08-31.md) — dritte Runde,
+  ausgeführt von einer frischen Sitzung ohne Vorwissen über frühere
+  Projektstände; kein 🔴-Befund, bestätigte alle vorherigen 🔴-Fixes live
+- [`PEER-REVIEW-2026-08-31.md`](PEER-REVIEW-2026-08-31.md) — ebenfalls
+  frische Sitzung, fand die zu enge Mensamax-Domain-Beschränkung (behoben,
+  siehe Entscheidungs-Log/Sicherheitsmodell) und die uneinheitliche
+  Haushaltsausnahme-Formulierung in vier Dokumenten (ebenfalls korrigiert)
 
-**Methodik — wichtig für die Einordnung:** Beide Audit-Runden und das
-Peer-Review wurden **nicht von menschlichen Prüfer:innen durchgeführt**,
-sondern von Claude (Anthropics KI-Assistent) anhand strukturierter,
-von Björn selbst formulierter Prompts — mit echtem Zugriff auf die
-Live-Website und den Quellcode, aber ohne die Unabhängigkeit menschlicher
-Gutachter:innen. Die Prompts liegen unter [`prompts/`](prompts/) zur
-Nachvollziehbarkeit:
-- [`prompts/peer-review-bester-freund.md`](prompts/peer-review-bester-freund.md)
-  — verbatim archiviert.
-- Der Prompt für Runde 1/2 der c't-Stil-Analyse ist **nicht** verbatim
-  erhalten (siehe [`prompts/README.md`](prompts/README.md) für den Grund) —
-  bewusst offen benannt, statt eine Rekonstruktion als Original
-  auszugeben.
+Auf der Website ([`ueber.html`](web/ueber.html), Abschnitt „Technische
+Details") sind bewusst nur die beiden aktuellsten Berichte verlinkt — die
+Website zeigt den aktuellen Stand, nicht die Historie. Die früheren Runden
+bleiben hier im Repository nachvollziehbar.
+
+**Methodik — wichtig für die Einordnung:** Keine der vier Audit-Runden
+wurde **von menschlichen Prüfer:innen durchgeführt**, sondern von Claude
+(Anthropics KI-Assistent) anhand strukturierter, von Björn selbst
+formulierter Prompts — mit echtem Zugriff auf die Live-Website und den
+Quellcode, aber ohne die Unabhängigkeit menschlicher Gutachter:innen. Die
+Runde vom 31.08. lief zusätzlich über zwei genuin unabhängige, frische
+Sitzungen ohne Kontext aus früheren Gesprächen zu diesem Projekt — nicht
+nur derselbe Assistent mit neuer Rolle. Alle Prompts liegen unter
+[`prompts/`](prompts/) zur Nachvollziehbarkeit, verbatim archiviert:
+[`prompts/peer-review-bester-freund.md`](prompts/peer-review-bester-freund.md)
+und [`prompts/ct-stil-analyse.md`](prompts/ct-stil-analyse.md) (dessen
+ursprünglicher Wortlaut zwischenzeitlich durch eine Kontext-Kompaktierung
+verloren war und am 31.08. erneut bereitgestellt wurde — siehe
+[`prompts/README.md`](prompts/README.md)).
 
 ## 10. Betrieb & Deploy
 
