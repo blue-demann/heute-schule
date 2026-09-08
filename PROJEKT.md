@@ -438,10 +438,12 @@ auf `main` — Tests (mit Coverage-Ausgabe), Lint, `npm audit
 direkt auf `main` committet statt über Pull Requests; ein roter ✗ ist eine
 Benachrichtigung (GitHub-Mail, rot im Commit-Verlauf), kein Merge-Gate.
 `./deploy.sh` bleibt die eigentliche Bremse, die kaputten Code am Live-Gehen
-hindert. GitHub-eigenes Secret-Scanning zusätzlich versucht zu aktivieren —
-auf diesem Plan für private Repos nicht verfügbar (braucht GitHub Advanced
-Security), würde bei einer späteren Veröffentlichung automatisch mit
-dazukommen.
+hindert. GitHub-eigenes Secret-Scanning (+ Push Protection) zusätzlich
+aktiv — auf dem privaten Plan zunächst nicht verfügbar (braucht GitHub
+Advanced Security), seit der Veröffentlichung des Repositorys (02.09.2026)
+automatisch nutzbar und eingeschaltet. Ebenso: Dependabot Security Updates
+(automatische PRs speziell bei entdeckten Schwachstellen, zusätzlich zu
+den regulären wöchentlichen Update-PRs).
 
 ## 11. Release-Historie
 
@@ -503,6 +505,15 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   Allowlist wie bei ccCampus) und eine an vier Stellen uneinheitliche
   Haushaltsausnahme-Formulierung (Zukunftsbedingung statt bereits
   eingetretenem Zustand).
+- **Fünfte Prüfrunde und Härtungsschub** (01.09.2026) — kompletter Umstieg
+  auf englische Bezeichner/Kommentare im Code (Anzeigesprache bleibt
+  Deutsch), Property-based Tests für die sicherheitskritischen
+  Hostname-Prüfungen, Code Coverage eingeführt und von 41 % auf ~99 %
+  gebracht (u. a. `proxy/worker.js`, vorher 0 %), GitHub-Actions-CI
+  (Tests/Lint/`npm audit` bei jedem Push).
+- **Repository öffentlich gemacht** (02.09.2026) — GitHub-eigenes
+  Secret-Scanning + Push Protection sowie Dependabot Security Updates
+  dadurch zusätzlich verfügbar geworden und aktiviert.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen
@@ -528,6 +539,9 @@ Kontaktdaten). Bus-Factor bewusst benannt statt verschwiegen: Bei Ausfall
 gibt es aktuell keine zweite Person mit Zugriff auf Cloudflare-Konto,
 GitHub-Konto oder Projektwissen. Gemildert durch: offenen Quellcode (MIT),
 dieses Dokument, eine nachvollziehbare Git-Historie seit 27.08.2026 und
-ein Remote-Repository (GitHub, privat) seit 31.08.2026 — Code und Historie
-liegen damit nicht mehr ausschließlich auf Björns eigenem Rechner. Noch
-nicht gemildert: eine zweite zugriffsberechtigte Person.
+ein Remote-Repository (GitHub, seit 31.08.2026, öffentlich seit
+02.09.2026) — Code und Historie liegen damit nicht mehr ausschließlich
+auf Björns eigenem Rechner, und potenziell könnte im Ernstfall auch eine
+außenstehende Person den Code einsehen. Noch nicht gemildert: eine zweite
+zugriffsberechtigte Person (Cloudflare-Konto, GitHub-Konto bleiben
+Björns alleiniger Zugriff).
