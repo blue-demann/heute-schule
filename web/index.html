@@ -130,9 +130,15 @@
   fieldset legend{font-size:.75rem; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); padding:0 .3rem;}
   label{display:block; font-size:.8rem; color:var(--muted); margin:.6rem 0 .2rem;}
   label:first-of-type{margin-top:0;}
+  /* font-size at least 1rem (16px at the default root size): iOS Safari
+     zooms the page in whenever a field with a smaller font takes focus,
+     and never zooms back out on its own — the whole app stays scaled up
+     and blurry afterwards, including after leaving the settings. Using
+     rem rather than a hard 16px keeps a user's own font-size setting
+     working. */
   input[type=text], input[type=password], input[type=url], select{
     width:100%; padding:.6rem .7rem; border-radius:9px; border:1px solid var(--border);
-    background:var(--card); color:var(--text); font-size:.95rem;
+    background:var(--card); color:var(--text); font-size:1rem;
   }
   input:focus, select:focus{outline:2px solid var(--accent); outline-offset:1px;}
   .child-setup{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:1rem 1.1rem; margin-bottom:1rem;}
