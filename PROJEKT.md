@@ -420,9 +420,14 @@ der bei Cloudflare hinterlegte Produktions-Branch heißt tatsächlich
 `production`, nicht `main`. `deploy.sh` setzt deshalb `--branch=production`
 explizit, unabhängig vom lokalen Branch-Namen.
 
-**Zugriff:** Deploy läuft über Björns eigenes, scoped Cloudflare-API-Token
-(`wrangler login`), kein breiter OAuth-Zugriff — Entscheidung aus
-Datenschutz-/Sicherheitspräferenz.
+**Zugriff:** Deploy läuft über ein eigenes, eng gefasstes Cloudflare-API-Token
+in der Umgebungsvariablen `CLOUDFLARE_API_TOKEN` — Entscheidung aus
+Datenschutz-/Sicherheitspräferenz. Bewusst **nicht** über `wrangler login`:
+das ist der OAuth-Flow, der der Wrangler-Anwendung Schreibrechte auf nahezu
+alle Cloudflare-Produkte des Kontos einräumt (Workers, Pages, D1, AI, Queues,
+E-Mail-Versand, Container), weit mehr als dieses Projekt braucht. Nötig sind
+nur `Cloudflare Pages:Edit` und `Workers Scripts:Edit`. Das Token gehört in
+die Shell-Umgebung, nicht ins Repository.
 
 **Rollback:** Kein automatisierter Rollback-Mechanismus. Cloudflare hält
 eine Historie vergangener Deployments vor (abrufbar über `wrangler pages
