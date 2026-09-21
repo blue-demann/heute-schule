@@ -82,9 +82,18 @@
   .fetching{opacity:.55;}
   .hidden-hint{
     margin-top:.7rem; padding-top:.6rem; border-top:1px dashed var(--border);
-    display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; font-size:.82rem;
+    font-size:.82rem;
   }
-  .hidden-hint-label{color:var(--muted); white-space:nowrap;}
+  /* Kein display:flex auf dem summary — das entfernt in Chrome/Safari das
+     native Aufklapp-Dreieck. Höhe stattdessen über padding, damit die
+     Zeile die 24×24 CSS-Pixel aus WCAG 2.5.8 (AA) für Bedienelemente
+     erreicht. */
+  .hidden-hint summary{
+    cursor:pointer; color:var(--muted); padding:.25rem 0; min-height:24px;
+  }
+  .hidden-hint-chips{
+    display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; margin-top:.5rem;
+  }
   .chip-restore{background:var(--warn-bg); border-color:transparent;}
   .legend{
     color:var(--muted); font-size:.78rem; line-height:1.5; text-align:center;
@@ -152,8 +161,6 @@
   .feld-hinweis code{background:var(--border); padding:.05rem .25rem; border-radius:4px;}
   .danger-zone h2{font-size:.95rem; margin:0 0 .4rem;}
   .danger-zone p{font-size:.85rem; color:var(--muted); margin:0 0 .8rem;}
-  details.mensa-defaults{margin-bottom:1rem; font-size:.85rem;}
-  details.mensa-defaults summary{cursor:pointer; color:var(--muted);}
 
   .chips{display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.5rem;}
   .chip{
@@ -203,8 +210,9 @@
     <p id="dashboardEmptyHint" class="empty-hint hidden">Noch keine Kinder eingerichtet — tippe oben rechts auf ⚙️.</p>
     <p id="dashboardLegend" class="legend hidden">
       🚫 neben einer Stunde blendet dieses Fach dauerhaft aus der Ansicht aus.
-      Ausgeblendete Fächer stehen unter „🙈 Ausgeblendet“ auf der jeweiligen Karte
-      und lassen sich dort mit 👁 jederzeit wieder einblenden.
+      Ausgeblendete Fächer zählt die jeweilige Karte unten mit („🙈 3 ausgeblendete
+      Fächer“) — aufklappen, und sie lassen sich dort mit 👁 jederzeit wieder
+      einblenden.
     </p>
 
     <p class="demo-hinweis">
@@ -383,7 +391,12 @@
     <table class="stunden" data-stunden></table>
     <p class="empty-hint hidden" data-empty>Heute keine Stunden / schulfrei.</p>
     <p class="fehler-hint hidden" data-fehler></p>
-    <div class="hidden-hint hidden" data-hidden-hint></div>
+    <!-- <details>, nicht <div> mit eigenem Toggle: Aufklapp-Dreieck,
+         Tastaturbedienung und die „eingeklappt/ausgeklappt"-Ansage für
+         Screenreader kommen vom Browser. Der offen/zu-Zustand hängt am
+         Element selbst und überlebt damit das Neuaufbauen des Inhalts,
+         das jedes Wieder-Einblenden auslöst. -->
+    <details class="hidden-hint hidden" data-hidden-hint></details>
   </div>
 </template>
 
@@ -808,11 +821,21 @@
       el.classList.add('hidden');
       return;
     }
+    // Ein Panel, das beim letzten Rendern noch leer war, startet
+    // zugeklappt. Ein bereits offenes bleibt offen: Sonst würde es bei
+    // jedem Wieder-Einblenden zuklappen, weil jeder 👁-Klick die Karte neu
+    // rendert — und man müsste es für jedes weitere Fach erneut öffnen.
+    if (el.classList.contains('hidden')) el.open = false;
     el.classList.remove('hidden');
-    var label = document.createElement('span');
-    label.className = 'hidden-hint-label';
-    label.textContent = '🙈 Ausgeblendet:';
-    el.appendChild(label);
+
+    var summary = document.createElement('summary');
+    summary.textContent = list.length === 1
+      ? '🙈 1 ausgeblendetes Fach'
+      : '🙈 ' + list.length + ' ausgeblendete Fächer';
+    el.appendChild(summary);
+
+    var chips = document.createElement('div');
+    chips.className = 'hidden-hint-chips';
     list.forEach(function(subject){
       var chip = document.createElement('span');
       chip.className = 'chip chip-restore';
@@ -827,11 +850,24 @@
       btn.addEventListener('click', function(){
         child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== subject; });
         saveConfig(cfg);
-        renderChildResult(card, child, lastDataById[child.id], null);
+        var data = lastDataById[child.id];
+        if (data){
+          renderChildResult(card, child, data, null);
+        } else {
+          // Für dieses Kind liegt kein Abruf-Ergebnis im Speicher, der
+          // Abruf ist also fehlgeschlagen — die Karte zeigt gerade eine
+          // Fehlermeldung. renderChildResult() würde hier über data.lunch
+          // stolpern und das Panel nie aktualisieren; das Fach wäre
+          // ausgetragen, sähe aber bis zum Neuladen unverändert aus. Das
+          // Panel allein neu zu zeichnen genügt, die Fehleranzeige der
+          // Karte bleibt stehen.
+          renderHiddenHint(el, child, card);
+        }
       });
       chip.appendChild(span); chip.appendChild(btn);
-      el.appendChild(chip);
+      chips.appendChild(chip);
     });
+    el.appendChild(chips);
   }
 
   function renderChildResult(card, child, data, requestError){
