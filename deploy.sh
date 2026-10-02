@@ -138,17 +138,29 @@ if [ "$TARGET" = "alles" ] || [ "$TARGET" = "web" ]; then
   ( cd web && $WRANGLER pages deploy . --project-name=heute-schule --branch=production )
   echo ""
 
+  # Cloudflare Pages braucht nach dem Upload einige Sekunden, bis die neue
+  # Version wirklich ausgeliefert wird. Ein einzelner Versuch direkt danach
+  # meldet deshalb regelmäßig eine Abweichung, die keine ist — und eine
+  # Warnung, die meistens falsch ist, wird irgendwann weggelesen. Genau das
+  # soll dieser Check verhindern, also wird er so lange wiederholt, bis die
+  # Aussage belastbar ist.
   echo "▶ Live-Stand gegen HEAD prüfen…"
-  sleep 3
-  LIVE_COMMIT="$(curl -s https://heute-schule.pages.dev/deploy-commit.txt || true)"
   HEAD_COMMIT="$(git rev-parse HEAD)"
+  LIVE_COMMIT=""
+  WAITED=0
+  for _ in 1 2 3 4 5 6 7 8; do
+    sleep 5
+    WAITED=$((WAITED + 5))
+    LIVE_COMMIT="$(curl -s https://heute-schule.pages.dev/deploy-commit.txt || true)"
+    [ "$LIVE_COMMIT" = "$HEAD_COMMIT" ] && break
+  done
   if [ "$LIVE_COMMIT" = "$HEAD_COMMIT" ]; then
-    echo "  ✓ Live-Stand entspricht HEAD ($HEAD_COMMIT)"
+    echo "  ✓ Live-Stand entspricht HEAD ($HEAD_COMMIT), nach ${WAITED}s"
   else
-    echo "  ⚠ Live-Stand ($LIVE_COMMIT) weicht von HEAD ($HEAD_COMMIT) ab —"
-    echo "    entweder ist der Cache noch nicht durchgezogen (kurz warten,"
-    echo "    erneut prüfen: curl https://heute-schule.pages.dev/deploy-commit.txt)"
-    echo "    oder der Deploy ist nicht wie erwartet gelaufen."
+    echo "  ⚠ Live-Stand ($LIVE_COMMIT) weicht nach ${WAITED}s noch von"
+    echo "    HEAD ($HEAD_COMMIT) ab. Erneut prüfen:"
+    echo "    curl https://heute-schule.pages.dev/deploy-commit.txt"
+    echo "    Bleibt es dabei, ist der Deploy nicht wie erwartet gelaufen."
   fi
   echo ""
 fi

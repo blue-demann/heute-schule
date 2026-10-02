@@ -41,6 +41,8 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🔴 (Peer-Review 01.09., Fund A-1) Der Mensamax-SSRF-Fix (Zeile oben) war committet und lokal getestet, lief aber nie auf dem produktiven Proxy — Open-Relay für beliebige öffentliche HTTPS-Ziele blieb live, obwohl als „erledigt" dokumentiert | `./deploy.sh proxy` ausgeführt; per direktem `curl` gegen den Live-Proxy verifiziert — nicht erlaubte Domain wird jetzt abgelehnt, `.parentsmensa.de`-Subdomain kommt durch |
 | 🟡 (Peer-Review 01.09., Fund D-1) Der eigens für obigen Fund gebaute Live-vs-HEAD-Check in `deploy.sh` war selbst funktionslos — Cloudflare Pages liefert Dateien mit führendem Punkt im Namen nicht aus | `web/.deploy-commit` → `web/deploy-commit.txt`; nach vollständigem `./deploy.sh` live verifiziert: Hash stimmt exakt mit Git-HEAD überein |
 | 🟡 (Peer-Review 01.09., Fund D-2) ESLint schloss `web/**` komplett von jeder Prüfung aus, nicht nur eine einzelne Regel | `eslint-plugin-html` prüft jetzt `web/index.html`/`web/ueber.html` (Inline-Script) und `web/sw.js` mit denselben Regeln wie der übrige Code (außer `var`); erster echter Lauf fand vier reale, bisher unentdeckte kleine Probleme im Code, alle behoben |
+| Deploy hing am kontoweiten `wrangler login` — ein langlebiger OAuth-Token im Klartext auf der Platte, mit Schreibrechten auf nahezu alle Cloudflare-Produkte des Kontos, der bis ins Nachbarprojekt Spektrum reichte (Fund aus dessen Chaos-Review) | Login entfernt (`wrangler logout`, 02.10.2026, Gegenprobe: keine `config/default.toml` mehr unter `~/Library/Preferences/.wrangler`, keine Profildatei mit Zugangsdaten). Stattdessen API-Token mit genau zwei Rechten (`Cloudflare Pages`, `Workers Scripts`) plus Account-ID im macOS-Schlüsselbund; `deploy.sh` liest, prüft und exportiert sie nur für die Dauer des Laufs. Dass die zwei Rechte genügen, ist durch einen vollständigen Deploy (Proxy + Website) am 02.10.2026 belegt — die zuvor ebenfalls vergebenen `Account Settings` und `User Details` wurden vorher entfernt. `wrangler` auf `4.144.0` gepinnt |
+| Der Live-vs-HEAD-Check schlug nach jedem Website-Deploy falschen Alarm — die drei Sekunden Wartezeit reichten nicht, bis Cloudflare Pages die neue Version auslieferte | Bis zu acht Versuche im Abstand von fünf Sekunden, Abbruch beim ersten Treffer; die Warnung erscheint nur noch, wenn der Stand nach 40 Sekunden wirklich nicht ankommt. Vier Fälle gegengeprüft (Treffer beim 1./4./8. Versuch, nie) |
 | Testlücke aus der Code-Coverage-Einführung: `proxy/worker.js` (der HTTP-Handler selbst) lag bei 0 % | Direkter Test des exportierten `fetch()`-Handlers — kleiner selbstgebauter `caches`-Stub, gemocktes `fetch()`, native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit. Jetzt ~99 % Statement-Coverage, 17 neue Tests (Routing, Rate-Limit, Cache-Hit-Regression, WebUntis-/Mensamax-Voll-Durchlauf inkl. Fehlerfälle) |
 
 ## Noch offen
@@ -66,20 +68,15 @@ Zeitpunkt-Momentaufnahmen unverändert.
    (kein Demo im Sinne von unecht — echtes, täglich genutztes Tool zweier
    Familien). Bessere Formulierung z. B. „Hobby-Projekt ohne Garantie, kann
    jederzeit geändert werden".
-4. **🟡 Deploy-Token: Rechte noch nicht auf das Minimum eingedampft.**
-   Der Token `StundenplanProxyWorkerScripts` trug am 02.10.2026 vier Rechte:
-   `Cloudflare Pages` und `Workers Scripts` (beide nötig) sowie
-   `Account Settings` und `User Details` (beide vermutlich entbehrlich —
-   `deploy.sh` ruft `wrangler whoami` nicht auf, und die Account-ID kommt
-   fest aus dem Schlüsselbund, statt von wrangler ermittelt zu werden).
-   Zu tun: die beiden letzten Rechte entfernen, einmal vollständig
-   deployen, und nur bei einem konkreten Berechtigungsfehler gezielt das
-   fehlende Recht nachfordern. Offen bleibt außerdem, dass das
-   Workers-Recht derzeit kontoweit gilt: ein Token für einen einzelnen
-   Worker scheitert an einem Cloudflare-Fehler
-   („com.cloudflare.edge.worker.script is not a supported resource type“,
-   bei der Spektrum-Einrichtung beobachtet). Der Token erreicht damit auch
-   fremde Worker desselben Kontos.
+4. **🟡 Workers-Recht des Deploy-Tokens gilt kontoweit.** Ein Token, der
+   nur den einen Worker `stundenplan-proxy` bearbeiten darf, lässt sich
+   derzeit nicht anlegen — Cloudflare lehnt das mit
+   „com.cloudflare.edge.worker.script is not a supported resource type" ab
+   (bei der Spektrum-Einrichtung beobachtet). Das Recht `Workers Scripts`
+   gilt deshalb für das ganze Konto und erreicht auch fremde Worker darin,
+   etwa den von Spektrum. Gegenstück: dasselbe gilt dort umgekehrt.
+   Wiedervorlage, sobald Cloudflare den Ressourcentyp unterstützt.
+
 5. **🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon fehlt als PNG.**
    `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
    SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
