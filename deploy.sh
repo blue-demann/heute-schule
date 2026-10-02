@@ -24,6 +24,35 @@ cd "$(dirname "$0")"
 
 TARGET="${1:-alles}"
 
+# Pinned, so the tool holding the Cloudflare credentials changes only on
+# purpose — an unpinned "npx wrangler" pulls whatever is newest at deploy
+# time, which is a silent change to the thing that talks to the account.
+WRANGLER="npx --yes wrangler@4.144.0"
+
+# Cloudflare access: an API token limited to Workers + Pages plus the account
+# ID, both kept in the macOS keychain (README, section "Zugang"). Deliberately
+# no account-wide `wrangler login`: that stores a long-lived OAuth token in
+# plain text on disk, scoped to every product in the account.
+CLOUDFLARE_API_TOKEN="$(security find-generic-password -s heute-schule-cloudflare-token -w 2>/dev/null | tr -d '[:space:]' || true)"
+CLOUDFLARE_ACCOUNT_ID="$(security find-generic-password -s heute-schule-cloudflare-account -w 2>/dev/null | tr -d '[:space:]' || true)"
+if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+  echo "✗ Cloudflare-Token oder Account-ID fehlt im Schlüsselbund — siehe README, Abschnitt „Zugang“."
+  exit 1
+fi
+# Format checks turn a mis-pasted value into a clear message instead of a
+# cryptic API error ("Authentication failed [9106]"); the values themselves
+# are never printed, only their length.
+if ! [[ "$CLOUDFLARE_API_TOKEN" =~ ^[A-Za-z0-9_-]{30,}$ ]]; then
+  echo "✗ Der Token im Schlüsselbund hat ein unerwartetes Format (${#CLOUDFLARE_API_TOKEN} Zeichen)."
+  echo "  Neu ablegen: security add-generic-password -U -a \"\$USER\" -s heute-schule-cloudflare-token -w"
+  exit 1
+fi
+if ! [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]]; then
+  echo "✗ Die Account-ID im Schlüsselbund hat ein unerwartetes Format (${#CLOUDFLARE_ACCOUNT_ID} Zeichen)."
+  exit 1
+fi
+export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+
 # Über c8 gelaufen statt nacktem "node run-tests.mjs" — liefert die Coverage-
 # Zusammenfassung als Nebenprodukt desselben Laufs, kein zweiter Testdurchgang
 # nötig. Rein informativ: eine niedrige Zahl bricht den Deploy nicht ab, dafür
@@ -84,7 +113,7 @@ echo ""
 
 if [ "$TARGET" = "alles" ] || [ "$TARGET" = "proxy" ]; then
   echo "▶ Proxy deployen…"
-  ( cd proxy && npx wrangler deploy )
+  ( cd proxy && $WRANGLER deploy )
   echo ""
 fi
 
@@ -106,7 +135,7 @@ if [ "$TARGET" = "alles" ] || [ "$TARGET" = "web" ]; then
   # main.heute-schule.pages.dev instead of heute-schule.pages.dev). The
   # production branch configured on Cloudflare is named "production", not
   # "main" (checkable via `wrangler pages deployment list`).
-  ( cd web && npx wrangler pages deploy . --project-name=heute-schule --branch=production )
+  ( cd web && $WRANGLER pages deploy . --project-name=heute-schule --branch=production )
   echo ""
 
   echo "▶ Live-Stand gegen HEAD prüfen…"

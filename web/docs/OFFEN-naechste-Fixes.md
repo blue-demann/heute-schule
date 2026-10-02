@@ -66,7 +66,21 @@ Zeitpunkt-Momentaufnahmen unverändert.
    (kein Demo im Sinne von unecht — echtes, täglich genutztes Tool zweier
    Familien). Bessere Formulierung z. B. „Hobby-Projekt ohne Garantie, kann
    jederzeit geändert werden".
-4. **🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon fehlt als PNG.**
+4. **🟡 Deploy-Token: Rechte noch nicht auf das Minimum eingedampft.**
+   Der Token `StundenplanProxyWorkerScripts` trug am 02.10.2026 vier Rechte:
+   `Cloudflare Pages` und `Workers Scripts` (beide nötig) sowie
+   `Account Settings` und `User Details` (beide vermutlich entbehrlich —
+   `deploy.sh` ruft `wrangler whoami` nicht auf, und die Account-ID kommt
+   fest aus dem Schlüsselbund, statt von wrangler ermittelt zu werden).
+   Zu tun: die beiden letzten Rechte entfernen, einmal vollständig
+   deployen, und nur bei einem konkreten Berechtigungsfehler gezielt das
+   fehlende Recht nachfordern. Offen bleibt außerdem, dass das
+   Workers-Recht derzeit kontoweit gilt: ein Token für einen einzelnen
+   Worker scheitert an einem Cloudflare-Fehler
+   („com.cloudflare.edge.worker.script is not a supported resource type“,
+   bei der Spektrum-Einrichtung beobachtet). Der Token erreicht damit auch
+   fremde Worker desselben Kontos.
+5. **🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon fehlt als PNG.**
    `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
    SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
    Besonders relevant wegen des geplanten eigenen Wechsels auf iPhone.

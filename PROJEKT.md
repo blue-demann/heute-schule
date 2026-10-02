@@ -211,6 +211,23 @@ eRecht24 deshalb explizit als Quelle, mit Link.
 Kindernamen durch „Mia" (Top-1-Mädchenname des Geburtsjahrgangs 2011 laut
 GfdS) und „Emma" ersetzt statt der echten Namen.
 
+### Deploy-Zugang: API-Token im Schlüsselbund statt `wrangler login`
+**Entscheidung:** Ein API-Token mit genau zwei Rechten (`Cloudflare Pages`,
+`Workers Scripts`) plus die Account-ID, beides im macOS-Schlüsselbund;
+`deploy.sh` liest sie dort, prüft das Format und exportiert sie nur für die
+Dauer des Laufs. `wrangler` ist auf eine feste Version gepinnt.
+**Alternative verworfen:** `wrangler login` — legt einen langlebigen,
+kontoweiten OAuth-Token im Klartext auf der Platte ab, mit Schreibrechten auf
+nahezu alle Produkte des Kontos. Ein Chaos-Review im Nachbarprojekt Spektrum
+machte sichtbar, dass dieser eine Token bis in fremde Projekte desselben
+Kontos reichte; er ist seit dem 02.10.2026 entfernt.
+**Alternative verworfen:** Token dauerhaft als Umgebungsvariable in
+`~/.zshrc` — bequem, aber der Wert liegt dann unverschlüsselt in einer
+Profildatei, statt vom Schlüsselbund im Ruhezustand geschützt zu werden.
+**Folge:** Deploys laufen ausschließlich in Björns Terminal. Claude Code
+erreicht den Schlüsselbund aus seiner Sandbox nicht — gewollt, nicht als
+Einschränkung empfunden.
+
 ## 6. Sicherheitsmodell
 
 **Bedrohungsmodell:** Kein Ziel für gezielte, aufwändige Angriffe — aber
@@ -420,14 +437,26 @@ der bei Cloudflare hinterlegte Produktions-Branch heißt tatsächlich
 `production`, nicht `main`. `deploy.sh` setzt deshalb `--branch=production`
 explizit, unabhängig vom lokalen Branch-Namen.
 
-**Zugriff:** Deploy läuft über ein eigenes, eng gefasstes Cloudflare-API-Token
-in der Umgebungsvariablen `CLOUDFLARE_API_TOKEN` — Entscheidung aus
-Datenschutz-/Sicherheitspräferenz. Bewusst **nicht** über `wrangler login`:
-das ist der OAuth-Flow, der der Wrangler-Anwendung Schreibrechte auf nahezu
-alle Cloudflare-Produkte des Kontos einräumt (Workers, Pages, D1, AI, Queues,
-E-Mail-Versand, Container), weit mehr als dieses Projekt braucht. Nötig sind
-nur `Cloudflare Pages:Edit` und `Workers Scripts:Edit`. Das Token gehört in
-die Shell-Umgebung, nicht ins Repository.
+**Zugriff:** Deploy läuft über ein eigenes Cloudflare-API-Token mit genau zwei
+Rechten — `Cloudflare Pages` für die Website, `Workers Scripts` für den Proxy.
+Token und Account-ID liegen im macOS-Schlüsselbund (`heute-schule-cloudflare-token`,
+`heute-schule-cloudflare-account`); `deploy.sh` liest sie dort, prüft ihr Format
+und exportiert sie nur für die Dauer des Laufs. Einrichtung: README, Abschnitt
+„Zugang“.
+
+Bewusst **nicht** über `wrangler login`: das ist der OAuth-Flow, der einen
+langlebigen, kontoweiten Token im Klartext auf der Platte ablegt und der
+Wrangler-Anwendung Schreibrechte auf nahezu alle Cloudflare-Produkte des Kontos
+einräumt (Workers, Pages, D1, AI, Queues, E-Mail-Versand, Container). Dieses
+Login reichte bis in fremde Projekte desselben Kontos und ist entfernt
+(`wrangler logout`, 02.10.2026). Ebenso bewusst nicht als dauerhafte
+Umgebungsvariable in `~/.zshrc`: der Schlüsselbund schützt den Wert im Ruhezustand,
+eine Profildatei nicht.
+
+`wrangler` ist auf eine feste Version gepinnt (`npx --yes wrangler@4.144.0`).
+Ein ungepinntes `npx wrangler` zieht bei jedem Deploy die gerade neueste
+Version — eine stille Änderung an genau dem Werkzeug, das die Zugangsdaten
+zum Konto in der Hand hält.
 
 **Rollback:** Kein automatisierter Rollback-Mechanismus. Cloudflare hält
 eine Historie vergangener Deployments vor (abrufbar über `wrangler pages

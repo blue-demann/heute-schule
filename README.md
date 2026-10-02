@@ -43,6 +43,38 @@ Details zu den einzelnen Teilen: [web/README.md](web/README.md),
 
 Lässt bei fehlschlagenden Tests oder Lint-Fehlern nichts deployen.
 
+### Zugang (einmalig)
+
+`deploy.sh` braucht kein kontoweites `wrangler login`, sondern einen
+Cloudflare-API-Token mit genau zwei Rechten plus die Account-ID – beides im
+macOS-Schlüsselbund, nie in einer Datei, nie im Repo und nicht als dauerhafte
+Umgebungsvariable.
+
+1. Cloudflare-Dashboard › API Tokens: Token mit **Cloudflare Pages** (Website)
+   und **Workers Scripts** (Proxy) – mehr braucht der Deploy nicht. Ablauf ein
+   Jahr. Fehlt nachweislich ein Recht (es kommt ein konkreter
+   Berechtigungsfehler), genau dieses nachfordern statt vorsorglich mehr zu
+   erlauben.
+2. Token in den Schlüsselbund – fragt verdeckt ab, landet nicht in der
+   Shell-History. Den Wert über den Kopieren-Knopf im Dashboard übernehmen;
+   `deploy.sh` lehnt Werte ab, die nicht wie ein Token aussehen:
+   ```bash
+   security add-generic-password -U -a "$USER" -s heute-schule-cloudflare-token -w
+   ```
+3. Account-ID in den Schlüsselbund:
+   ```bash
+   security add-generic-password -U -a "$USER" -s heute-schule-cloudflare-account -w
+   ```
+4. Länge prüfen, ohne den Wert zu zeigen (ein halb eingefügter Token führt
+   sonst zu „Authentication failed [9106]“):
+   ```bash
+   security find-generic-password -s heute-schule-cloudflare-token -w | awk '{print length($0)}'
+   ```
+
+**Deploys laufen in Björns Terminal.** Claude Code erreicht den Schlüsselbund
+aus seiner Sandbox nicht, und das ist so gewollt – Claude committet, Björn
+startet `./deploy.sh`.
+
 ## Sicherheit & Datenschutz
 
 Kein eigener Server speichert Zugangsdaten — sie liegen ausschließlich im

@@ -11,6 +11,10 @@ Logik lebt testbar weiter in `stundenplan.js`).
 2. [`OFFEN-naechste-Fixes.md`](OFFEN-naechste-Fixes.md) — bekannte offene Punkte,
    nicht neu erfinden oder übersehen
 
+**Deploys startet Björn selbst** in seinem Terminal: `deploy.sh` liest Token und
+Account-ID aus dem macOS-Schlüsselbund, den Claude Code aus der Sandbox nicht
+erreicht (und nicht erreichen soll). Claude committet, Björn deployt.
+
 **Vor jedem Deploy zwingend:** `./deploy.sh` (nie `wrangler` direkt aufrufen) —
 löst Tests, Lint, Coverage-Info, Datei-Dump-Konsistenz-Gate und einen
 Live-vs-HEAD-Check aus. Bei fehlschlagenden Tests wird nicht deployed.
