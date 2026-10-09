@@ -53,6 +53,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | (Kosmetisch, Doku-Konsistenz) WCAG-Versionsangaben in den Audit-Dokumenten uneinheitlich zitiert (mal 2.1, mal ohne Version) | Regel für künftige Prüfungen festgehalten: durchgängig WCAG 2.2, jedes Kriterium mit Nummer und Level — in `PROJEKT.md` Abschnitt 9 und `prompts/README.md`. Alte Berichte bleiben als Momentaufnahmen unverändert (09.10.2026) |
 | 🟡 (Peer-Review 01.09., Fund C-2) „Demo-Website"-Hinweistext missverständlich — klang nach „nicht ernst gemeint", gemeint war ein Haftungsausschluss ohne SLA | Text an allen drei Stellen (`web/index.html` zweimal, `web/ueber.html`) ersetzt durch „Privates Hobby-Projekt, ohne Gewähr und ohne zugesicherte Verfügbarkeit. Es kann jederzeit geändert oder abgeschaltet werden." (09.10.2026) |
 | 🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon nur als SVG — Annahme: iOS stellt SVG dafür nicht zuverlässig dar, PNG nötig | Am 09.10.2026 auf Björns iPhone (aktuelles iOS) geprüft: Das Homescreen-Icon zeigt `icon.svg` korrekt (grünes Quadrat `#2f6f4f` mit 📚), keinen Seiten-Screenshot. Kein PNG ergänzt; Restrisiko nur für deutlich ältere iOS-Versionen, im Wartungsmodus bewusst in Kauf genommen |
+| (Kosmetisch, Folge des Hostcheck-Fixes 09.10.) Frontend-Bereinigung des Server-Felds schnitt eine ohne Protokoll eingefügte Adresse nur an `/`, `#` und `?` ab, nicht an `\` | `extractWebUntisHostname` in `web/index.html` trennt jetzt an `/`, `\`, `#` und `?`. Im Browser gegengeprüft: `schule.webuntis.com\WebUntis` blieb vorher ungekürzt und wird jetzt zu `schule.webuntis.com` bereinigt; Kontrolle mit `/` griff in beiden Ständen (09.10.2026) |
 
 ## Noch offen
 
@@ -81,12 +82,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    (kein Build-Schritt), strict. Antworten der Upstream-Dienste im Proxy
    zusätzlich per Laufzeitvalidierung absichern. `typescript` ist eine neue
    devDependency und braucht vorher eine Freigabe.
-7. **Kosmetisch: Frontend-Bereinigung des Server-Felds** (09.10.2026).
-   `extractWebUntisHostname` in `web/index.html` schneidet eine ohne
-   Protokoll eingefügte Adresse nur an `/`, `#` und `?` ab, nicht an `\`.
-   Keine Sicherheitsgrenze (die liegt im Proxy, siehe Erledigt-Tabelle),
-   aber `schule.webuntis.com\WebUntis` bliebe ungekürzt und würde dann
-   vom Proxy abgelehnt statt bereinigt.
 8. **🟡 Wartungs-Vorhaben „Prüfer nachziehen“** (Entwicklungsprozess Q38,
    09.10.2026; Befunde aus dem Regel-Inventar EP-INV v1,
    `~/dev/claude/prozessentwicklung/REGEL-INVENTAR.md`, lokal, nicht im Repo).

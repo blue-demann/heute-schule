@@ -519,8 +519,10 @@
     if (/^https?:\/\//i.test(value)){
       try { return new URL(value).hostname; } catch { /* falls through */ }
     }
-    // Also pasted without a protocol (e.g. "schule.webuntis.com/WebUntis/...")
-    return value.split('/')[0].split('#')[0].split('?')[0];
+    // Also pasted without a protocol (e.g. "schule.webuntis.com/WebUntis/...").
+    // Cut at every character that ends the host part of a URL, including
+    // the backslash, which browsers treat like "/".
+    return value.split(/[/\\#?]/)[0];
   }
 
   var cfg = loadConfig();
