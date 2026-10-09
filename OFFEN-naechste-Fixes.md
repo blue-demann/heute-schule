@@ -54,6 +54,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (Peer-Review 01.09., Fund C-2) „Demo-Website"-Hinweistext missverständlich — klang nach „nicht ernst gemeint", gemeint war ein Haftungsausschluss ohne SLA | Text an allen drei Stellen (`web/index.html` zweimal, `web/ueber.html`) ersetzt durch „Privates Hobby-Projekt, ohne Gewähr und ohne zugesicherte Verfügbarkeit. Es kann jederzeit geändert oder abgeschaltet werden." (09.10.2026) |
 | 🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon nur als SVG — Annahme: iOS stellt SVG dafür nicht zuverlässig dar, PNG nötig | Am 09.10.2026 auf Björns iPhone (aktuelles iOS) geprüft: Das Homescreen-Icon zeigt `icon.svg` korrekt (grünes Quadrat `#2f6f4f` mit 📚), keinen Seiten-Screenshot. Kein PNG ergänzt; Restrisiko nur für deutlich ältere iOS-Versionen, im Wartungsmodus bewusst in Kauf genommen |
 | (Kosmetisch, Folge des Hostcheck-Fixes 09.10.) Frontend-Bereinigung des Server-Felds schnitt eine ohne Protokoll eingefügte Adresse nur an `/`, `#` und `?` ab, nicht an `\` | `extractWebUntisHostname` in `web/index.html` trennt jetzt an `/`, `\`, `#` und `?`. Im Browser gegengeprüft: `schule.webuntis.com\WebUntis` blieb vorher ungekürzt und wird jetzt zu `schule.webuntis.com` bereinigt; Kontrolle mit `/` griff in beiden Ständen (09.10.2026) |
+| 🟡 (Entwicklungsprozess Q38, Regel-Inventar EP-INV v1) Wartungs-Vorhaben „Prüfer nachziehen": falsches Grün im Live-Check bei unsauberem Arbeitsbaum, fehlende ESLint-Sicherheitsregeln, `npm audit` nur in der CI, kein Test der Sicherheits-Header, ES5-Ziel weder eingehalten noch geprüft | **Deploy nur aus sauberem Arbeitsbaum** (`tools/require-clean-tree.sh`, vor dem Schlüsselbund). **ESLint:** `no-eval`, `no-implied-eval`, `no-new-func`, Verbot von `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` (die fünf `innerHTML = ''` sind jetzt `textContent = ''`, keine Ausnahme nötig), `no-console` im Proxy. **`npm audit --audit-level=high` als Deploy-Gate**; dafür `wrangler` als exakt gepinnte Entwicklungsabhängigkeit ins Lockfile — das Audit fand sofort eine hohe Lücke in 4.144.0, jetzt 4.149.0. **Sicherheits-Header:** Test der Pflichtteile in `web/_headers` plus Live-Vergleich nach dem Deploy (`tools/headers.mjs`). **Syntax-Ziel ES2019** für `index.html`, `ueber.html`, `sw.js`, per ESLint durchgesetzt. Zusätzlich **Lizenztest** über das Lockfile. Gegenproben: je ein Mutant pro Prüfer (Arbeitsbaum-Prüfung wirkungslos, Sicherheitsregeln entfernt, Sprachstand 2022, Lizenzprüfung lässt alles durch, Header-Prüfung ignoriert CSP) macht 3–9 Tests rot; Audit-Gate einmalig mit `minimist@1.2.0` (Exit 1) gegen `1.2.8` (Exit 0) geprüft (09.10.2026) |
 
 ## Noch offen
 
@@ -82,26 +83,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    (kein Build-Schritt), strict. Antworten der Upstream-Dienste im Proxy
    zusätzlich per Laufzeitvalidierung absichern. `typescript` ist eine neue
    devDependency und braucht vorher eine Freigabe.
-8. **🟡 Wartungs-Vorhaben „Prüfer nachziehen“** (Entwicklungsprozess Q38,
-   09.10.2026; Befunde aus dem Regel-Inventar EP-INV v1,
-   `~/dev/claude/prozessentwicklung/REGEL-INVENTAR.md`, lokal, nicht im Repo).
-   Zusammen mit Punkt 6 umsetzen, jede Prüfung mit Gegenprobe (ein Fall,
-   der rot werden muss). Keine neue Abhängigkeit nötig.
-   - **Falsches Grün im Live-Check:** `deploy.sh` schreibt den HEAD-Hash auch
-     bei unsauberem Arbeitsbaum und meldet dann „Live-Stand entspricht
-     HEAD“. Deploy nur aus sauberem Baum (Muster: `spektrum/deploy.sh:53-59`).
-   - **ESLint ergänzen:** `no-eval`, `no-implied-eval`, `no-new-func`, Verbot
-     von `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write`
-     (bewusste Ausnahmen mit Begründung), `no-console` für `proxy/**`.
-   - **`npm audit --audit-level=high` als Deploy-Gate**, nicht nur in der CI.
-   - **Test der Sicherheits-Header** in `web/_headers` (HSTS ≥ 1 Jahr,
-     CSP-Pflichtteile, `nosniff`, Referrer-Policy; Muster:
-     `spektrum/test/security.test.mjs`).
-   - **ES5-Ziel aufgeben, auf ES2019 anheben** (Björn, 09.10.): Das
-     Inline-Skript in `index.html` nutzt schon `catch {` ohne Variable
-     (ES2019). Entscheidungs-Log in `PROJEKT.md` („ES5-Syntax“) und
-     Kommentar in `eslint.config.mjs` anpassen, dort `ecmaVersion: 2019`
-     für `index.html`/`ueber.html` setzen, damit neuere Syntax auffällt.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

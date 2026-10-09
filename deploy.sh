@@ -24,10 +24,20 @@ cd "$(dirname "$0")"
 
 TARGET="${1:-alles}"
 
-# Pinned, so the tool holding the Cloudflare credentials changes only on
-# purpose — an unpinned "npx wrangler" pulls whatever is newest at deploy
-# time, which is a silent change to the thing that talks to the account.
-WRANGLER="npx --yes wrangler@4.144.0"
+# First, before touching the keychain: only a clean working tree may be
+# deployed. The live-vs-HEAD check at the end names HEAD as the live state,
+# which is only true if exactly HEAD went out.
+echo "▶ Arbeitsbaum sauber?"
+./tools/require-clean-tree.sh
+echo "  ✓ sauber"
+echo ""
+
+# wrangler is an exact-pinned devDependency (package.json/package-lock.json):
+# the tool holding the Cloudflare credentials changes only on purpose, its
+# download is checked against the lockfile's integrity hash, and the audit
+# gate below sees its dependency tree. --no-install: never fetch anything
+# ad hoc — without `npm ci` there is no deploy.
+WRANGLER="npx --no-install wrangler"
 
 # Cloudflare access: an API token limited to Workers + Pages plus the account
 # ID, both kept in the macOS keychain (README, section "Zugang"). Deliberately
@@ -75,6 +85,17 @@ if ! npx eslint .; then
   exit 1
 fi
 echo "  ✓ sauber"
+echo ""
+
+# High/critical only, like the CI step. Covers every devDependency,
+# including wrangler itself. Fails closed: if the registry can't be
+# reached, npm audit exits non-zero and nothing gets deployed.
+echo "▶ Abhängigkeiten auf bekannte Lücken prüfen (npm audit)…"
+if ! npm audit --audit-level=high; then
+  echo ""
+  echo "✗ npm audit meldet Lücken ab „high“ oder ist nicht erreichbar — Deploy abgebrochen."
+  exit 1
+fi
 echo ""
 
 # web/source/ and web/docs/ are hand-maintained copies (see web/ueber.html,
@@ -161,6 +182,16 @@ if [ "$TARGET" = "alles" ] || [ "$TARGET" = "web" ]; then
     echo "    HEAD ($HEAD_COMMIT) ab. Erneut prüfen:"
     echo "    curl https://heute-schule.pages.dev/deploy-commit.txt"
     echo "    Bleibt es dabei, ist der Deploy nicht wie erwartet gelaufen."
+  fi
+  echo ""
+
+  # The header test in run-tests.mjs only checks the file; this checks that
+  # Cloudflare actually sends exactly those headers.
+  echo "▶ Sicherheits-Header live gegen web/_headers prüfen…"
+  if node tools/check-live-headers.mjs https://heute-schule.pages.dev/; then
+    echo "  ✓ Live-Header entsprechen web/_headers"
+  else
+    echo "  ⚠ Live-Header weichen von web/_headers ab oder sind nicht prüfbar (siehe oben)."
   fi
   echo ""
 fi

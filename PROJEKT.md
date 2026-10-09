@@ -64,7 +64,7 @@ weitere befreundete Familien weiterzugeben.
   Analyse-/Tracking-Tools, kein Bestellen/Stornieren — nur Lesen.
 - **Funktioniert auf altem Geräte-Bestand.** Familien-Tablets sind selten
   die neueste Hardware; die Seite darf keine moderne Baseline voraussetzen
-  (siehe Entscheidungs-Log, ES5).
+  (siehe Entscheidungs-Log, Syntax-Ziel ES2019).
 - **Für die Zielgruppe geeignete Rechtstexte.** Impressum,
   Datenschutzerklärung, die den tatsächlichen Datenfluss ehrlich beschreibt
   statt Textbaustein-Floskeln zu wiederholen.
@@ -186,16 +186,26 @@ Abwägung stützt sich auf mehrere Faktoren zusammen:
 für diese Abwägung): kein `innerHTML` mit Fremddaten, keine externen
 JS-Abhängigkeiten, Löschfunktion in der App.
 
-### Kein Build-Tooling, eine Datei, ES5-Syntax
+### Kein Build-Tooling, eine Datei, Syntax-Ziel ES2019
 **Entscheidung:** `index.html` ist eine einzelne Datei mit Inline-`<style>`/
-`<script>`, JavaScript durchgängig in ES5-kompatiblem Stil (keine Arrow
-Functions, kein `async`/`await`, kein optional chaining — im Peer-Review
-gezielt gegengeprüft, nur ein `.finally()` als einziges neueres Feature).
+`<script>`. Syntax-Ziel für alles, was auf den Geräten der Familien läuft
+(`index.html`, `ueber.html`, `sw.js`), ist **ES2019** — läuft ab iOS 11.3 /
+Chrome 66 (2018). ESLint parst diese Dateien mit `ecmaVersion: 2019`, neuere
+Syntax wie `?.` oder `??` ist damit ein Lint-Fehler und blockiert den Deploy.
+Grenze: geprüft wird nur Syntax, nicht die Verfügbarkeit neuerer
+Browser-Funktionen (etwa `replaceChildren()`); dort im Zweifel die ältere
+Variante wählen. `var` bleibt im Inline-Script erlaubt, kein Umbau ohne Anlass.
 **Warum:** Zielgruppe nutzt teils ältere Familien-Geräte; ein Build-Schritt
 hätte zusätzliche Werkzeuge und einen Wartungspfad eingeführt, der für die
 Projektgröße nicht gerechtfertigt war. Nebeneffekt: keine
-Dependency-Supply-Chain, nichts zu scannen, nichts, das im Hintergrund
+Dependency-Supply-Chain in der ausgelieferten App, nichts, das im Hintergrund
 veraltet.
+**Geändert am 09.10.2026 (vorher: ES5):** Das dokumentierte ES5-Ziel war
+weder eingehalten noch geprüft — `index.html` nutzte bereits `catch {` ohne
+Variable (ES2019) und `.finally()` (ES2018), `sw.js` Arrow Functions und
+`const` (ES2015), während ESLint mit Sprachstand 2022 parste. ES2019 ist der
+tatsächlich gelebte Stand, mit dem beide Familien die App nutzen; jetzt ist er
+auch durchgesetzt (Regel-Inventar, Befund W9).
 
 ### MIT-Lizenz statt eigener Lizenztext
 **Entscheidung:** MIT, mit Verweis auf die deutsche Wikipedia-Erklärung
@@ -308,18 +318,23 @@ offen benannt statt verschwiegen.
 
 - **Node.js** — ausschließlich für die lokale Testsuite, keine
   Laufzeit-Abhängigkeit der ausgelieferten App
-- **Git** — lokale Versionsverwaltung seit 27.08.2026 (siehe Abschnitt 11);
-  noch kein Remote-Repository angebunden
-- Keine Frameworks, kein Bundler, kein Paketmanager-Lockfile — siehe
-  Nicht-Ziele (Abschnitt 3)
+- **Git** — Versionsverwaltung seit 27.08.2026 (siehe Abschnitt 11),
+  öffentlich unter `github.com/blue-demann/heute-schule`
+- **npm-Entwicklungsabhängigkeiten** (`package.json`, alle exakt bzw. per
+  Lockfile gepinnt): ESLint, c8, `typescript` (Typprüfung) und `wrangler`
+  (Deploy). Keine davon wird mit der App ausgeliefert; ein Test prüft, dass
+  alle reine Entwicklungsabhängigkeiten mit freigegebener Lizenz bleiben
+  (Abschnitt 9). Keine Frameworks, kein Bundler — siehe Nicht-Ziele
+  (Abschnitt 3)
 
 ## 9. Testkonzept
 
 **Ausführung:** `node run-tests.mjs` — reines Node, keine
 Testframework-Abhängigkeit (`node --test` wäre möglich gewesen, für die
-Projektgröße nicht nötig).
+Projektgröße nicht nötig). Einziges genutztes Paket ist ESLint, um die
+Lint-Regeln selbst zu prüfen.
 
-**Umfang: 0 Abhängigkeiten, aktuelle Anzahl per `node run-tests.mjs`**
+**Umfang: aktuelle Anzahl per `node run-tests.mjs`**
 (bewusst keine feste Zahl hier — genau ein eingefrorener Wert dieser Art
 lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 
@@ -327,6 +342,10 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 |---|---|---|
 | `pad()`, Cookie-Extraktion, `parseLunchStatus()`, `buildLessonList()`, `formatLessons()`, `buildEmail()` | `stundenplan.js` | Geerbte Logik aus der ursprünglichen Apps-Script-Automation |
 | `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` (Beispielwerte + Property-Tests, s. u.) | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link), Host-Verwechslung über Trennzeichen vor der erlaubten Endung |
+| `tools/require-clean-tree.sh` | Deploy-Gate | Deploy nur aus sauberem Arbeitsbaum — je Fall ein Wegwerf-Git-Repo im System-Temp: sauber und „nur ignorierte Datei“ gehen durch, geänderte, gestagte und neue Dateien sowie „kein Git-Repo“ werden abgelehnt |
+| `checkSecurityHeaders()`, `compareHeaders()` | `tools/headers.mjs`, `web/_headers` | Pflichtteile der Sicherheits-Header (HSTS ≥ 1 Jahr, CSP-Kern, `nosniff`, Referrer-Policy, `X-Frame-Options`, Permissions-Policy); jede Anforderung einzeln entfernt bzw. abgeschwächt muss namentlich gemeldet werden. Derselbe Code vergleicht in `deploy.sh` die Live-Header mit der Datei |
+| ESLint-Konfiguration | `eslint.config.mjs` | Prüft die Prüfer: Jede Sicherheitsregel (`no-eval`, `no-implied-eval`, `no-new-func`, `innerHTML` & Co., `no-console` im Proxy) muss ihr Konstrukt melden, die erlaubte Variante nicht; ES2020-Syntax in `index.html`/`ueber.html`/`sw.js` muss ein Parse-Fehler sein |
+| Lizenzen | `package-lock.json` | Alle Pakete reine Entwicklungsabhängigkeiten unter freigegebener Lizenz (MIT, ISC, Apache-2.0, BSD, BlueOak, 0BSD, CC0); benannte Ausnahme LGPL nur für `@img/sharp-*` (kommt über `wrangler`, wird nie ausgeliefert) |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -365,10 +384,14 @@ gelangt.
 
 **Code Coverage** (`c8`, seit 01.09.2026): `npm run test:coverage` bzw. als
 Info-Zeile in `deploy.sh` (bricht den Deploy nicht ab). Miss nur, was
-`run-tests.mjs` tatsächlich lädt — `proxy/*`, `stundenplan.js`;
+`run-tests.mjs` tatsächlich lädt — `proxy/*`, `stundenplan.js`, `tools/*.mjs`;
 `web/index.html` läuft im Browser und taucht bewusst nicht auf (siehe
-`.c8rc.json`, `include`-Liste). Gesamt 99 % Statement-Coverage;
-`hostcheck.mjs`/`cachekey.mjs`/`stundenplan.js` bei 100 %, `worker.js` bei
+`.c8rc.json`, `include`-Liste). Gesamt rund 96 % Statement-Coverage; die
+Lücke ist im Wesentlichen `tools/check-live-headers.mjs`, ein
+Kommandozeilen-Skript, das nur `deploy.sh` nach dem Deploy aufruft (seine
+Vergleichslogik `compareHeaders()` ist getestet, das Skript selbst einmalig
+gegen einen Server ohne Header und eine nicht erreichbare Adresse
+gegengeprüft). `hostcheck.mjs`/`cachekey.mjs`/`stundenplan.js` bei 100 %, `worker.js` bei
 ~99 % (ungetestet bleiben nur der Timeout-Abbruch-Pfad und eine
 kaputte-JSON-Antwort von WebUntis — beides schwer ohne echte Verzögerung
 bzw. künstlich verstümmelte Antwort zu simulieren, geringer Grenznutzen).
@@ -465,7 +488,25 @@ Zeitpunkt-Momentaufnahmen unverändert.
 ./deploy.sh web      # nur die Website
 ```
 
-Bricht bei fehlschlagenden Tests ab, ohne zu deployen.
+Reihenfolge der Prüfungen in `deploy.sh` — jede bricht den Deploy ab:
+
+1. **Sauberer Arbeitsbaum** (`tools/require-clean-tree.sh`), noch vor dem
+   Zugriff auf den Schlüsselbund. Sonst meldete der Live-Check am Ende „Live
+   entspricht HEAD“, obwohl nicht committete Änderungen deployt wurden.
+2. Zugangsdaten aus dem Schlüsselbund, Formatprüfung
+3. Testsuite (mit Coverage-Info), Lint
+4. **`npm audit --audit-level=high`** — deckt alle Entwicklungsabhängigkeiten
+   ab, auch `wrangler` selbst. Ist die Registry nicht erreichbar, wird nicht
+   deployt.
+5. Datei-Dump (`web/source/`, `web/docs/`) aktuell
+6. Deploy Proxy und/oder Website, danach Live-vs-HEAD-Check und Vergleich der
+   Live-Sicherheits-Header mit `web/_headers` (beides nach dem Deploy, daher
+   als Warnung)
+
+Gegenprobe für das Audit-Gate (09.10.2026, einmalig von Hand, braucht Netz):
+Ein Lockfile mit `minimist@1.2.0` (bekannte kritische Lücke) ließ
+`npm audit --audit-level=high` mit Exit 1 abbrechen, dasselbe mit
+`minimist@1.2.8` lief mit Exit 0 durch.
 
 **Bekannte Stolperfalle (28.08.2026, in `deploy.sh` dokumentiert):** Seit
 das Projekt unter Git-Versionsverwaltung steht, erkennt `wrangler pages
@@ -491,10 +532,15 @@ Login reichte bis in fremde Projekte desselben Kontos und ist entfernt
 Umgebungsvariable in `~/.zshrc`: der Schlüsselbund schützt den Wert im Ruhezustand,
 eine Profildatei nicht.
 
-`wrangler` ist auf eine feste Version gepinnt (`npx --yes wrangler@4.144.0`).
-Ein ungepinntes `npx wrangler` zieht bei jedem Deploy die gerade neueste
-Version — eine stille Änderung an genau dem Werkzeug, das die Zugangsdaten
-zum Konto in der Hand hält.
+`wrangler` ist eine exakt gepinnte Entwicklungsabhängigkeit (`package.json`,
+derzeit `4.149.0`), `deploy.sh` ruft sie mit `npx --no-install` aus
+`node_modules` auf. Ein ungepinntes `npx wrangler` zöge bei jedem Deploy die
+gerade neueste Version — eine stille Änderung an genau dem Werkzeug, das die
+Zugangsdaten zum Konto in der Hand hält. Bis 09.10.2026 lief es über
+`npx --yes wrangler@4.144.0` außerhalb des Lockfiles: ohne Prüfsumme und für
+`npm audit` unsichtbar. Beim Umzug ins Lockfile meldete das Audit sofort eine
+hohe Lücke in genau dieser Version (über `miniflare` → `sharp`, librsvg);
+behoben mit `4.149.0`.
 
 **Rollback:** Kein automatisierter Rollback-Mechanismus. Cloudflare hält
 eine Historie vergangener Deployments vor (abrufbar über `wrangler pages

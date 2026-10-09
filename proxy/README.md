@@ -11,10 +11,13 @@ Anfrage bringt ihre Login-Daten selbst mit.
 
 ## Deploy
 
+Deploy ausschließlich über `../deploy.sh` (siehe `../README.md`, Abschnitte
+„Deployen“ und „Zugang“): API-Token mit zwei Rechten aus dem
+Schlüsselbund statt `wrangler login`, vorher Tests, Lint und `npm audit`.
+
 ```bash
-cd proxy
-npx wrangler login       # einmalig, öffnet Browser-Login
-npx wrangler deploy
+cd ..
+./deploy.sh proxy
 ```
 
 Am Ende zeigt `wrangler` die Worker-URL an, z. B.
@@ -24,7 +27,7 @@ in der Website unter „Einstellungen → Proxy-URL" ein.
 ## Lokal testen
 
 ```bash
-npx wrangler dev
+npx --no-install wrangler dev
 ```
 
 Dann z. B. mit curl gegen `http://localhost:8787/api/status` testen

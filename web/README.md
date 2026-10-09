@@ -16,8 +16,9 @@ das ist erwartet, solange der Proxy (`../proxy/`) noch nicht deployed ist.
 
 ## Tests
 
-Reine Node-Testsuite, keine Abhängigkeiten (`node --test` o. ä. war
-absichtlich nicht nötig — ein einfaches Skript reicht für diese Größe):
+Reine Node-Testsuite ohne Testframework (`node --test` o. ä. war
+absichtlich nicht nötig — ein einfaches Skript reicht für diese Größe).
+Einziges genutztes Paket ist ESLint, um die Lint-Regeln selbst zu prüfen:
 
 ```bash
 cd ..

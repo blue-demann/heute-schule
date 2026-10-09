@@ -1,12 +1,19 @@
-// Test suite — runs dependency-free with plain Node:
+// Test suite — runs with plain Node:
 //   node run-tests.mjs
+// The only package it uses is ESLint itself (already a devDependency), to
+// check that the lint rules actually catch what they are meant to catch.
 //
 // ESM (.mjs), because the proxy modules (hostcheck.mjs) are ESM — the
 // Apps Script logic in stundenplan.js is still CommonJS and gets wired in
 // here by Node automatically as a default export.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ESLint } from 'eslint';
 import stundenplan from './stundenplan.js';
+import { parseHeadersFile, checkSecurityHeaders, compareHeaders } from './tools/headers.mjs';
 import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
 import proxyWorker from './proxy/worker.js';
@@ -1374,6 +1381,242 @@ await testAsync('getSetCookies falls back to a single set-cookie header when get
 
 delete globalThis.caches;
 
+// ── Deploy gate: clean working tree ──────────────────────────────────────
+//
+// tools/require-clean-tree.sh runs first in deploy.sh. Each case builds a
+// throwaway Git repository in the system temp folder (deleted afterwards)
+// and checks the script's exit code — the dirty cases are the ones that
+// must turn red, the clean and ignored-only cases prove it doesn't just
+// always fail.
+
+console.log('\ntools/require-clean-tree.sh');
+
+const CLEAN_TREE_SCRIPT = new URL('./tools/require-clean-tree.sh', import.meta.url).pathname;
+
+function withTempRepo(setup) {
+  const dir = mkdtempSync(join(tmpdir(), 'heute-schule-cleantree-'));
+  try {
+    const git = (...args) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, stdio: 'pipe' });
+    git('init', '-q');
+    writeFileSync(join(dir, '.gitignore'), 'geheim.txt\n');
+    writeFileSync(join(dir, 'datei.txt'), 'eins\n');
+    git('add', '.');
+    git('commit', '-q', '-m', 'init');
+    setup({ dir, git });
+    try {
+      execFileSync('bash', [CLEAN_TREE_SCRIPT], { cwd: dir, stdio: 'pipe' });
+      return 0;
+    } catch (e) {
+      return e.status;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('clean tree passes', () => {
+  assertEqual(withTempRepo(() => {}), 0);
+});
+test('only a gitignored file present passes (e.g. the real impressum.html)', () => {
+  assertEqual(withTempRepo(({ dir }) => writeFileSync(join(dir, 'geheim.txt'), 'x\n')), 0);
+});
+test('modified tracked file is rejected', () => {
+  assertEqual(withTempRepo(({ dir }) => writeFileSync(join(dir, 'datei.txt'), 'zwei\n')), 1);
+});
+test('staged but uncommitted change is rejected', () => {
+  assertEqual(withTempRepo(({ dir, git }) => { writeFileSync(join(dir, 'datei.txt'), 'zwei\n'); git('add', 'datei.txt'); }), 1);
+});
+test('untracked, not ignored file is rejected', () => {
+  assertEqual(withTempRepo(({ dir }) => writeFileSync(join(dir, 'neu.txt'), 'x\n')), 1);
+});
+test('a folder that is no Git repository is rejected', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'heute-schule-nogit-'));
+  try {
+    let status = 0;
+    try { execFileSync('bash', [CLEAN_TREE_SCRIPT], { cwd: dir, stdio: 'pipe' }); } catch (e) { status = e.status; }
+    assertEqual(status, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── Security headers in web/_headers ────────────────────────────────────
+//
+// The real file must meet the minimum, and every single requirement must
+// be reported by name when it is removed or weakened — otherwise the check
+// could silently pass a regression.
+
+console.log('\nSecurity headers (web/_headers)');
+
+const HEADERS_FILE = parseHeadersFile(readFileSync(new URL('./web/_headers', import.meta.url), 'utf-8'));
+const SITE_HEADERS = HEADERS_FILE['/*'];
+
+test('web/_headers has a block for all paths', () => {
+  assert(SITE_HEADERS, 'no "/*" block in web/_headers');
+});
+test('web/_headers meets every security requirement', () => {
+  assertEqual(checkSecurityHeaders(SITE_HEADERS).join(' | '), '');
+});
+
+const withCsp = (fn) => ({ ...SITE_HEADERS, 'Content-Security-Policy': fn(SITE_HEADERS['Content-Security-Policy']) });
+const HEADER_MUTATIONS = [
+  ['HSTS removed', () => { const h = { ...SITE_HEADERS }; delete h['Strict-Transport-Security']; return h; }, 'Strict-Transport-Security: fehlt'],
+  ['HSTS max-age below one year', () => ({ ...SITE_HEADERS, 'Strict-Transport-Security': 'max-age=86400; includeSubDomains' }), 'Strict-Transport-Security: max-age'],
+  ['HSTS without includeSubDomains', () => ({ ...SITE_HEADERS, 'Strict-Transport-Security': 'max-age=31536000' }), 'includeSubDomains'],
+  ['CSP removed', () => { const h = { ...SITE_HEADERS }; delete h['Content-Security-Policy']; return h; }, 'Content-Security-Policy: fehlt'],
+  ['CSP default-src widened', () => withCsp((v) => v.replace("default-src 'self'", "default-src 'self' https:")), 'default-src'],
+  ['CSP object-src removed', () => withCsp((v) => v.replace("object-src 'none'; ", '')), 'object-src fehlt'],
+  ['CSP base-uri removed', () => withCsp((v) => v.replace("base-uri 'self'; ", '')), 'base-uri fehlt'],
+  ['CSP frame-ancestors allows self', () => withCsp((v) => v.replace("frame-ancestors 'none'", "frame-ancestors 'self'")), 'frame-ancestors'],
+  ['CSP form-action removed', () => withCsp((v) => v.replace("form-action 'none'; ", '')), 'form-action fehlt'],
+  ['CSP unsafe-eval added', () => withCsp((v) => v.replace("script-src 'self'", "script-src 'self' 'unsafe-eval'")), 'unsafe-eval'],
+  ['CSP wildcard source added', () => withCsp((v) => v.replace("img-src 'self'", "img-src 'self' *")), '* als Quelle'],
+  ['CSP foreign script host added', () => withCsp((v) => v.replace("script-src 'self'", "script-src 'self' https://cdn.example")), 'script-src erlaubt fremde Quellen'],
+  ['nosniff removed', () => { const h = { ...SITE_HEADERS }; delete h['X-Content-Type-Options']; return h; }, 'X-Content-Type-Options'],
+  ['X-Frame-Options weakened', () => ({ ...SITE_HEADERS, 'X-Frame-Options': 'SAMEORIGIN' }), 'X-Frame-Options'],
+  ['Referrer-Policy leaks full URL', () => ({ ...SITE_HEADERS, 'Referrer-Policy': 'unsafe-url' }), 'Referrer-Policy'],
+  ['Permissions-Policy allows camera', () => ({ ...SITE_HEADERS, 'Permissions-Policy': SITE_HEADERS['Permissions-Policy'].replace('camera=()', 'camera=(self)') }), 'camera=() fehlt'],
+];
+for (const [name, mutate, expected] of HEADER_MUTATIONS) {
+  test(`header check reports: ${name}`, () => {
+    const problems = checkSecurityHeaders(mutate());
+    assert(problems.some((p) => p.includes(expected)), `expected a problem containing "${expected}", got: ${JSON.stringify(problems)}`);
+  });
+}
+
+test('live comparison: equal headers pass, regardless of name case and whitespace', () => {
+  const live = Object.fromEntries(Object.entries(SITE_HEADERS).map(([n, v]) => [n.toLowerCase(), ` ${v.replace(/ /g, '  ')} `]));
+  assertEqual(compareHeaders(SITE_HEADERS, live).length, 0);
+});
+test('live comparison: a missing and a changed header are each reported by name', () => {
+  const live = { ...SITE_HEADERS, 'X-Frame-Options': 'SAMEORIGIN' };
+  delete live['Referrer-Policy'];
+  const problems = compareHeaders(SITE_HEADERS, live);
+  assertEqual(problems.length, 2);
+  assert(problems.some((p) => p.startsWith('Referrer-Policy:')) && problems.some((p) => p.startsWith('X-Frame-Options:')), JSON.stringify(problems));
+});
+
+// ── ESLint: security rules and syntax target actually fire ────────────────
+//
+// Lints small snippets as if they were files in the project, using the
+// real eslint.config.mjs. Every forbidden construct must be reported, the
+// allowed counterpart must not — a rule that is misconfigured (wrong file
+// glob, typo in the rule name) would otherwise fail silently.
+
+console.log('\nESLint configuration');
+
+const eslint = new ESLint({ cwd: new URL('.', import.meta.url).pathname });
+const inHtml = (js) => `<!doctype html><html><body><script>\n${js}\n</script></body></html>\n`;
+
+async function lintMessages(code, filePath) {
+  const [result] = await eslint.lintText(code, { filePath });
+  return result.messages;
+}
+
+const LINT_MUST_FLAG = [
+  ['eval in the proxy', 'eval("1");\n', 'proxy/x.mjs', 'no-eval'],
+  ['setTimeout with a string in the proxy', 'setTimeout("x()", 1);\n', 'proxy/x.mjs', 'no-implied-eval'],
+  ['new Function in tools', 'export const f = new Function("return 1");\n', 'tools/x.mjs', 'no-new-func'],
+  ['console in the proxy', 'console.log("x");\n', 'proxy/x.mjs', 'no-console'],
+  ['innerHTML in index.html', inHtml("document.body.innerHTML = 'x';"), 'web/index.html', 'no-restricted-properties'],
+  ['outerHTML in index.html', inHtml("document.body.outerHTML = 'x';"), 'web/index.html', 'no-restricted-properties'],
+  ['insertAdjacentHTML in index.html', inHtml("document.body.insertAdjacentHTML('beforeend', 'x');"), 'web/index.html', 'no-restricted-properties'],
+  ['document.write in ueber.html', inHtml("document.write('x');"), 'web/ueber.html', 'no-restricted-properties'],
+  ['innerHTML in sw.js', 'self.x = self.document.body.innerHTML;\n', 'web/sw.js', 'no-restricted-properties'],
+];
+for (const [name, code, filePath, ruleId] of LINT_MUST_FLAG) {
+  await testAsync(`lint flags ${name}`, async () => {
+    const messages = await lintMessages(code, filePath);
+    assert(messages.some((m) => m.ruleId === ruleId), `expected ${ruleId}, got ${JSON.stringify(messages.map((m) => m.ruleId))}`);
+  });
+}
+
+const LINT_MUST_ALLOW = [
+  ['textContent instead of innerHTML', inHtml("document.body.textContent = '';"), 'web/index.html'],
+  ['console in the test suite', "console.log('x');\n", 'run-tests.mjs'],
+];
+for (const [name, code, filePath] of LINT_MUST_ALLOW) {
+  await testAsync(`lint allows ${name}`, async () => {
+    const messages = await lintMessages(code, filePath);
+    assertEqual(messages.map((m) => m.ruleId || m.message).join(' | '), '');
+  });
+}
+
+// Syntax target ES2019 for everything that runs on the families' devices:
+// ES2019 syntax must parse, ES2020 syntax must be a fatal parse error.
+const ES2019_FILES = [
+  ['web/index.html', inHtml], ['web/ueber.html', inHtml], ['web/sw.js', (js) => `${js}\n`],
+];
+for (const [filePath, wrap] of ES2019_FILES) {
+  await testAsync(`${filePath}: ES2019 syntax (catch without binding) parses`, async () => {
+    const messages = await lintMessages(wrap('try { self.x(); } catch { self.y = 1; }'), filePath);
+    assert(!messages.some((m) => m.fatal), JSON.stringify(messages));
+  });
+  for (const [feature, js] of [['optional chaining', 'self.a = self.b?.c;'], ['nullish coalescing', 'self.a = self.b ?? 1;']]) {
+    await testAsync(`${filePath}: ES2020 ${feature} is a parse error`, async () => {
+      const messages = await lintMessages(wrap(js), filePath);
+      assert(messages.some((m) => m.fatal), `expected a fatal parse error, got ${JSON.stringify(messages)}`);
+    });
+  }
+}
+
+// ── Licenses of all dependencies ─────────────────────────────────────────
+//
+// The project is MIT-licensed and ships none of its dependencies: all of
+// them are build/test/deploy tools. This keeps it that way: every package
+// in the lockfile must be a devDependency under a permissive license. An
+// SPDX "OR" needs one allowed alternative, an "AND" needs all parts.
+
+console.log('\nDependency licenses (package-lock.json)');
+
+const PERMISSIVE_LICENSES = new Set(['MIT', 'ISC', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'BlueOak-1.0.0', '0BSD', 'CC0-1.0']);
+// Named exception: sharp's prebuilt libvips binaries (optional, one per
+// platform) are LGPL-3.0-or-later. They come in via wrangler → miniflare
+// → sharp, are only used by wrangler's local emulation on the developer's
+// machine and are never part of the deployed app.
+const LICENSE_EXCEPTIONS = [{ packagePrefix: 'node_modules/@img/sharp-', license: 'LGPL-3.0-or-later' }];
+
+function licenseAllowed(packagePath, expression) {
+  if (!expression) return false;
+  const term = (t) => PERMISSIVE_LICENSES.has(t)
+    || LICENSE_EXCEPTIONS.some((ex) => packagePath.startsWith(ex.packagePrefix) && ex.license === t);
+  const clean = expression.replace(/[()]/g, '').trim();
+  if (/\sOR\s/.test(clean)) return clean.split(/\s+OR\s+/).some((alt) => licenseAllowed(packagePath, alt));
+  return clean.split(/\s+AND\s+/).every(term);
+}
+
+function checkLockfile(lock) {
+  const problems = [];
+  for (const [path, info] of Object.entries(lock.packages)) {
+    if (!path) continue;
+    if (!info.dev) problems.push(`${path}: keine reine Entwicklungsabhängigkeit`);
+    if (!licenseAllowed(path, info.license)) problems.push(`${path}: Lizenz ${info.license || '(keine Angabe)'} nicht freigegeben`);
+  }
+  return problems;
+}
+
+const LOCKFILE = JSON.parse(readFileSync(new URL('./package-lock.json', import.meta.url), 'utf-8'));
+test('every locked package is a devDependency under an approved license', () => {
+  const problems = checkLockfile(LOCKFILE);
+  assert(problems.length === 0, problems.join('\n    '));
+});
+
+const lockWith = (path, info) => ({ packages: { '': {}, 'node_modules/ok': { dev: true, license: 'MIT' }, [path]: info } });
+const LICENSE_CASES = [
+  ['GPL-3.0 package', lockWith('node_modules/x', { dev: true, license: 'GPL-3.0-only' }), 1],
+  ['LGPL outside the named exception', lockWith('node_modules/x', { dev: true, license: 'LGPL-3.0-or-later' }), 1],
+  ['package without a license field', lockWith('node_modules/x', { dev: true }), 1],
+  ['runtime (non-dev) dependency', lockWith('node_modules/x', { license: 'MIT' }), 1],
+  ['AND with one non-permissive part', lockWith('node_modules/x', { dev: true, license: 'MIT AND GPL-2.0-only' }), 1],
+  ['OR with one permissive alternative', lockWith('node_modules/x', { dev: true, license: '(GPL-2.0-only OR MIT)' }), 0],
+  ['LGPL within the named sharp exception', lockWith('node_modules/@img/sharp-libvips-test', { dev: true, license: 'Apache-2.0 AND LGPL-3.0-or-later' }), 0],
+];
+for (const [name, lock, expectedProblems] of LICENSE_CASES) {
+  test(`license check: ${name} → ${expectedProblems ? 'reported' : 'accepted'}`, () => {
+    assertEqual(checkLockfile(lock).length, expectedProblems);
+  });
+}
+
 // ── ccCampus domain allowlist: index.html and _headers must agree ────────
 //
 // Two independent mechanisms check the same domain list: the CSP
@@ -1429,7 +1672,8 @@ test('no date/history signal words in code comments', () => {
   const files = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
     'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
-    'web/index.html', 'web/_headers',
+    'tools/headers.mjs', 'tools/check-live-headers.mjs', 'tools/require-clean-tree.sh',
+    'web/index.html', 'web/sw.js', 'web/_headers',
   ];
   const signalWords = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert|fix from|beta test \(|for months|has happened since|confirmed \(\d|verified \(\d|\bwas fixed\b|changed later/;
   const hits = [];

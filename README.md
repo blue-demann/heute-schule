@@ -36,12 +36,17 @@ Details zu den einzelnen Teilen: [web/README.md](web/README.md),
 ## Deployen
 
 ```bash
-./deploy.sh          # Standard: Tests, Lint, dann Proxy + Website
+npm ci               # einmalig bzw. nach Änderungen an package-lock.json
+./deploy.sh          # Standard: alle Prüfungen, dann Proxy + Website
 ./deploy.sh proxy    # nur der Proxy
 ./deploy.sh web      # nur die Website
 ```
 
-Lässt bei fehlschlagenden Tests oder Lint-Fehlern nichts deployen.
+Deployt nur aus einem sauberen Arbeitsbaum (alles committet) und nur, wenn
+Tests, Lint und `npm audit` (Lücken ab „high“) durchgehen. `wrangler` kommt
+als exakt gepinnte Entwicklungsabhängigkeit aus `node_modules`, ohne
+`npm ci` gibt es keinen Deploy. Die Reihenfolge der Prüfungen steht in
+[PROJEKT.md](PROJEKT.md), Abschnitt 10.
 
 ### Zugang (einmalig)
 

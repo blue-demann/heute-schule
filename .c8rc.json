@@ -2,7 +2,8 @@
   "all": true,
   "include": [
     "proxy/**/*.{js,mjs}",
-    "stundenplan.js"
+    "stundenplan.js",
+    "tools/**/*.mjs"
   ],
   "exclude": [
     "**/node_modules/**",
