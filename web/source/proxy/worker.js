@@ -39,7 +39,7 @@
  * together with the matching web/index.html pass, not on their own.
  */
 
-import { checkSafeHostname, checkSafeHttpsUrl } from './hostcheck.mjs';
+import { checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './hostcheck.mjs';
 import { buildCacheKeyMaterial } from './cachekey.mjs';
 
 const FETCH_TIMEOUT_MS = 10000;
@@ -149,7 +149,7 @@ function jsonResponse(obj, status, corsHeaders) {
 
 async function webuntisRpc(server, cookie, method, params) {
   const safeServer = checkSafeHostname(server, { requiredSuffix: '.webuntis.com' });
-  const resp = await fetchWithTimeout(`https://${safeServer}/WebUntis/jsonrpc.do`, {
+  const resp = await fetchWithTimeout(httpsUrlForHost(safeServer, '/WebUntis/jsonrpc.do'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

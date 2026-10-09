@@ -43,6 +43,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (Peer-Review 01.09., Fund D-2) ESLint schloss `web/**` komplett von jeder Prüfung aus, nicht nur eine einzelne Regel | `eslint-plugin-html` prüft jetzt `web/index.html`/`web/ueber.html` (Inline-Script) und `web/sw.js` mit denselben Regeln wie der übrige Code (außer `var`); erster echter Lauf fand vier reale, bisher unentdeckte kleine Probleme im Code, alle behoben |
 | Deploy hing am kontoweiten `wrangler login` — ein langlebiger OAuth-Token im Klartext auf der Platte, mit Schreibrechten auf nahezu alle Cloudflare-Produkte des Kontos, der bis ins Nachbarprojekt Spektrum reichte (Fund aus dessen Chaos-Review) | Login entfernt (`wrangler logout`, 02.10.2026, Gegenprobe: keine `config/default.toml` mehr unter `~/Library/Preferences/.wrangler`, keine Profildatei mit Zugangsdaten). Stattdessen API-Token mit genau zwei Rechten (`Cloudflare Pages`, `Workers Scripts`) plus Account-ID im macOS-Schlüsselbund; `deploy.sh` liest, prüft und exportiert sie nur für die Dauer des Laufs. Dass die zwei Rechte genügen, ist durch einen vollständigen Deploy (Proxy + Website) am 02.10.2026 belegt — die zuvor ebenfalls vergebenen `Account Settings` und `User Details` wurden vorher entfernt. `wrangler` auf `4.144.0` gepinnt |
 | Der Live-vs-HEAD-Check schlug nach jedem Website-Deploy falschen Alarm — die drei Sekunden Wartezeit reichten nicht, bis Cloudflare Pages die neue Version auslieferte | Bis zu acht Versuche im Abstand von fünf Sekunden, Abbruch beim ersten Treffer; die Warnung erscheint nur noch, wenn der Stand nach 40 Sekunden wirklich nicht ankommt. Vier Fälle gegengeprüft (Treffer beim 1./4./8. Versuch, nie) |
+| 🔴 (Befund 09.10.2026) Host-Verwechslung im WebUntis-Hostcheck: `checkSafeHostname()` sperrte nur `/` und `@`, prüfte sonst nur die Endung als String — `evil.example#.webuntis.com`, `…?.webuntis.com`, `…\.webuntis.com`, `evil.example:443#.webuntis.com` und `127.0.0.1#.webuntis.com` kamen durch, der Worker rief dann `evil.example` bzw. `127.0.0.1` ab (offener Relay) | Positive Validierung nach RFC 1123 vor der Endungsprüfung (`proxy/hostcheck.mjs`), im Worker zusätzlich `httpsUrlForHost()`, das abbricht, wenn der URL-Parser einen anderen Host auflöst. Property-Tests je Angriffsklasse (Fragment, Query, Backslash, Port, Leerraum, Prozent-Kodierung, Userinfo) plus Worker-Regressionstest; Gegenprobe: gegen den alten Code rot (außer Userinfo, dort griff schon die `@`-Sperre). Mensamax (`checkSafeHttpsUrl`) war nicht betroffen, weil dort die geparste URL geprüft wird — jetzt per Property abgesichert. **Live erst nach `./deploy.sh`** |
 | Testlücke aus der Code-Coverage-Einführung: `proxy/worker.js` (der HTTP-Handler selbst) lag bei 0 % | Direkter Test des exportierten `fetch()`-Handlers — kleiner selbstgebauter `caches`-Stub, gemocktes `fetch()`, native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit. Jetzt ~99 % Statement-Coverage, 17 neue Tests (Routing, Rate-Limit, Cache-Hit-Regression, WebUntis-/Mensamax-Voll-Durchlauf inkl. Fehlerfälle) |
 
 ## Noch offen
@@ -81,6 +82,18 @@ Zeitpunkt-Momentaufnahmen unverändert.
    `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
    SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
    Besonders relevant wegen des geplanten eigenen Wechsels auf iPhone.
+6. **🟡 Typprüfung nachziehen** (Entwicklungsprozess Q28/Q31, 09.10.2026;
+   trotz Wartungsmodus gewollt). Stand 09.10.: 13 JS-Dateien, nur ESLint,
+   kein `@ts-check`, kein `tsc`. Ziel: JSDoc-Typen mit `tsc --checkJs`
+   (kein Build-Schritt), strict. Antworten der Upstream-Dienste im Proxy
+   zusätzlich per Laufzeitvalidierung absichern. `typescript` ist eine neue
+   devDependency und braucht vorher eine Freigabe.
+7. **Kosmetisch: Frontend-Bereinigung des Server-Felds** (09.10.2026).
+   `extractWebUntisHostname` in `web/index.html` schneidet eine ohne
+   Protokoll eingefügte Adresse nur an `/`, `#` und `?` ab, nicht an `\`.
+   Keine Sicherheitsgrenze (die liegt im Proxy, siehe Erledigt-Tabelle),
+   aber `schule.webuntis.com\WebUntis` bliebe ungekürzt und würde dann
+   vom Proxy abgelehnt statt bereinigt.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

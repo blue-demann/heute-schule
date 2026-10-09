@@ -60,7 +60,11 @@ beliebige https-Ziele. Validierung liegt in `hostcheck.mjs` (bewusst
 ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
 `../run-tests.mjs`):
 
-- `server` (WebUntis) muss auf `.webuntis.com` enden.
+- `server` (WebUntis) muss ein gültiger Hostname nach RFC 1123 sein (nur
+  `a–z`, `0–9`, Punkt, Bindestrich) und auf `.webuntis.com` enden. Die
+  Syntaxprüfung ist nötig, weil eine reine Endungsprüfung z. B.
+  `evil.example#.webuntis.com` durchließe — der URL-Parser liest den Teil
+  ab `#` als Fragment, der Abruf ginge an `evil.example`.
 - `base` (Mensamax — die einzige Basis-URL, die den Proxy tatsächlich
   erreicht; ccCampus läuft komplett im Browser, siehe unten) muss
   `https://` sein, darf keine Zugangsdaten in der URL selbst enthalten und

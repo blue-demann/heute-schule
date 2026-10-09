@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs';
 import stundenplan from './stundenplan.js';
-import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl } from './proxy/hostcheck.mjs';
+import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
 import proxyWorker from './proxy/worker.js';
 
@@ -439,6 +439,45 @@ test('path in the hostname is rejected', () => {
 test('empty hostname is rejected', () => {
   assertWirft(() => checkSafeHostname(''), 'Ungültiger Server-Hostname');
 });
+test('REGRESSION: a delimiter before the required suffix cannot smuggle in another host', () => {
+  // Each of these ends in ".webuntis.com" as a string, but the URL parser
+  // reads everything from the delimiter on as fragment/query/path, so the
+  // fetch would go to the host in front of it.
+  for (const input of [
+    'evil.example#.webuntis.com',
+    'evil.example?.webuntis.com',
+    'evil.example\\.webuntis.com',
+    'evil.example:443#.webuntis.com',
+    '127.0.0.1#.webuntis.com',
+  ]) {
+    assertWirft(() => checkSafeHostname(input, { requiredSuffix: '.webuntis.com' }), 'Ungültiger Server-Hostname');
+  }
+});
+test('labels violating RFC 1123 are rejected (empty, leading/trailing hyphen, too long)', () => {
+  for (const input of ['a..webuntis.com', '-a.webuntis.com', 'a-.webuntis.com', `${'a'.repeat(64)}.webuntis.com`, '.webuntis.com']) {
+    assertWirft(() => checkSafeHostname(input, { requiredSuffix: '.webuntis.com' }), 'Ungültiger Server-Hostname');
+  }
+});
+test('a 63-character label is still accepted (boundary)', () => {
+  const host = `${'a'.repeat(63)}.webuntis.com`;
+  assertEqual(checkSafeHostname(host, { requiredSuffix: '.webuntis.com' }), host);
+});
+test('non-ASCII hostname is rejected, its xn-- form is accepted', () => {
+  assertWirft(() => checkSafeHostname('schüle.webuntis.com', { requiredSuffix: '.webuntis.com' }), 'Ungültiger Server-Hostname');
+  assertEqual(checkSafeHostname('xn--schle-mva.webuntis.com', { requiredSuffix: '.webuntis.com' }), 'xn--schle-mva.webuntis.com');
+});
+
+console.log('\nhttpsUrlForHost()');
+test('builds the URL for a checked hostname', () => {
+  assertEqual(httpsUrlForHost('schule.webuntis.com', '/WebUntis/jsonrpc.do'), 'https://schule.webuntis.com/WebUntis/jsonrpc.do');
+});
+test('fails closed when the parser would resolve a different host', () => {
+  assertWirft(() => httpsUrlForHost('evil.example#.webuntis.com', '/WebUntis/jsonrpc.do'), 'Ungültiger Server-Hostname');
+  assertWirft(() => httpsUrlForHost('a\t.webuntis.com', '/WebUntis/jsonrpc.do'), 'Ungültiger Server-Hostname');
+});
+test('fails closed when the URL does not parse at all', () => {
+  assertWirft(() => httpsUrlForHost('a b.webuntis.com', '/WebUntis/jsonrpc.do'), 'Ungültiger Server-Hostname');
+});
 test('REGRESSION: a full WebUntis URL copied from the address bar is accepted', () => {
   // Covers someone pasting the whole address-bar URL into the server field
   // instead of just the hostname.
@@ -612,6 +651,145 @@ forAll(
   'random domain outside the allowlist is always rejected',
   (random) => `${randomLabel(random)}.${randomLabel(random, 2, 6)}.example`,
   (host) => assertWirft(() => checkSafeHostname(host, { requiredSuffixes: [ALLOWED_TEST_SUFFIX] }), 'muss auf')
+);
+
+console.log('\nProperty: checkSafeHostname() — the checked string is the host the fetch reaches');
+
+// The security property behind "WebUntis only on *.webuntis.com": whatever
+// checkSafeHostname() accepts must, once inserted into the worker's URL,
+// be parsed back as exactly that host — otherwise the suffix check
+// compared one string while the fetch went somewhere else. The classes
+// below each wrap an attacker-controlled host so that the raw string
+// still ends in ".webuntis.com"; every one of them must be rejected, and
+// the invariant must hold for anything that is accepted.
+const WEBUNTIS_SUFFIX = '.webuntis.com';
+
+function pick(random, items) {
+  return items[randomInt(random, 0, items.length - 1)];
+}
+
+// Valid RFC 1123 label: letters/digits, hyphens only in the interior.
+function randomRfcLabel(random) {
+  const len = randomInt(random, 1, 20);
+  if (len === 1) return randomLabel(random, 1, 1);
+  let interior = '';
+  for (let i = 0; i < len - 2; i++) interior += pick(random, ['-', ...'abcdefghijklmnopqrstuvwxyz0123456789']);
+  return randomLabel(random, 1, 1) + interior + randomLabel(random, 1, 1);
+}
+
+function randomAllowedHost(random) {
+  const labels = [];
+  for (let i = randomInt(random, 1, 3); i > 0; i--) labels.push(randomRfcLabel(random));
+  return labels.join('.') + WEBUNTIS_SUFFIX;
+}
+
+// Attacker target in front of the delimiter: a foreign domain, a public
+// IPv4 address or an internal one (loopback, cloud metadata).
+function randomAttackerHost(random) {
+  return pick(random, [
+    () => `${randomLabel(random)}.${randomLabel(random, 2, 6)}.example`,
+    () => `${randomPublicFirstOctet(random)}.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}`,
+    () => `127.${randomInt(random, 0, 255)}.${randomInt(random, 0, 255)}.${randomInt(random, 1, 254)}`,
+    () => '169.254.169.254',
+  ])();
+}
+
+// Optional filler between delimiter and suffix, so the suffix is not
+// always glued directly to the delimiter.
+function randomFiller(random) {
+  return random() < 0.5 ? '' : randomLabel(random);
+}
+
+function insertAt(random, str, chars) {
+  const pos = randomInt(random, 1, str.length - 1);
+  return str.slice(0, pos) + chars + str.slice(pos);
+}
+
+function assertParsesToSameAllowedHost(input) {
+  let accepted;
+  try {
+    accepted = checkSafeHostname(input, { requiredSuffix: WEBUNTIS_SUFFIX });
+  } catch {
+    return; // rejected — always safe
+  }
+  let parsedHost;
+  try {
+    parsedHost = new URL(`https://${accepted}/WebUntis/jsonrpc.do`).hostname;
+  } catch (e) {
+    throw new Error(`accepted ${JSON.stringify(accepted)}, but it does not parse as a URL host`, { cause: e });
+  }
+  assertEqual(parsedHost, accepted);
+  assert(parsedHost.endsWith(WEBUNTIS_SUFFIX), `${parsedHost} does not end in ${WEBUNTIS_SUFFIX}`);
+  assert(!isPrivateOrLocalTarget(parsedHost), `${parsedHost} is an internal target`);
+}
+
+const HOST_CONFUSION_CLASSES = [
+  ['fragment', (random) => `${randomAttackerHost(random)}#${randomFiller(random)}${WEBUNTIS_SUFFIX}`],
+  ['query', (random) => `${randomAttackerHost(random)}?${randomFiller(random)}${WEBUNTIS_SUFFIX}`],
+  ['backslash', (random) => `${randomAttackerHost(random)}\\${randomFiller(random)}${WEBUNTIS_SUFFIX}`],
+  ['port followed by a delimiter', (random) =>
+    `${randomAttackerHost(random)}:${randomInt(random, 1, 65535)}${pick(random, ['#', '?', '\\'])}${randomFiller(random)}${WEBUNTIS_SUFFIX}`],
+  // Interior only: leading/trailing whitespace is trimmed on purpose.
+  ['whitespace inside the host', (random) => insertAt(random, randomAllowedHost(random), pick(random, [' ', '\t', '\n', '\r', ' ']))],
+  ['percent-encoding', (random) =>
+    `${randomAttackerHost(random)}%${pick(random, ['23', '3f', '3F', '5c', '2f', '40', '3a', '2e', '09'])}${randomFiller(random)}${WEBUNTIS_SUFFIX}`],
+  ['userinfo', (random) =>
+    `${randomLabel(random)}${random() < 0.5 ? '' : `:${randomLabel(random)}`}@${randomAttackerHost(random)}${pick(random, ['#', '?', '\\', ''])}${WEBUNTIS_SUFFIX}`],
+];
+
+for (const [className, generator] of HOST_CONFUSION_CLASSES) {
+  forAll(
+    `host confusion via ${className} is always rejected`,
+    generator,
+    (input) => assertWirft(() => checkSafeHostname(input, { requiredSuffix: WEBUNTIS_SUFFIX }), 'Ungültiger Server-Hostname')
+  );
+}
+
+// Guards against the opposite failure: an over-strict check that blocks
+// real schools. Multi-label subdomains with hyphens must pass unchanged.
+forAll(
+  'random valid RFC 1123 subdomain of webuntis.com is always accepted unchanged',
+  randomAllowedHost,
+  (host) => assertEqual(checkSafeHostname(host, { requiredSuffix: WEBUNTIS_SUFFIX }), host)
+);
+
+// The invariant itself, over all classes mixed with valid hosts — phrased
+// independently of error messages, so it also holds for any future change
+// that rejects differently.
+forAll(
+  'whatever is accepted parses back to exactly that allowed, public host',
+  (random) => (random() < 0.3 ? randomAllowedHost(random) : pick(random, HOST_CONFUSION_CLASSES)[1](random)),
+  assertParsesToSameAllowedHost
+);
+
+console.log('\nProperty: checkSafeHttpsUrl() — the worker\'s concatenated URLs stay on the checked host');
+
+// worker.js appends paths to the raw Mensamax base ("${base}/login.aspx"),
+// while checkSafeHttpsUrl() checks the parsed URL. Appending text that
+// starts with "/" cannot change the authority, so both must agree, and
+// the host actually requested must be on the allowlist — checked here for
+// well-formed bases and for the same delimiter tricks as above.
+forAll(
+  'for every accepted Mensamax base, the concatenated request URL has the checked host',
+  (random) => {
+    const tail = pick(random, ['', '/', '#', '?x', '\t', '/pfad']);
+    return random() < 0.5
+      ? `https://${randomRfcLabel(random)}${ALLOWED_TEST_SUFFIX}${tail}`
+      : `https://${randomAttackerHost(random)}${pick(random, ['#', '?', '\\', '\\@', ':443#'])}${randomFiller(random)}${ALLOWED_TEST_SUFFIX}${tail}`;
+  },
+  (base) => {
+    let checked;
+    try {
+      checked = checkSafeHttpsUrl(base, { requiredSuffixes: [ALLOWED_TEST_SUFFIX] });
+    } catch {
+      return; // rejected — always safe
+    }
+    for (const path of ['/login.aspx', '/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx']) {
+      const requestHost = new URL(`${base}${path}`).hostname;
+      assertEqual(requestHost, checked.hostname);
+      assert(requestHost.endsWith(ALLOWED_TEST_SUFFIX), `${requestHost} is not on the allowlist`);
+    }
+  }
 );
 
 // ── Proxy: Cache-Schlüssel ─────────────────────────────────────────────────
@@ -819,6 +997,25 @@ await testAsync('an unsafe WebUntis server is rejected before any network call',
   restoreFetch();
   const body = await resp.json();
   assert(body.stundenFehler.includes('muss auf'), 'expected the hostcheck allowlist rejection message');
+});
+
+await testAsync('REGRESSION: a server smuggling another host before ".webuntis.com" never reaches the network', async () => {
+  for (const server of ['evil.example#.webuntis.com', 'evil.example?.webuntis.com', 'evil.example\\.webuntis.com', '127.0.0.1#.webuntis.com']) {
+    globalThis.caches = makeCachesStub();
+    const outbound = [];
+    mockFetch([{
+      test: () => true,
+      respond: async (url) => { outbound.push(url); return new Response('{}', { status: 500 }); },
+    }]);
+    const resp = await proxyWorker.fetch(
+      apiRequest({ webuntis: { server, user: 'x', password: 'x', klasse: '9c' }, lunch: {} }),
+      TEST_ENV, makeCtx()
+    );
+    restoreFetch();
+    assertEqual(outbound.length, 0);
+    const body = await resp.json();
+    assert(body.stundenFehler.includes('Ungültiger Server-Hostname'), `unexpected error for ${server}: ${body.stundenFehler}`);
+  }
 });
 
 await testAsync('REGRESSION: an identical second request is served from cache, not a second WebUntis round-trip', async () => {

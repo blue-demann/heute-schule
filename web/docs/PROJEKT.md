@@ -243,7 +243,7 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 
 | Maßnahme | Datei | Wogegen |
 |---|---|---|
-| Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele |
+| Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
@@ -326,7 +326,7 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | Testgruppe | Datei unter Test | Fokus |
 |---|---|---|
 | `pad()`, Cookie-Extraktion, `parseLunchStatus()`, `buildLessonList()`, `formatLessons()`, `buildEmail()` | `stundenplan.js` | Geerbte Logik aus der ursprünglichen Apps-Script-Automation |
-| `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` (Beispielwerte + Property-Tests, s. u.) | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link) |
+| `isPrivateOrLocalTarget()`, `checkSafeHostname()`, `checkSafeHttpsUrl()` (Beispielwerte + Property-Tests, s. u.) | `proxy/hostcheck.mjs` | SSRF-Schutz — Loopback/private/Link-lokale Ziele, Allowlist-Grenzen, URL-Normalisierung (inkl. Regressionstest für den aus der Adresszeile kopierten WebUntis-Link), Host-Verwechslung über Trennzeichen vor der erlaubten Endung |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -339,6 +339,20 @@ macht sichtbar, *warum* ein Testwert gewählt wurde, und ist schwerer
 versehentlich (oder durch eine KI) auf die Implementierung zuzuschneiden,
 statt die eigentliche Eigenschaft zu prüfen. Fester Seed (`mulberry32`,
 kein neues Paket) für reproduzierbare Fehlschläge.
+
+Seit 09.10.2026 zusätzlich die Invariante hinter „WebUntis nur über
+`*.webuntis.com`": Was `checkSafeHostname()` akzeptiert, muss in der URL
+des Workers exakt als derselbe, erlaubte, öffentliche Host zurückgeparst
+werden. Je eine benannte Angriffsklasse — Fragment, Query, Backslash,
+Port mit Trennzeichen, Leerraum im Host, Prozent-Kodierung, Userinfo —
+setzt einen fremden Host vor die erlaubte Endung und muss immer abgelehnt
+werden; eine Positivklasse (gültige RFC-1123-Subdomains) schützt vor einer
+zu strengen Prüfung. Gegenprobe beim Einführen: Gegen den alten Code waren
+alle Klassen außer Userinfo (dort griff schon die `@`-Sperre) rot. Für die
+Mensamax-Basis-URL prüft eine Property, dass die im Worker per String
+zusammengesetzten Anfrage-URLs auf dem geprüften Host bleiben; dort war der
+alte Code korrekt, die Gegenprobe lief deshalb gegen einen bewusst
+eingebauten Mutanten (Endungsprüfung auf dem rohen String).
 
 **Code Coverage** (`c8`, seit 01.09.2026): `npm run test:coverage` bzw. als
 Info-Zeile in `deploy.sh` (bricht den Deploy nicht ab). Miss nur, was
@@ -548,6 +562,12 @@ Meilensteine seit dem ersten Commit (27.08.2026):
 - **Repository öffentlich gemacht** (02.09.2026) — GitHub-eigenes
   Secret-Scanning + Push Protection sowie Dependabot Security Updates
   dadurch zusätzlich verfügbar geworden und aktiviert.
+- **Host-Verwechslung im WebUntis-Hostcheck** (09.10.2026) — die
+  Endungsprüfung auf `.webuntis.com` ließ Eingaben wie
+  `evil.example#.webuntis.com` durch; der Proxy war damit erneut ein
+  offener Relay. Jetzt positive Hostname-Validierung nach RFC 1123 plus
+  Parser-Gegenprüfung im Worker, Property-Tests je Angriffsklasse (siehe
+  Abschnitt 9).
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

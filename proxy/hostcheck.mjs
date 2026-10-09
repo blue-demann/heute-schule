@@ -63,18 +63,30 @@ function extractHostnameFromUrl(input) {
   return value;
 }
 
+// Hostname syntax per RFC 1123: dot-separated labels of 1–63 ASCII
+// letters/digits/hyphens, each starting and ending with a letter or digit,
+// at most 253 characters in total. This is an allowlist, not a list of
+// forbidden characters: none of the characters the WHATWG URL parser
+// treats as a delimiter or rewrites (# ? / \ : @ %, whitespace, non-ASCII)
+// can occur, so "https://<host>/..." always parses back to exactly <host>.
+// The suffix check below compares strings — it is only meaningful because
+// this check guarantees the string *is* the host the fetch will reach.
+// Internationalized names have to be entered in their xn-- form.
+const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+function isValidHostnameSyntax(h) {
+  return h.length <= 253 && h.split('.').every((label) => HOSTNAME_LABEL.test(label));
+}
+
 // requiredSuffix: exactly one fixed domain (e.g. WebUntis).
 // requiredSuffixes: a growable list of possible domains (e.g. Mensamax,
 // where different schools can use different portal domains of the same
 // provider type) — the hostname must end in at least one of them. Both
 // parameters are optional and mutually exclusive.
 export function checkSafeHostname(hostname, { requiredSuffix, requiredSuffixes } = {}) {
-  const cleaned = extractHostnameFromUrl(hostname);
-  if (!cleaned || typeof cleaned !== 'string' || cleaned.includes('@') || cleaned.includes('/')) {
+  const h = extractHostnameFromUrl(hostname).trim().toLowerCase();
+  if (!isValidHostnameSyntax(h)) {
     throw new Error('Ungültiger Server-Hostname');
   }
-  const h = cleaned.trim().toLowerCase();
-  if (!h) throw new Error('Ungültiger Server-Hostname');
   if (isPrivateOrLocalTarget(h)) {
     throw new Error('Server-Hostname zeigt auf ein internes/lokales Ziel — nicht erlaubt');
   }
@@ -89,6 +101,23 @@ export function checkSafeHostname(hostname, { requiredSuffix, requiredSuffixes }
     }
   }
   return h;
+}
+
+// Builds an outbound https URL from a hostname that already passed
+// checkSafeHostname() and fails closed unless the URL parser resolves it
+// to exactly that host — a second, independent guard in case the syntax
+// check above and the parser ever disagree. path must start with "/".
+export function httpsUrlForHost(hostname, path) {
+  let url;
+  try {
+    url = new URL(`https://${hostname}${path}`);
+  } catch (e) {
+    throw new Error('Ungültiger Server-Hostname', { cause: e });
+  }
+  if (url.hostname !== hostname) {
+    throw new Error('Ungültiger Server-Hostname');
+  }
+  return url.href;
 }
 
 export function checkSafeHttpsUrl(rawUrl, { requiredSuffixes } = {}) {
