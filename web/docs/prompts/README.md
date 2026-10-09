@@ -16,3 +16,8 @@ für den Zusammenhang mit den Ergebnisdokumenten.
 - [`peer-review-bester-freund.md`](peer-review-bester-freund.md) — der
   Prompt für die unabhängige Gegenprüfung (`PEER-REVIEW-2026-08-27.md`).
   Verbatim archiviert.
+
+Beim nächsten Einsatz eines Prompts zusätzlich vorgeben: Barrierefreiheit
+gegen **WCAG 2.2** prüfen, jedes Kriterium mit Nummer und Level (A/AA/AAA)
+zitieren. Die archivierten Prompts selbst bleiben wortgetreu, siehe
+[`PROJEKT.md`](../PROJEKT.md) Abschnitt 9.

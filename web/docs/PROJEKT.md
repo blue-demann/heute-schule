@@ -451,6 +451,12 @@ ursprünglicher Wortlaut zwischenzeitlich durch eine Kontext-Kompaktierung
 verloren war und am 31.08. erneut bereitgestellt wurde — siehe
 [`prompts/README.md`](prompts/README.md)).
 
+**Referenzen in künftigen Prüfungen:** Barrierefreiheit durchgängig gegen
+**WCAG 2.2** prüfen und jedes Kriterium mit Nummer und Level (A/AA/AAA)
+zitieren, z. B. „1.4.3 Kontrast (Minimum), AA“. Die älteren Berichte zitieren
+uneinheitlich (mal 2.1, mal ohne Version); sie bleiben als
+Zeitpunkt-Momentaufnahmen unverändert.
+
 ## 10. Betrieb & Deploy
 
 ```bash

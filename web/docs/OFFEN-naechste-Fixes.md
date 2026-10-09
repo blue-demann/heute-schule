@@ -50,6 +50,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🔴 (Befund 09.10.2026) Host-Verwechslung im WebUntis-Hostcheck: `checkSafeHostname()` sperrte nur `/` und `@`, prüfte sonst nur die Endung als String — `evil.example#.webuntis.com`, `…?.webuntis.com`, `…\.webuntis.com`, `evil.example:443#.webuntis.com` und `127.0.0.1#.webuntis.com` kamen durch, der Worker rief dann `evil.example` bzw. `127.0.0.1` ab (offener Relay) | Positive Validierung nach RFC 1123 vor der Endungsprüfung (`proxy/hostcheck.mjs`), im Worker zusätzlich `httpsUrlForHost()`, das abbricht, wenn der URL-Parser einen anderen Host auflöst. Property-Tests je Angriffsklasse (Fragment, Query, Backslash, Port, Leerraum, Prozent-Kodierung, Userinfo) plus Worker-Regressionstest; Gegenprobe: gegen den alten Code rot (außer Userinfo, dort griff schon die `@`-Sperre). Mensamax (`checkSafeHttpsUrl`) war nicht betroffen, weil dort die geparste URL geprüft wird — jetzt per Property abgesichert. Live seit 09.10.2026 (Version 0.3.1), per `curl` gegen den Live-Proxy verifiziert |
 | 🟡 (Peer-Review 09.10., Funde A-1 bis A-3) Rund um den Hostcheck-Fix: (1) ausgehende Abrufe folgten Weiterleitungen — der Plan-Abruf samt Session-Cookie, also hätte eine einzige offene Weiterleitung auf einer erlaubten Mensamax-Domain wieder einen Relay ergeben; (2) die Mensamax-URLs entstanden aus dem rohen `base`-String, Pfad, Query und Port waren damit frei wählbar (und machten (1) erst ausnutzbar); (3) zwei Regressionen blieben von den Tests unbemerkt: fehlender `checkSafeHttpsUrl`-Aufruf im Worker und Endungsprüfung ohne führenden Punkt (`evilwebuntis.com`) | `fetchWithTimeout` setzt immer `redirect: 'manual'`, eine Weiterleitung gilt als Fehler; Mensamax-URLs nur noch aus `origin` der geprüften URL plus festem Pfad; `checkSafeHttpsUrl` lehnt einen eigenen Port ab. Neue Tests: unsichere Mensamax-Basis ohne Netzzugriff, Pfad/Query der Basis erreichen nie die Anfrage, jede Anfrage mit `redirect: 'manual'`, Property-Klasse „Domain ohne Punkt angehängt“. Gegenprobe: gegen Version 0.3.1 fünf Tests rot; jeder der vier Mutanten (Prüfung gelöscht, Endung ohne Punkt, Weiterleitungen folgen, roher `base`) wird von mindestens einem Test erkannt. Dazu Doku-Korrekturen aus derselben Runde (K-2, K-3, D-5). Version 0.3.2 |
 | Testlücke aus der Code-Coverage-Einführung: `proxy/worker.js` (der HTTP-Handler selbst) lag bei 0 % | Direkter Test des exportierten `fetch()`-Handlers — kleiner selbstgebauter `caches`-Stub, gemocktes `fetch()`, native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit. Jetzt ~99 % Statement-Coverage, 17 neue Tests (Routing, Rate-Limit, Cache-Hit-Regression, WebUntis-/Mensamax-Voll-Durchlauf inkl. Fehlerfälle) |
+| (Kosmetisch, Doku-Konsistenz) WCAG-Versionsangaben in den Audit-Dokumenten uneinheitlich zitiert (mal 2.1, mal ohne Version) | Regel für künftige Prüfungen festgehalten: durchgängig WCAG 2.2, jedes Kriterium mit Nummer und Level — in `PROJEKT.md` Abschnitt 9 und `prompts/README.md`. Alte Berichte bleiben als Momentaufnahmen unverändert (09.10.2026) |
 
 ## Noch offen
 
@@ -63,11 +64,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Datenschutzerklärung. Noch zu tun:
    - Einschätzung durch jemanden mit juristischem Hintergrund einholen
    - Speicherdauer der Cloudflare-Server-Logs klären
-2. **Kosmetisch, keine Eile:** Die WCAG-Versionsangaben in den Audit-
-   Dokumenten (QA-Bericht Runde 1/2, Peer-Review 27.08.) sind uneinheitlich
-   zitiert (mal 2.1, mal ohne Version). Die Dokumente selbst bleiben als
-   Zeitpunkt-Momentaufnahmen unverändert; für alle künftigen Prüfungen gilt:
-   durchgängig **WCAG 2.2** referenzieren, mit Level (A/AA/AAA).
 3. **🟡 (Peer-Review 01.09., Fund C-2) „Demo-Website"-Hinweistext
    missverständlich.** Klingt nach „nicht ernst gemeint, kann jederzeit
    verschwinden", gemeint ist eigentlich ein Haftungsausschluss ohne SLA
