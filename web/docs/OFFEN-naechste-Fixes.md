@@ -52,6 +52,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | Testlücke aus der Code-Coverage-Einführung: `proxy/worker.js` (der HTTP-Handler selbst) lag bei 0 % | Direkter Test des exportierten `fetch()`-Handlers — kleiner selbstgebauter `caches`-Stub, gemocktes `fetch()`, native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit. Jetzt ~99 % Statement-Coverage, 17 neue Tests (Routing, Rate-Limit, Cache-Hit-Regression, WebUntis-/Mensamax-Voll-Durchlauf inkl. Fehlerfälle) |
 | (Kosmetisch, Doku-Konsistenz) WCAG-Versionsangaben in den Audit-Dokumenten uneinheitlich zitiert (mal 2.1, mal ohne Version) | Regel für künftige Prüfungen festgehalten: durchgängig WCAG 2.2, jedes Kriterium mit Nummer und Level — in `PROJEKT.md` Abschnitt 9 und `prompts/README.md`. Alte Berichte bleiben als Momentaufnahmen unverändert (09.10.2026) |
 | 🟡 (Peer-Review 01.09., Fund C-2) „Demo-Website"-Hinweistext missverständlich — klang nach „nicht ernst gemeint", gemeint war ein Haftungsausschluss ohne SLA | Text an allen drei Stellen (`web/index.html` zweimal, `web/ueber.html`) ersetzt durch „Privates Hobby-Projekt, ohne Gewähr und ohne zugesicherte Verfügbarkeit. Es kann jederzeit geändert oder abgeschaltet werden." (09.10.2026) |
+| 🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon nur als SVG — Annahme: iOS stellt SVG dafür nicht zuverlässig dar, PNG nötig | Am 09.10.2026 auf Björns iPhone (aktuelles iOS) geprüft: Das Homescreen-Icon zeigt `icon.svg` korrekt (grünes Quadrat `#2f6f4f` mit 📚), keinen Seiten-Screenshot. Kein PNG ergänzt; Restrisiko nur für deutlich ältere iOS-Versionen, im Wartungsmodus bewusst in Kauf genommen |
 
 ## Noch offen
 
@@ -74,10 +75,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    etwa den von Spektrum. Gegenstück: dasselbe gilt dort umgekehrt.
    Wiedervorlage, sobald Cloudflare den Ressourcentyp unterstützt.
 
-5. **🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon fehlt als PNG.**
-   `apple-touch-icon` verweist nur auf `icon.svg` — iOS/Safari unterstützt
-   SVG dafür nicht zuverlässig, PNG (z. B. 180×180) ist weiterhin nötig.
-   Besonders relevant wegen des geplanten eigenen Wechsels auf iPhone.
 6. **🟡 Typprüfung nachziehen** (Entwicklungsprozess Q28/Q31, 09.10.2026;
    trotz Wartungsmodus gewollt). Stand 09.10.: 13 JS-Dateien, nur ESLint,
    kein `@ts-check`, kein `tsc`. Ziel: JSDoc-Typen mit `tsc --checkJs`
