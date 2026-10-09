@@ -100,7 +100,8 @@ Zeitpunkt-Momentaufnahmen unverändert.
    aber `schule.webuntis.com\WebUntis` bliebe ungekürzt und würde dann
    vom Proxy abgelehnt statt bereinigt.
 8. **🟡 Wartungs-Vorhaben „Prüfer nachziehen“** (Entwicklungsprozess Q38,
-   09.10.2026; Befunde aus `~/dev/claude/entwicklungsprozess/REGEL-INVENTAR.md`).
+   09.10.2026; Befunde aus dem Regel-Inventar EP-INV v1,
+   `~/dev/claude/prozessentwicklung/REGEL-INVENTAR.md`, lokal, nicht im Repo).
    Zusammen mit Punkt 6 umsetzen, jede Prüfung mit Gegenprobe (ein Fall,
    der rot werden muss). Keine neue Abhängigkeit nötig.
    - **Falsches Grün im Live-Check:** `deploy.sh` schreibt den HEAD-Hash auch
