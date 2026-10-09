@@ -92,14 +92,19 @@ async function isRateLimited(request, ctx) {
   return false;
 }
 
-// Timeout wrapper around every request to WebUntis/Mensamax — stops a
-// hung third-party server from blocking the worker (and the parent's
-// request) indefinitely.
+// Wrapper around every request to WebUntis/Mensamax.
+// - Timeout: stops a hung third-party server from blocking the worker (and
+//   the parent's request) indefinitely.
+// - Never follows redirects: the host check only covers the first URL. A
+//   followed 3xx would send the request — including session cookies or
+//   login data — to whatever host the Location header names, so one open
+//   redirect on an allowed domain would turn the proxy into a relay.
+//   A 3xx response is returned as is and treated as an error by the caller.
 async function fetchWithTimeout(url, options) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, { ...options, redirect: 'manual', signal: controller.signal });
   } catch (e) {
     if (e && e.name === 'AbortError') {
       throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (>${FETCH_TIMEOUT_MS / 1000}s)`, { cause: e });
@@ -272,8 +277,8 @@ function getSetCookies(resp) {
   return single ? [single] : [];
 }
 
-async function getMensamaxCookies({ base, projekt, einrichtung, username, password }) {
-  const loginPage = await fetchWithTimeout(`${base}/login.aspx`);
+async function getMensamaxCookies(origin, { projekt, einrichtung, username, password }) {
+  const loginPage = await fetchWithTimeout(`${origin}/login.aspx`);
   const loginHtml = await loginPage.text();
 
   const payload = [
@@ -287,11 +292,10 @@ async function getMensamaxCookies({ base, projekt, einrichtung, username, passwo
     'hdfCheck=&hdfLanguage=german&hdfLogin=&btnLogin=Anmelden',
   ].join('&');
 
-  const loginResp = await fetchWithTimeout(`${base}/login.aspx`, {
+  const loginResp = await fetchWithTimeout(`${origin}/login.aspx`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: payload,
-    redirect: 'manual',
   });
 
   const cookies = {};
@@ -343,13 +347,16 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
   if (!base || !lunchCfg.username || !lunchCfg.password) {
     throw new Error('Mensamax-Konfiguration unvollständig (base/username/password)');
   }
-  checkSafeHttpsUrl(base, { requiredSuffixes: MENSAMAX_ALLOWED_DOMAINS });
+  // Requests are built from the checked origin plus fixed paths only — a
+  // path, query or fragment in the configured base never reaches the URL,
+  // so it cannot steer the request to e.g. a redirect endpoint.
+  const { origin } = checkSafeHttpsUrl(base, { requiredSuffixes: MENSAMAX_ALLOWED_DOMAINS });
 
-  const cookieHeader = await getMensamaxCookies(lunchCfg);
+  const cookieHeader = await getMensamaxCookies(origin, lunchCfg);
   if (!cookieHeader) return 'Schulessen: Login fehlgeschlagen';
 
   const planResp = await fetchWithTimeout(
-    `${base}/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx`,
+    `${origin}/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx`,
     { headers: { Cookie: cookieHeader } }
   );
   if (planResp.status !== 200) return 'Schulessen: Daten nicht verfügbar';

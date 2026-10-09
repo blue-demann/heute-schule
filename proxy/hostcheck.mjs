@@ -68,10 +68,13 @@ function extractHostnameFromUrl(input) {
 // at most 253 characters in total. This is an allowlist, not a list of
 // forbidden characters: none of the characters the WHATWG URL parser
 // treats as a delimiter or rewrites (# ? / \ : @ %, whitespace, non-ASCII)
-// can occur, so "https://<host>/..." always parses back to exactly <host>.
-// The suffix check below compares strings — it is only meaningful because
-// this check guarantees the string *is* the host the fetch will reach.
-// Internationalized names have to be entered in their xn-- form.
+// can occur, so the parser cannot split a different host off the front of
+// "https://<host>/...". The suffix check below compares strings — it is
+// only meaningful because of this. The parser can still normalize numeric
+// shorthands (e.g. "127.1" becomes "127.0.0.1"); httpsUrlForHost() catches
+// any such difference before a request goes out.
+// A bare non-ASCII name is rejected; inside a full https:// URL the parser
+// has already converted it to its xn-- form before this check runs.
 const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 function isValidHostnameSyntax(h) {
   return h.length <= 253 && h.split('.').every((label) => HOSTNAME_LABEL.test(label));
@@ -132,6 +135,9 @@ export function checkSafeHttpsUrl(rawUrl, { requiredSuffixes } = {}) {
   }
   if (url.username || url.password) {
     throw new Error('Ungültige Basis-URL (keine Zugangsdaten in der URL selbst)');
+  }
+  if (url.port) {
+    throw new Error('Ungültige Basis-URL (kein eigener Port erlaubt)');
   }
   checkSafeHostname(url.hostname, { requiredSuffixes });
   return url;

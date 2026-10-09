@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-**Stand: 09.10.2026 · Version 0.3.1**
+**Stand: 09.10.2026 · Version 0.3.2**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -243,7 +243,7 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 
 | Maßnahme | Datei | Wogegen |
 |---|---|---|
-| Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst |
+| Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst. Mensamax-URLs entstehen nur aus `origin` der geprüften Basis-URL plus festem Pfad (kein eigener Port). Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` zentral in `fetchWithTimeout`) — die Host-Prüfung gilt nur für die erste URL |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
@@ -354,6 +354,15 @@ zusammengesetzten Anfrage-URLs auf dem geprüften Host bleiben; dort war der
 alte Code korrekt, die Gegenprobe lief deshalb gegen einen bewusst
 eingebauten Mutanten (Endungsprüfung auf dem rohen String).
 
+Die Prüfrunde vom 09.10.2026 fand per Mutationstest zwei Regressionen,
+die keine dieser Tests bemerkt hätte (Mensamax-Prüfung im Worker
+gelöscht, Endung ohne führenden Punkt). Seitdem gilt für neue
+Sicherheitstests: Gegenprobe nicht nur gegen den alten Code, sondern auch
+gegen gezielte Mutanten der neuen Prüfung. Die Worker-Tests prüfen
+zusätzlich, dass jede ausgehende Anfrage mit `redirect: 'manual'` läuft
+und eine konfigurierte Basis-URL nur über ihren `origin` in die Anfrage
+gelangt.
+
 **Code Coverage** (`c8`, seit 01.09.2026): `npm run test:coverage` bzw. als
 Info-Zeile in `deploy.sh` (bricht den Deploy nicht ab). Miss nur, was
 `run-tests.mjs` tatsächlich lädt — `proxy/*`, `stundenplan.js`;
@@ -399,7 +408,7 @@ relativer Link würde dort ins Leere laufen:
   vierte Runde, gezielt auf Doku-Konsistenz statt den vollen Kriterienkatalog;
   fand zwei 🔴-Funde (private Adresse in einer Prompt-Kopie, Code-Kommentar
   widersprach der eigenen Projekt-Doku), beide behoben
-- [`PEER-REVIEW-2026-09-01.md`](PEER-REVIEW-2026-09-01.md) — fünfte Runde,
+- [`PEER-REVIEW-2026-09-01.md`](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-09-01.md) — fünfte Runde,
   ebenfalls frische Sitzung und bewusst ohne die vierte Runde gelesen zu
   haben (Unabhängigkeit); Teil 1 prüft `QA-Bericht-2026-08-31.md` gegen,
   Teil 2 ist ein eigenständiges Audit. Fand den bislang schwerwiegendsten
@@ -408,6 +417,15 @@ relativer Link würde dort ins Leere laufen:
   per `./deploy.sh proxy` behoben und ebenso live nachverifiziert. Fand
   außerdem den kaputten Live-vs-HEAD-Check (Dotfile-Problem, s. o.) und
   den zu pauschalen ESLint-Ausschluss von `web/**` (beide ebenfalls behoben)
+- [`PEER-REVIEW-2026-10-09.md`](PEER-REVIEW-2026-10-09.md) — sechste Runde,
+  frische Sitzung ohne Vorwissen über die Fix-Sitzung, gezielt auf den Fix
+  der Host-Verwechslung (Version 0.3.1) statt auf die ganze Website, Rolle
+  aus `prompts/peer-review-bester-freund.md`, angepasst auf einen Code-Fix
+  als Prüfobjekt. Bestätigte den Fix in der lokalen Workers-Runtime
+  (`workerd`) und live, fand aber drei 🟡-Punkte im selben Umfeld:
+  Weiterleitungen wurden gefolgt, Mensamax-URLs aus dem rohen
+  `base`-String, zwei per Mutationstest unentdeckte Regressionen — alle in
+  Version 0.3.2 behoben
 
 Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
 Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
@@ -415,7 +433,7 @@ c't-Stil-/Peer-Review-Berichte verlinkt — die Website zeigt den aktuellen
 Stand, nicht die Historie. Die früheren Runden
 bleiben hier im Repository nachvollziehbar.
 
-**Methodik — wichtig für die Einordnung:** Keine der fünf Audit-Runden
+**Methodik — wichtig für die Einordnung:** Keine der sechs Audit-Runden
 wurde **von menschlichen Prüfer:innen durchgeführt**, sondern von Claude
 (Anthropics KI-Assistent) anhand strukturierter, von Björn selbst
 formulierter Prompts — mit echtem Zugriff auf die Live-Website und den
@@ -568,6 +586,11 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   offener Relay. Jetzt positive Hostname-Validierung nach RFC 1123 plus
   Parser-Gegenprüfung im Worker, Property-Tests je Angriffsklasse (siehe
   Abschnitt 9).
+- **Folge-Härtung aus der sechsten Prüfrunde** (09.10.2026, Version
+  0.3.2) — kein ausgehender Abruf folgt mehr Weiterleitungen,
+  Mensamax-URLs nur noch aus dem geprüften `origin`, zwei zusätzliche
+  Tests gegen per Mutationstest gefundene Lücken (siehe Abschnitt 9 und
+  `PEER-REVIEW-2026-10-09.md`).
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

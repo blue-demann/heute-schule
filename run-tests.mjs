@@ -515,6 +515,12 @@ test('file:// is rejected', () => {
 test('credentials in the URL are rejected', () => {
   assertWirft(() => checkSafeHttpsUrl('https://user:pw@parentsmensa.de'), 'keine Zugangsdaten');
 });
+test('a non-default port is rejected', () => {
+  assertWirft(() => checkSafeHttpsUrl('https://parentsmensa.de:8443'), 'kein eigener Port');
+});
+test('the explicit default port :443 is accepted (the parser drops it)', () => {
+  assertEqual(checkSafeHttpsUrl('https://parentsmensa.de:443').origin, 'https://parentsmensa.de');
+});
 test('an internal address as the base URL is rejected', () => {
   assertWirft(() => checkSafeHttpsUrl('https://192.168.1.1/admin'), 'internes/lokales Ziel');
 });
@@ -653,6 +659,21 @@ forAll(
   (host) => assertWirft(() => checkSafeHostname(host, { requiredSuffixes: [ALLOWED_TEST_SUFFIX] }), 'muss auf')
 );
 
+// Equivalence class: the allowed domain glued directly onto a random
+// label, without the separating dot ("evilparentsmensa.de"). Ends in the
+// domain name as a string, but is a different registrable domain — the
+// leading dot of the suffix is what makes the check a domain boundary.
+forAll(
+  'allowed domain glued on without a dot is always rejected (Mensamax list)',
+  (random) => `${randomLabel(random)}${ALLOWED_TEST_SUFFIX.slice(1)}`,
+  (host) => assertWirft(() => checkSafeHostname(host, { requiredSuffixes: [ALLOWED_TEST_SUFFIX] }), 'muss auf')
+);
+forAll(
+  'allowed domain glued on without a dot is always rejected (WebUntis single suffix)',
+  (random) => `${randomLabel(random)}webuntis.com`,
+  (host) => assertWirft(() => checkSafeHostname(host, { requiredSuffix: '.webuntis.com' }), 'muss auf')
+);
+
 console.log('\nProperty: checkSafeHostname() — the checked string is the host the fetch reaches');
 
 // The security property behind "WebUntis only on *.webuntis.com": whatever
@@ -762,17 +783,17 @@ forAll(
   assertParsesToSameAllowedHost
 );
 
-console.log('\nProperty: checkSafeHttpsUrl() — the worker\'s concatenated URLs stay on the checked host');
+console.log('\nProperty: checkSafeHttpsUrl() — the worker\'s Mensamax request URLs stay on the checked host');
 
-// worker.js appends paths to the raw Mensamax base ("${base}/login.aspx"),
-// while checkSafeHttpsUrl() checks the parsed URL. Appending text that
-// starts with "/" cannot change the authority, so both must agree, and
-// the host actually requested must be on the allowlist — checked here for
-// well-formed bases and for the same delimiter tricks as above.
+// worker.js builds every Mensamax request as "${origin}/<fixed path>" from
+// the URL checkSafeHttpsUrl() returns. For anything accepted, that request
+// must go to the checked, allowlisted host on the default port — checked
+// for well-formed bases (with paths, queries, ports, whitespace appended)
+// and for the same delimiter tricks as above.
 forAll(
-  'for every accepted Mensamax base, the concatenated request URL has the checked host',
+  'for every accepted Mensamax base, the request URLs the worker builds stay on the allowlisted host and default port',
   (random) => {
-    const tail = pick(random, ['', '/', '#', '?x', '\t', '/pfad']);
+    const tail = pick(random, ['', '/', '#', '?x', '\t', '/pfad', ':8443', ':443', '/umleitung?ziel=https://evil.example']);
     return random() < 0.5
       ? `https://${randomRfcLabel(random)}${ALLOWED_TEST_SUFFIX}${tail}`
       : `https://${randomAttackerHost(random)}${pick(random, ['#', '?', '\\', '\\@', ':443#'])}${randomFiller(random)}${ALLOWED_TEST_SUFFIX}${tail}`;
@@ -784,10 +805,13 @@ forAll(
     } catch {
       return; // rejected — always safe
     }
+    assertEqual(checked.port, '');
     for (const path of ['/login.aspx', '/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx']) {
-      const requestHost = new URL(`${base}${path}`).hostname;
-      assertEqual(requestHost, checked.hostname);
-      assert(requestHost.endsWith(ALLOWED_TEST_SUFFIX), `${requestHost} is not on the allowlist`);
+      const request = new URL(`${checked.origin}${path}`);
+      assertEqual(request.hostname, checked.hostname);
+      assertEqual(request.port, '');
+      assertEqual(request.pathname, path);
+      assert(request.hostname.endsWith(ALLOWED_TEST_SUFFIX), `${request.hostname} is not on the allowlist`);
     }
   }
 );
@@ -1141,6 +1165,120 @@ await testAsync('a successful Mensamax order is parsed off the plan page', async
   restoreFetch();
   const body = await resp.json();
   assertEqual(body.lunch, 'Essen bestellt: Spaghetti & Soße');
+});
+
+// Canned Mensamax responses for a successful login, shared by the
+// redirect/URL-construction tests below.
+function mensamaxLoginHandler() {
+  return {
+    test: (url) => url.endsWith('/login.aspx'),
+    respond: async (url, options) => {
+      if (options.method === 'POST') {
+        return new Response('<html>ok</html>', {
+          headers: [['Set-Cookie', 'MensaMax=tok123; Path=/'], ['Set-Cookie', 'ASP.NET_SessionId=sess1; Path=/']],
+        });
+      }
+      return new Response('<html><input name="__VIEWSTATE" value="x"><input name="__VIEWSTATEGENERATOR" value="x"><input name="__EVENTVALIDATION" value="x"></html>');
+    },
+  };
+}
+function mensamaxLunch(base) {
+  return { provider: 'mensamax', base, projekt: 'P', einrichtung: 'E', username: 'u', password: 'p' };
+}
+
+await testAsync('an unsafe Mensamax base is rejected before any network call', async () => {
+  for (const base of [
+    'https://angreifer.example',
+    'http://x.parentsmensa.de',
+    'https://192.168.1.1',
+    'https://parentsmensa.de.angreifer.example',
+    'https://evilparentsmensa.de',
+    'https://x.parentsmensa.de:8443',
+  ]) {
+    globalThis.caches = makeCachesStub();
+    const outbound = [];
+    mockFetch([{ test: () => true, respond: async (url) => { outbound.push(url); return new Response('', { status: 500 }); } }]);
+    const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch: mensamaxLunch(base), datum: '20260901' }), TEST_ENV, makeCtx());
+    restoreFetch();
+    assertEqual(outbound.length, 0);
+    const body = await resp.json();
+    assert(body.lunchFehler, `expected a lunch error for ${base}`);
+  }
+});
+
+await testAsync('REGRESSION: path, query and fragment of the Mensamax base never reach the request URL', async () => {
+  globalThis.caches = makeCachesStub();
+  const outbound = [];
+  mockFetch([{
+    test: () => true,
+    respond: async (url, options) => {
+      outbound.push(url);
+      if (url.includes('/PlanForm.aspx')) return new Response('<html></html>', { status: 200 });
+      return mensamaxLoginHandler().respond(url, options);
+    },
+  }]);
+  await proxyWorker.fetch(
+    apiRequest({ webuntis: {}, lunch: mensamaxLunch('https://x.parentsmensa.de/umleitung?ziel=https://evil.example#frag'), datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const allowed = new Set([
+    'https://x.parentsmensa.de/login.aspx',
+    'https://x.parentsmensa.de/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx',
+  ]);
+  assert(outbound.length === 3, `expected login GET, login POST and plan GET, got ${JSON.stringify(outbound)}`);
+  for (const url of outbound) assert(allowed.has(url), `unexpected request URL ${url}`);
+});
+
+await testAsync('REGRESSION: no outbound request follows redirects (WebUntis and Mensamax)', async () => {
+  globalThis.caches = makeCachesStub();
+  const redirectModes = [];
+  mockFetch([
+    {
+      test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+      respond: async (url, options) => {
+        redirectModes.push([url, options.redirect]);
+        return new Response(JSON.stringify({ error: { message: 'invalid credentials' } }));
+      },
+    },
+    {
+      test: (url) => url.includes('parentsmensa.de'),
+      respond: async (url, options) => {
+        redirectModes.push([url, options.redirect]);
+        if (url.includes('/PlanForm.aspx')) return new Response('<html></html>', { status: 200 });
+        return mensamaxLoginHandler().respond(url, options);
+      },
+    },
+  ]);
+  await proxyWorker.fetch(
+    apiRequest({
+      webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' },
+      lunch: mensamaxLunch('https://x.parentsmensa.de'),
+      datum: '20260901',
+    }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  assert(redirectModes.length === 4, `expected 1 WebUntis + 3 Mensamax requests, got ${redirectModes.length}`);
+  for (const [url, mode] of redirectModes) assertEqual(`${url} → ${mode}`, `${url} → manual`);
+});
+
+await testAsync('a redirect on the Mensamax plan page is reported as unavailable, not followed', async () => {
+  globalThis.caches = makeCachesStub();
+  const outbound = [];
+  mockFetch([
+    mensamaxLoginHandler(),
+    {
+      test: (url) => url.includes('/PlanForm.aspx'),
+      respond: async () => new Response(null, { status: 302, headers: { Location: 'https://evil.example/' } }),
+    },
+    { test: () => true, respond: async (url) => { outbound.push(url); return new Response('', { status: 500 }); } },
+  ]);
+  const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' }), TEST_ENV, makeCtx());
+  restoreFetch();
+  assertEqual(outbound.length, 0);
+  const body = await resp.json();
+  assertEqual(body.lunch, 'Schulessen: Daten nicht verfügbar');
 });
 
 await testAsync('a ccCampus child sent to the proxy anyway gets the "runs in the browser" note, no network call', async () => {

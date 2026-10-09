@@ -73,7 +73,13 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   wachsbare Domain-Allowlist (`MENSAMAX_ALLOWED_DOMAINS` in `worker.js`,
   aktuell nur `parentsmensa.de`), damit der Proxy nicht als Relay gegen
   beliebige öffentliche Hosts missbraucht werden kann. Nutzt eine Schule
-  Mensamax unter einer anderen Domain, dort ergänzen.
+  Mensamax unter einer anderen Domain, dort ergänzen. Ein eigener Port ist
+  nicht erlaubt; Pfad, Query und Fragment der Basis-URL werden ignoriert —
+  die Anfragen entstehen nur aus deren `origin` plus festem Pfad.
+- Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` in
+  `fetchWithTimeout`). Die Prüfung oben gilt nur für die erste URL; eine
+  gefolgte Weiterleitung könnte die Anfrage samt Session-Cookie an einen
+  beliebigen Host schicken.
 
 ## Offene Punkte
 

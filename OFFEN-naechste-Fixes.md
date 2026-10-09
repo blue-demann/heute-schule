@@ -16,7 +16,11 @@ Eine fünfte Runde, ebenfalls am 01.09. und bewusst ohne die vierte Runde zu
 kennen (Unabhängigkeit), prüfte den QA-Bericht vom 31.08. gegen und führte
 zusätzlich ein eigenes Audit durch — fand dabei den schwerwiegendsten
 Befund bisher: den nicht deployten SSRF-Fix, siehe unten und
-[PEER-REVIEW-2026-09-01.md](PEER-REVIEW-2026-09-01.md).
+[PEER-REVIEW-2026-09-01.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-09-01.md).
+Eine sechste Runde am 09.10.2026 (frische Sitzung, kein Vorwissen über die
+Fix-Sitzung) prüfte gezielt den Fix der Host-Verwechslung im
+WebUntis-Hostcheck und fand drei weitere 🟡-Punkte im selben Umfeld, siehe
+unten und [PEER-REVIEW-2026-10-09.md](PEER-REVIEW-2026-10-09.md).
 (Links zu Berichten, die nicht Teil des `web/docs/`-Dumps sind, zeigen
 bewusst auf GitHub statt auf eine relative Datei — dort würde ein
 relativer Link ins Leere laufen.) Alle Berichte bleiben als
@@ -43,7 +47,8 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (Peer-Review 01.09., Fund D-2) ESLint schloss `web/**` komplett von jeder Prüfung aus, nicht nur eine einzelne Regel | `eslint-plugin-html` prüft jetzt `web/index.html`/`web/ueber.html` (Inline-Script) und `web/sw.js` mit denselben Regeln wie der übrige Code (außer `var`); erster echter Lauf fand vier reale, bisher unentdeckte kleine Probleme im Code, alle behoben |
 | Deploy hing am kontoweiten `wrangler login` — ein langlebiger OAuth-Token im Klartext auf der Platte, mit Schreibrechten auf nahezu alle Cloudflare-Produkte des Kontos, der bis ins Nachbarprojekt Spektrum reichte (Fund aus dessen Chaos-Review) | Login entfernt (`wrangler logout`, 02.10.2026, Gegenprobe: keine `config/default.toml` mehr unter `~/Library/Preferences/.wrangler`, keine Profildatei mit Zugangsdaten). Stattdessen API-Token mit genau zwei Rechten (`Cloudflare Pages`, `Workers Scripts`) plus Account-ID im macOS-Schlüsselbund; `deploy.sh` liest, prüft und exportiert sie nur für die Dauer des Laufs. Dass die zwei Rechte genügen, ist durch einen vollständigen Deploy (Proxy + Website) am 02.10.2026 belegt — die zuvor ebenfalls vergebenen `Account Settings` und `User Details` wurden vorher entfernt. `wrangler` auf `4.144.0` gepinnt |
 | Der Live-vs-HEAD-Check schlug nach jedem Website-Deploy falschen Alarm — die drei Sekunden Wartezeit reichten nicht, bis Cloudflare Pages die neue Version auslieferte | Bis zu acht Versuche im Abstand von fünf Sekunden, Abbruch beim ersten Treffer; die Warnung erscheint nur noch, wenn der Stand nach 40 Sekunden wirklich nicht ankommt. Vier Fälle gegengeprüft (Treffer beim 1./4./8. Versuch, nie) |
-| 🔴 (Befund 09.10.2026) Host-Verwechslung im WebUntis-Hostcheck: `checkSafeHostname()` sperrte nur `/` und `@`, prüfte sonst nur die Endung als String — `evil.example#.webuntis.com`, `…?.webuntis.com`, `…\.webuntis.com`, `evil.example:443#.webuntis.com` und `127.0.0.1#.webuntis.com` kamen durch, der Worker rief dann `evil.example` bzw. `127.0.0.1` ab (offener Relay) | Positive Validierung nach RFC 1123 vor der Endungsprüfung (`proxy/hostcheck.mjs`), im Worker zusätzlich `httpsUrlForHost()`, das abbricht, wenn der URL-Parser einen anderen Host auflöst. Property-Tests je Angriffsklasse (Fragment, Query, Backslash, Port, Leerraum, Prozent-Kodierung, Userinfo) plus Worker-Regressionstest; Gegenprobe: gegen den alten Code rot (außer Userinfo, dort griff schon die `@`-Sperre). Mensamax (`checkSafeHttpsUrl`) war nicht betroffen, weil dort die geparste URL geprüft wird — jetzt per Property abgesichert. **Live erst nach `./deploy.sh`** |
+| 🔴 (Befund 09.10.2026) Host-Verwechslung im WebUntis-Hostcheck: `checkSafeHostname()` sperrte nur `/` und `@`, prüfte sonst nur die Endung als String — `evil.example#.webuntis.com`, `…?.webuntis.com`, `…\.webuntis.com`, `evil.example:443#.webuntis.com` und `127.0.0.1#.webuntis.com` kamen durch, der Worker rief dann `evil.example` bzw. `127.0.0.1` ab (offener Relay) | Positive Validierung nach RFC 1123 vor der Endungsprüfung (`proxy/hostcheck.mjs`), im Worker zusätzlich `httpsUrlForHost()`, das abbricht, wenn der URL-Parser einen anderen Host auflöst. Property-Tests je Angriffsklasse (Fragment, Query, Backslash, Port, Leerraum, Prozent-Kodierung, Userinfo) plus Worker-Regressionstest; Gegenprobe: gegen den alten Code rot (außer Userinfo, dort griff schon die `@`-Sperre). Mensamax (`checkSafeHttpsUrl`) war nicht betroffen, weil dort die geparste URL geprüft wird — jetzt per Property abgesichert. Live seit 09.10.2026 (Version 0.3.1), per `curl` gegen den Live-Proxy verifiziert |
+| 🟡 (Peer-Review 09.10., Funde A-1 bis A-3) Rund um den Hostcheck-Fix: (1) ausgehende Abrufe folgten Weiterleitungen — der Plan-Abruf samt Session-Cookie, also hätte eine einzige offene Weiterleitung auf einer erlaubten Mensamax-Domain wieder einen Relay ergeben; (2) die Mensamax-URLs entstanden aus dem rohen `base`-String, Pfad, Query und Port waren damit frei wählbar (und machten (1) erst ausnutzbar); (3) zwei Regressionen blieben von den Tests unbemerkt: fehlender `checkSafeHttpsUrl`-Aufruf im Worker und Endungsprüfung ohne führenden Punkt (`evilwebuntis.com`) | `fetchWithTimeout` setzt immer `redirect: 'manual'`, eine Weiterleitung gilt als Fehler; Mensamax-URLs nur noch aus `origin` der geprüften URL plus festem Pfad; `checkSafeHttpsUrl` lehnt einen eigenen Port ab. Neue Tests: unsichere Mensamax-Basis ohne Netzzugriff, Pfad/Query der Basis erreichen nie die Anfrage, jede Anfrage mit `redirect: 'manual'`, Property-Klasse „Domain ohne Punkt angehängt“. Gegenprobe: gegen Version 0.3.1 fünf Tests rot; jeder der vier Mutanten (Prüfung gelöscht, Endung ohne Punkt, Weiterleitungen folgen, roher `base`) wird von mindestens einem Test erkannt. Dazu Doku-Korrekturen aus derselben Runde (K-2, K-3, D-5). Version 0.3.2 |
 | Testlücke aus der Code-Coverage-Einführung: `proxy/worker.js` (der HTTP-Handler selbst) lag bei 0 % | Direkter Test des exportierten `fetch()`-Handlers — kleiner selbstgebauter `caches`-Stub, gemocktes `fetch()`, native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit. Jetzt ~99 % Statement-Coverage, 17 neue Tests (Routing, Rate-Limit, Cache-Hit-Regression, WebUntis-/Mensamax-Voll-Durchlauf inkl. Fehlerfälle) |
 
 ## Noch offen
@@ -94,6 +99,25 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Keine Sicherheitsgrenze (die liegt im Proxy, siehe Erledigt-Tabelle),
    aber `schule.webuntis.com\WebUntis` bliebe ungekürzt und würde dann
    vom Proxy abgelehnt statt bereinigt.
+8. **🟡 Wartungs-Vorhaben „Prüfer nachziehen“** (Entwicklungsprozess Q38,
+   09.10.2026; Befunde aus `~/dev/claude/entwicklungsprozess/REGEL-INVENTAR.md`).
+   Zusammen mit Punkt 6 umsetzen, jede Prüfung mit Gegenprobe (ein Fall,
+   der rot werden muss). Keine neue Abhängigkeit nötig.
+   - **Falsches Grün im Live-Check:** `deploy.sh` schreibt den HEAD-Hash auch
+     bei unsauberem Arbeitsbaum und meldet dann „Live-Stand entspricht
+     HEAD“. Deploy nur aus sauberem Baum (Muster: `spektrum/deploy.sh:53-59`).
+   - **ESLint ergänzen:** `no-eval`, `no-implied-eval`, `no-new-func`, Verbot
+     von `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write`
+     (bewusste Ausnahmen mit Begründung), `no-console` für `proxy/**`.
+   - **`npm audit --audit-level=high` als Deploy-Gate**, nicht nur in der CI.
+   - **Test der Sicherheits-Header** in `web/_headers` (HSTS ≥ 1 Jahr,
+     CSP-Pflichtteile, `nosniff`, Referrer-Policy; Muster:
+     `spektrum/test/security.test.mjs`).
+   - **ES5-Ziel aufgeben, auf ES2019 anheben** (Björn, 09.10.): Das
+     Inline-Skript in `index.html` nutzt schon `catch {` ohne Variable
+     (ES2019). Entscheidungs-Log in `PROJEKT.md` („ES5-Syntax“) und
+     Kommentar in `eslint.config.mjs` anpassen, dort `ecmaVersion: 2019`
+     für `index.html`/`ueber.html` setzen, damit neuere Syntax auffällt.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

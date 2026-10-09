@@ -90,7 +90,7 @@ for PAIR in \
   "PROJEKT.md:web/docs/PROJEKT.md" \
   "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md" \
   "QA-Bericht-2026-08-31.md:web/docs/QA-Bericht-2026-08-31.md" \
-  "PEER-REVIEW-2026-09-01.md:web/docs/PEER-REVIEW-2026-09-01.md" \
+  "PEER-REVIEW-2026-10-09.md:web/docs/PEER-REVIEW-2026-10-09.md" \
   "prompts/README.md:web/docs/prompts/README.md" \
   "prompts/ct-stil-analyse.md:web/docs/prompts/ct-stil-analyse.md" \
   "prompts/peer-review-bester-freund.md:web/docs/prompts/peer-review-bester-freund.md"; do
