@@ -145,8 +145,10 @@ Zu klären, bevor der Kreis weiter wächst:
 - [x] AVV mit Cloudflare verifiziert (28.08.2026, im Konto bestätigt, nicht
       nur angenommen) — Details in `Verarbeitungsverzeichnis-INTERN.md`
       Abschnitt 4
-- [ ] Überlegen, ob „Demo-Website" die richtige Formulierung bleibt, wenn
-      fremde Eltern echte Zugangsdaten ihrer Kinder eingeben
+- [x] Überlegen, ob „Demo-Website" die richtige Formulierung bleibt, wenn
+      fremde Eltern echte Zugangsdaten ihrer Kinder eingeben — ersetzt durch
+      „Privates Hobby-Projekt, ohne Gewähr und ohne zugesicherte
+      Verfügbarkeit“ (09.10.2026)
 
 ## Sicherheit / Datenschutz
 
