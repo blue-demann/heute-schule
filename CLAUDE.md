@@ -33,4 +33,4 @@ Live-vs-HEAD-Check aus. Bei fehlschlagenden Tests wird nicht deployed.
   vorschlagen (siehe `prompts/` für Vorlagen) — dieses Projekt lebt von dem Muster
 
 Für alles, was projektübergreifend gilt (Sprache, Speicherort, Arbeitsweise),
-siehe die `CLAUDE.md` eine Ebene höher in `Meine Ablage/Claude/`.
+siehe `~/.claude/CLAUDE.md`; die Projektübersicht steht in `~/dev/claude/CLAUDE.md`.
