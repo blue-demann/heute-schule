@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-**Stand: 01.09.2026 · Version 0.3.0**
+**Stand: 09.10.2026 · Version 0.3.1**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -562,7 +562,7 @@ Meilensteine seit dem ersten Commit (27.08.2026):
 - **Repository öffentlich gemacht** (02.09.2026) — GitHub-eigenes
   Secret-Scanning + Push Protection sowie Dependabot Security Updates
   dadurch zusätzlich verfügbar geworden und aktiviert.
-- **Host-Verwechslung im WebUntis-Hostcheck** (09.10.2026) — die
+- **Host-Verwechslung im WebUntis-Hostcheck** (09.10.2026, Version 0.3.1) — die
   Endungsprüfung auf `.webuntis.com` ließ Eingaben wie
   `evil.example#.webuntis.com` durch; der Proxy war damit erneut ein
   offener Relay. Jetzt positive Hostname-Validierung nach RFC 1123 plus
