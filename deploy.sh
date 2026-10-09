@@ -87,6 +87,15 @@ fi
 echo "  ✓ sauber"
 echo ""
 
+echo "▶ Typprüfung (tsc --checkJs, siehe tsconfig.json)…"
+if ! npx --no-install tsc -p tsconfig.json; then
+  echo ""
+  echo "✗ Typfehler — Deploy abgebrochen."
+  exit 1
+fi
+echo "  ✓ keine Typfehler"
+echo ""
+
 # High/critical only, like the CI step. Covers every devDependency,
 # including wrangler itself. Fails closed: if the registry can't be
 # reached, npm audit exits non-zero and nothing gets deployed.
@@ -108,6 +117,7 @@ for PAIR in \
   "proxy/worker.js:web/source/proxy/worker.js" \
   "proxy/hostcheck.mjs:web/source/proxy/hostcheck.mjs" \
   "proxy/cachekey.mjs:web/source/proxy/cachekey.mjs" \
+  "proxy/validate.mjs:web/source/proxy/validate.mjs" \
   "PROJEKT.md:web/docs/PROJEKT.md" \
   "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md" \
   "QA-Bericht-2026-08-31.md:web/docs/QA-Bericht-2026-08-31.md" \

@@ -255,6 +255,7 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 |---|---|---|
 | Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst. Mensamax-URLs entstehen nur aus `origin` der geprüften Basis-URL plus festem Pfad (kein eigener Port). Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` zentral in `fetchWithTimeout`) — die Host-Prüfung gilt nur für die erste URL |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
+| Laufzeitvalidierung an der Vertrauensgrenze | `proxy/validate.mjs` | Ungeprüfte Daten im Proxy: Der Request-Body aus dem Browser darf nur bekannte Felder als Text enthalten (sonst 400, unbekannte Felder fallen weg); jede WebUntis-Antwort wird vor der Verwendung auf genau die genutzten Felder geprüft und bei Strukturfehlern als Ganzes abgelehnt („WebUntis: unerwartete Antwort auf …“, ohne Inhalte des Anbieters). Die `sessionId` darf nur Token-Zeichen enthalten, weil sie in den `Cookie`-Header geht — kein Zeilenumbruch, kein `;` |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
 | Security-Header (CSP, HSTS, X-Frame-Options, Permissions-Policy) | `web/_headers` | Clickjacking, Nachladen fremden Codes; CSP mit `unsafe-inline`, weil bewusst kein Build-Schritt existiert (siehe Nicht-Ziele) |
@@ -346,6 +347,7 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | `checkSecurityHeaders()`, `compareHeaders()` | `tools/headers.mjs`, `web/_headers` | Pflichtteile der Sicherheits-Header (HSTS ≥ 1 Jahr, CSP-Kern, `nosniff`, Referrer-Policy, `X-Frame-Options`, Permissions-Policy); jede Anforderung einzeln entfernt bzw. abgeschwächt muss namentlich gemeldet werden. Derselbe Code vergleicht in `deploy.sh` die Live-Header mit der Datei |
 | ESLint-Konfiguration | `eslint.config.mjs` | Prüft die Prüfer: Jede Sicherheitsregel (`no-eval`, `no-implied-eval`, `no-new-func`, `innerHTML` & Co., `no-console` im Proxy) muss ihr Konstrukt melden, die erlaubte Variante nicht; ES2020-Syntax in `index.html`/`ueber.html`/`sw.js` muss ein Parse-Fehler sein |
 | Lizenzen | `package-lock.json` | Alle Pakete reine Entwicklungsabhängigkeiten unter freigegebener Lizenz (MIT, ISC, Apache-2.0, BSD, BlueOak, 0BSD, CC0); benannte Ausnahme LGPL nur für `@img/sharp-*` (kommt über `wrangler`, wird nie ausgeliefert) |
+| `validateRequestBody()`, `validateRpcEnvelope()`, `validateAuth()`, `validateLessons()` u. a. (Property-Tests) | `proxy/validate.mjs` | Gültige Antworten mit beliebigen Zusatzfeldern gehen unverändert durch; je eine benannte Schadensklasse (falscher Typ oder Bereich der `id`, fehlende `id`, Uhrzeit außerhalb 0–2359 oder Minute ≥ 60, `code` kein Text, Fach-/Raum-Verweise ohne gültige `id`, Eintrag kein Objekt) wird immer abgelehnt; `sessionId` mit Zeichen, die einen Header brechen, ebenso; Request-Body mit Nicht-Text-Feld oder überlangem Feld → abgelehnt. Dazu Worker-Tests: kaputte Antwort wird nicht als „Passwort falsch“ gemeldet, eine `sessionId` mit CR/LF erreicht nie einen `Cookie`-Header |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -381,6 +383,18 @@ gegen gezielte Mutanten der neuen Prüfung. Die Worker-Tests prüfen
 zusätzlich, dass jede ausgehende Anfrage mit `redirect: 'manual'` läuft
 und eine konfigurierte Basis-URL nur über ihren `origin` in die Anfrage
 gelangt.
+
+**Typprüfung** (seit 09.10.2026): `npm run typecheck` — `tsc --checkJs`
+im strict-Modus über JSDoc-Typen, ohne Build-Schritt, `typescript` exakt
+gepinnt. Geprüft werden der Proxy (`proxy/*`), `stundenplan.js` und
+`web/sw.js`; gemeinsame Formen und die wenigen benötigten Cloudflare-Typen
+stehen in `types/heute-schule.d.ts`. **Nicht** geprüft wird das
+Inline-Script in `web/index.html`/`web/ueber.html` — `tsc` kann JavaScript
+in HTML nicht lesen (offener Punkt in `OFFEN-naechste-Fixes.md`). Gate in
+`deploy.sh` und in der CI. Gegenprobe: ein eingebauter Typfehler
+(`requiredSuffix: 42`) ließ `tsc` mit Exit 1 abbrechen. Beim Einführen fand
+`tsc` eine echte Unschärfe: Der Service Worker gab offline ohne Cache-Treffer
+`undefined` an `respondWith()` weiter, jetzt ausdrücklich `Response.error()`.
 
 **Code Coverage** (`c8`, seit 01.09.2026): `npm run test:coverage` bzw. als
 Info-Zeile in `deploy.sh` (bricht den Deploy nicht ab). Miss nur, was
@@ -494,7 +508,7 @@ Reihenfolge der Prüfungen in `deploy.sh` — jede bricht den Deploy ab:
    Zugriff auf den Schlüsselbund. Sonst meldete der Live-Check am Ende „Live
    entspricht HEAD“, obwohl nicht committete Änderungen deployt wurden.
 2. Zugangsdaten aus dem Schlüsselbund, Formatprüfung
-3. Testsuite (mit Coverage-Info), Lint
+3. Testsuite (mit Coverage-Info), Lint, Typprüfung
 4. **`npm audit --audit-level=high`** — deckt alle Entwicklungsabhängigkeiten
    ab, auch `wrangler` selbst. Ist die Registry nicht erreichbar, wird nicht
    deployt.
@@ -643,6 +657,16 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   Mensamax-URLs nur noch aus dem geprüften `origin`, zwei zusätzliche
   Tests gegen per Mutationstest gefundene Lücken (siehe Abschnitt 9 und
   `PEER-REVIEW-2026-10-09.md`).
+- **Wartungs-Vorhaben „Prüfer nachziehen“** (09.10.2026, Version 0.3.3) —
+  Deploy nur aus sauberem Arbeitsbaum, `npm audit` als Deploy-Gate (dafür
+  `wrangler` ins Lockfile; das Audit fand sofort eine hohe Lücke in der
+  bisher gepinnten Version), ESLint-Sicherheitsregeln, Test und
+  Live-Vergleich der Sicherheits-Header, Lizenztest, Syntax-Ziel ES2019
+  statt des nie eingehaltenen ES5, Typprüfung mit `tsc --checkJs` und
+  Laufzeitvalidierung von Request-Body und WebUntis-Antworten. Dazu die
+  kleineren offenen Punkte (Hinweistext, WCAG-Leitlinie, Backslash im
+  Server-Feld, Apple-Touch-Icon geprüft). Jede neue Prüfung mit Gegenprobe
+  gegen den alten Stand oder gezielte Mutanten.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

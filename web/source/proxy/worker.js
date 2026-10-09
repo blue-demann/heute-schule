@@ -41,6 +41,9 @@
 
 import { checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './hostcheck.mjs';
 import { buildCacheKeyMaterial } from './cachekey.mjs';
+import {
+  validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
+} from './validate.mjs';
 
 const FETCH_TIMEOUT_MS = 10000;
 const CACHE_TTL_SECONDS = 240; // 4 minutes
@@ -53,6 +56,7 @@ const CACHE_TTL_SECONDS = 240; // 4 minutes
 // abuse, WebUntis would see our Cloudflare IP, not the attacker's).
 const RATE_LIMIT_PER_MINUTE = 30;
 
+/** @param {string} text */
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -70,6 +74,10 @@ async function sha256Hex(text) {
 //
 // The IP is only ever used hashed, never written into a cache key in
 // plaintext (data minimization — it should be counted, not stored).
+/**
+ * @param {Request} request
+ * @param {ExecutionContext} ctx
+ */
 async function isRateLimited(request, ctx) {
   const ip = request.headers.get('CF-Connecting-IP');
   if (!ip) return false; // e.g. locally via `wrangler dev` — don't block there
@@ -100,13 +108,17 @@ async function isRateLimited(request, ctx) {
 //   login data — to whatever host the Location header names, so one open
 //   redirect on an allowed domain would turn the proxy into a relay.
 //   A 3xx response is returned as is and treated as an error by the caller.
+/**
+ * @param {string} url
+ * @param {RequestInit} [options]
+ */
 async function fetchWithTimeout(url, options) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     return await fetch(url, { ...options, redirect: 'manual', signal: controller.signal });
   } catch (e) {
-    if (e && e.name === 'AbortError') {
+    if (e instanceof Error && e.name === 'AbortError') {
       throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (>${FETCH_TIMEOUT_MS / 1000}s)`, { cause: e });
     }
     throw e;
@@ -119,6 +131,12 @@ async function fetchWithTimeout(url, options) {
 // cachekey.mjs. Short version: without the password in the key, a cache
 // hit would serve someone else's data without ever checking a login. The
 // credentials are only ever hashed (SHA-256), never stored in plaintext.
+/**
+ * @param {Request} request
+ * @param {string} datum
+ * @param {WebUntisConfig} webuntisCfg
+ * @param {LunchConfig} lunchCfg
+ */
 async function buildCacheKey(request, datum, webuntisCfg, lunchCfg) {
   const enc = new TextEncoder().encode(buildCacheKeyMaterial(datum, webuntisCfg, lunchCfg));
   const digestBuf = await crypto.subtle.digest('SHA-256', enc);
@@ -133,16 +151,23 @@ async function buildCacheKey(request, datum, webuntisCfg, lunchCfg) {
 // early morning (UTC offset). So: either use the date the client already
 // sent along (the browser knows its own local time correctly), or, as a
 // fallback, explicitly resolve the Europe/Berlin timezone.
+/** @param {string | undefined} explicit */
 function resolveDate(explicit) {
   if (explicit && /^\d{8}$/.test(explicit)) return explicit;
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
   });
+  /** @type {Record<string, string>} */
   const parts = {};
   formatter.formatToParts(new Date()).forEach((p) => { parts[p.type] = p.value; });
   return `${parts.year}${parts.month}${parts.day}`;
 }
 
+/**
+ * @param {unknown} obj
+ * @param {number} status
+ * @param {Record<string, string>} corsHeaders
+ */
 function jsonResponse(obj, status, corsHeaders) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -152,6 +177,13 @@ function jsonResponse(obj, status, corsHeaders) {
 
 // ── WebUntis ─────────────────────────────────────────────────────────────
 
+/**
+ * @param {string} server
+ * @param {string | null} cookie
+ * @param {string} method
+ * @param {Record<string, unknown>} params
+ * @returns {Promise<unknown>}
+ */
 async function webuntisRpc(server, cookie, method, params) {
   const safeServer = checkSafeHostname(server, { requiredSuffix: '.webuntis.com' });
   const resp = await fetchWithTimeout(httpsUrlForHost(safeServer, '/WebUntis/jsonrpc.do'), {
@@ -169,10 +201,16 @@ async function webuntisRpc(server, cookie, method, params) {
   } catch (e) {
     throw new Error(`WebUntis ${method}: keine gültige JSON-Antwort (HTTP ${resp.status})`, { cause: e });
   }
-  if (data.error) throw new Error(`WebUntis ${method}: ${data.error.message}`);
-  return data.result;
+  const envelope = validateRpcEnvelope(data, method);
+  if ('error' in envelope) throw new Error(`WebUntis ${method}: ${envelope.error}`);
+  return envelope.result;
 }
 
+/**
+ * @param {WebUntisConfig} webuntisCfg
+ * @param {string} datumStr
+ * @returns {Promise<Lesson[]>}
+ */
 async function getTimetable({ server, user, password, klasse }, datumStr) {
   if (!server || !user || !password || !klasse) {
     throw new Error('WebUntis-Konfiguration unvollständig (server/user/password/klasse)');
@@ -180,16 +218,16 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
 
   let auth;
   try {
-    auth = await webuntisRpc(server, null, 'authenticate', {
+    auth = validateAuth(await webuntisRpc(server, null, 'authenticate', {
       user, password, client: 'stundenplan-proxy',
-    });
+    }));
   } catch (e) {
     // Distinguish: did WebUntis respond and reject the login (wrong
     // username/password), or was it a connection problem? Only in the
     // first case is a "check your password" message worth showing — in
     // the second it would be misleading, so we pass the original message
     // through instead.
-    const msg = String((e && e.message) || e);
+    const msg = e instanceof Error ? e.message : String(e);
     if (msg.indexOf('WebUntis authenticate:') === 0) {
       throw new Error('WebUntis-Login fehlgeschlagen — Benutzername oder Passwort prüfen.', { cause: e });
     }
@@ -199,18 +237,20 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
 
   const dateInt = parseInt(datumStr, 10);
 
-  const classes = await webuntisRpc(server, cookie, 'getKlassen', {});
+  const classes = validateClasses(await webuntisRpc(server, cookie, 'getKlassen', {}));
   const classObj = classes.find(k => k.name.toLowerCase() === klasse.toLowerCase());
   if (!classObj) throw new Error(`Klasse "${klasse}" bei WebUntis nicht gefunden`);
 
-  const lessons = await webuntisRpc(server, cookie, 'getTimetable', {
+  const lessons = validateLessons(await webuntisRpc(server, cookie, 'getTimetable', {
     id: classObj.id, type: 1, startDate: dateInt, endDate: dateInt,
-  });
-  const subjects = await webuntisRpc(server, cookie, 'getSubjects', {});
-  const rooms = await webuntisRpc(server, cookie, 'getRooms', {});
+  }));
+  const subjects = validateSubjects(await webuntisRpc(server, cookie, 'getSubjects', {}));
+  const rooms = validateRooms(await webuntisRpc(server, cookie, 'getRooms', {}));
 
+  /** @type {Record<number, string>} */
   const subjectNameById = {};
   subjects.forEach(f => { subjectNameById[f.id] = f.longName || f.name || '?'; });
+  /** @type {Record<number, string>} */
   const roomNameById = {};
   rooms.forEach(r => { roomNameById[r.id] = r.name || '?'; });
 
@@ -256,18 +296,27 @@ const HTML_ENTITIES = {
   auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü', szlig: 'ß',
   eacute: 'é', egrave: 'è', ecirc: 'ê', agrave: 'à', ccedil: 'ç', euro: '€',
 };
+/** @param {string} str */
 function decodeHtmlEntities(str) {
   return str
     .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&([a-zA-Z]+);/g, (m, name) => (name in HTML_ENTITIES ? HTML_ENTITIES[name] : m));
+    .replace(/&([a-zA-Z]+);/g, (m, name) => (Object.hasOwn(HTML_ENTITIES, name) ? HTML_ENTITIES[/** @type {keyof typeof HTML_ENTITIES} */ (name)] : m));
 }
 
+/**
+ * @param {string} html
+ * @param {string} name
+ */
 function extractHidden(html, name) {
   const m = html.match(new RegExp(`name="${name}"[^>]*value="([^"]*)"`));
   return m ? m[1] : '';
 }
 
+/**
+ * @param {Response} resp
+ * @returns {string[]}
+ */
 function getSetCookies(resp) {
   // Cloudflare Workers supports headers.getSetCookie(); fall back if not.
   if (typeof resp.headers.getSetCookie === 'function') {
@@ -277,7 +326,12 @@ function getSetCookies(resp) {
   return single ? [single] : [];
 }
 
-async function getMensamaxCookies(origin, { projekt, einrichtung, username, password }) {
+/**
+ * @param {string} origin
+ * @param {LunchConfig} lunchCfg
+ * @returns {Promise<string | null>}
+ */
+async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', username = '', password = '' }) {
   const loginPage = await fetchWithTimeout(`${origin}/login.aspx`);
   const loginHtml = await loginPage.text();
 
@@ -298,6 +352,7 @@ async function getMensamaxCookies(origin, { projekt, einrichtung, username, pass
     body: payload,
   });
 
+  /** @type {Record<string, string>} */
   const cookies = {};
   getSetCookies(loginResp).forEach(c => {
     const m = c.match(/^([^=]+)=([^;]*)/);
@@ -327,6 +382,11 @@ async function getMensamaxCookies(origin, { projekt, einrichtung, username, pass
     .join('; ');
 }
 
+/**
+ * @param {LunchConfig} lunchCfg
+ * @param {string} datumStr
+ * @returns {Promise<string>}
+ */
 async function getLunchStatus(lunchCfg, datumStr) {
   const provider = lunchCfg.provider || 'mensamax';
   if (provider === 'cccampus') {
@@ -342,6 +402,11 @@ async function getLunchStatus(lunchCfg, datumStr) {
   return getLunchStatusMensamax(lunchCfg, datumStr);
 }
 
+/**
+ * @param {LunchConfig} lunchCfg
+ * @param {string} datumStr
+ * @returns {Promise<string>}
+ */
 async function getLunchStatusMensamax(lunchCfg, datumStr) {
   const { base } = lunchCfg;
   if (!base || !lunchCfg.username || !lunchCfg.password) {
@@ -404,6 +469,11 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
 // ── HTTP handler ─────────────────────────────────────────────────────────
 
 export default {
+  /**
+   * @param {Request} request
+   * @param {ProxyEnv} env
+   * @param {ExecutionContext} ctx
+   */
   async fetch(request, env, ctx) {
     const corsHeaders = {
       'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
@@ -432,16 +502,19 @@ export default {
       );
     }
 
+    // Only known fields, each a string or absent (see validate.mjs) — the
+    // body comes straight from the browser and is as untrusted as any
+    // upstream answer.
     let body;
     try {
-      body = await request.json();
+      body = validateRequestBody(await request.json());
     } catch {
-      return jsonResponse({ error: 'Ungültiger Request-Body (JSON erwartet)' }, 400, corsHeaders);
+      return jsonResponse({ error: 'Ungültiger Request-Body' }, 400, corsHeaders);
     }
 
     const datum = resolveDate(body.datum);
-    const webuntisCfg = body.webuntis || {};
-    const lunchCfg = body.lunch || {};
+    const webuntisCfg = body.webuntis;
+    const lunchCfg = body.lunch;
 
     // Short-lived cache: an identical request (same child, same day)
     // within the TTL doesn't hit WebUntis/Mensamax again.

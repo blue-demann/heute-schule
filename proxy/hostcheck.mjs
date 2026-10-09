@@ -18,6 +18,7 @@
 // Loopback, private and link-local targets are never legitimate school
 // portals. The link-local block (169.254.0.0/16) also covers the classic
 // cloud-metadata trick, 169.254.169.254.
+/** @param {unknown} hostname */
 export function isPrivateOrLocalTarget(hostname) {
   const h = String(hostname || '').toLowerCase();
   if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.localhost')) return true;
@@ -55,6 +56,10 @@ export function isPrivateOrLocalTarget(hostname) {
 // focus (see extractWebUntisHostname in web/index.html) — this second,
 // server-side stage catches older website versions and anything the
 // frontend failed to clean up for whatever reason.
+/**
+ * @param {unknown} input
+ * @returns {string}
+ */
 function extractHostnameFromUrl(input) {
   const value = String(input || '').trim();
   if (/^https?:\/\//i.test(value)) {
@@ -76,6 +81,7 @@ function extractHostnameFromUrl(input) {
 // A bare non-ASCII name is rejected; inside a full https:// URL the parser
 // has already converted it to its xn-- form before this check runs.
 const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+/** @param {string} h */
 function isValidHostnameSyntax(h) {
   return h.length <= 253 && h.split('.').every((label) => HOSTNAME_LABEL.test(label));
 }
@@ -85,6 +91,11 @@ function isValidHostnameSyntax(h) {
 // where different schools can use different portal domains of the same
 // provider type) — the hostname must end in at least one of them. Both
 // parameters are optional and mutually exclusive.
+/**
+ * @param {unknown} hostname
+ * @param {{ requiredSuffix?: string, requiredSuffixes?: string[] }} [options]
+ * @returns {string}
+ */
 export function checkSafeHostname(hostname, { requiredSuffix, requiredSuffixes } = {}) {
   const h = extractHostnameFromUrl(hostname).trim().toLowerCase();
   if (!isValidHostnameSyntax(h)) {
@@ -110,6 +121,11 @@ export function checkSafeHostname(hostname, { requiredSuffix, requiredSuffixes }
 // checkSafeHostname() and fails closed unless the URL parser resolves it
 // to exactly that host — a second, independent guard in case the syntax
 // check above and the parser ever disagree. path must start with "/".
+/**
+ * @param {string} hostname
+ * @param {string} path
+ * @returns {string}
+ */
 export function httpsUrlForHost(hostname, path) {
   let url;
   try {
@@ -123,6 +139,11 @@ export function httpsUrlForHost(hostname, path) {
   return url.href;
 }
 
+/**
+ * @param {string} rawUrl
+ * @param {{ requiredSuffixes?: string[] }} [options]
+ * @returns {URL}
+ */
 export function checkSafeHttpsUrl(rawUrl, { requiredSuffixes } = {}) {
   let url;
   try {

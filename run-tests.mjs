@@ -16,6 +16,9 @@ import stundenplan from './stundenplan.js';
 import { parseHeadersFile, checkSecurityHeaders, compareHeaders } from './tools/headers.mjs';
 import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './proxy/hostcheck.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
+import {
+  validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
+} from './proxy/validate.mjs';
 import proxyWorker from './proxy/worker.js';
 
 const {
@@ -823,6 +826,150 @@ forAll(
   }
 );
 
+// ── Runtime validation of untrusted input (proxy/validate.mjs) ─────────────
+//
+// Property-based like the hostname checks: each equivalence class generates
+// inputs and states what must happen to all of them. Valid shapes (with
+// arbitrary extra fields) must pass unchanged; every class of structural
+// damage must be rejected with the generic message, never passed on.
+
+console.log('\nProperty: WebUntis answer validation');
+
+function randomLesson(random) {
+  const lesson = {
+    id: randomInt(random, 0, 1e6),
+    startTime: randomInt(random, 6, 18) * 100 + randomInt(random, 0, 59),
+    endTime: randomInt(random, 6, 18) * 100 + randomInt(random, 0, 59),
+  };
+  if (random() < 0.5) lesson.code = pick(random, ['cancelled', 'irregular', null]);
+  if (random() < 0.8) lesson.su = [{ id: randomInt(random, 0, 999) }];
+  if (random() < 0.8) lesson.ro = random() < 0.2 ? [] : [{ id: randomInt(random, 0, 999), orgid: 1 }];
+  if (random() < 0.5) lesson.lsnumber = randomInt(random, 0, 1e5); // extra field WebUntis sends
+  return lesson;
+}
+const randomLessons = (random) => Array.from({ length: randomInt(random, 0, 8) }, () => randomLesson(random));
+
+forAll('valid lessons (with extra fields) pass and keep id/times/code/refs', randomLessons, (lessons) => {
+  const out = validateLessons(lessons);
+  assertEqual(out.length, lessons.length);
+  out.forEach((l, i) => {
+    assertEqual(l.id, lessons[i].id);
+    assertEqual(l.startTime, lessons[i].startTime);
+    assertEqual(l.endTime, lessons[i].endTime);
+    assertEqual(JSON.stringify(l.su), JSON.stringify(lessons[i].su));
+  });
+});
+
+// Each class damages exactly one thing in an otherwise valid answer.
+const BAD_VALUES = [null, '12', -1, 1.5, Number.NaN, true, {}, []];
+const LESSON_DAMAGE = [
+  ['id of the wrong type or range', (l, random) => ({ ...l, id: pick(random, BAD_VALUES) })],
+  ['id missing', (l) => { const c = { ...l }; delete c.id; return c; }],
+  ['start time out of range (hour ≥ 24, minute ≥ 60, negative)', (l, random) => ({ ...l, startTime: pick(random, [2400, 1260, -5, 99999]) })],
+  ['end time of the wrong type', (l, random) => ({ ...l, endTime: pick(random, ['0800', null, 8.5]) })],
+  ['code not a string', (l, random) => ({ ...l, code: pick(random, [1, {}, []]) })],
+  ['subject refs not a list of ids', (l, random) => ({ ...l, su: pick(random, [{}, 'x', [null], [{}], [{ id: '1' }]]) })],
+  ['room refs not a list of ids', (l, random) => ({ ...l, ro: pick(random, [{}, [{ id: -1 }], [7]]) })],
+  ['entry not an object', (l, random) => pick(random, [null, 'x', 1, []])],
+];
+for (const [className, damage] of LESSON_DAMAGE) {
+  forAll(
+    `getTimetable answer with ${className} is always rejected`,
+    (random) => {
+      const lessons = [randomLesson(random), ...randomLessons(random)];
+      const at = randomInt(random, 0, lessons.length - 1);
+      lessons[at] = damage(lessons[at], random);
+      return lessons;
+    },
+    (lessons) => assertWirft(() => validateLessons(lessons), 'unerwartete Antwort auf getTimetable')
+  );
+}
+
+test('a non-array answer is rejected for every list method', () => {
+  for (const [validate, method] of [[validateLessons, 'getTimetable'], [validateClasses, 'getKlassen'], [validateSubjects, 'getSubjects'], [validateRooms, 'getRooms']]) {
+    for (const value of [null, undefined, {}, 'x', 1]) assertWirft(() => validate(value), `unerwartete Antwort auf ${method}`);
+  }
+});
+test('classes need a numeric id and a string name; subjects/rooms may lack names', () => {
+  assertEqual(validateClasses([{ id: 3, name: '9c', extra: 1 }])[0].name, '9c');
+  assertWirft(() => validateClasses([{ id: 3 }]), 'getKlassen');
+  assertWirft(() => validateClasses([{ id: '3', name: '9c' }]), 'getKlassen');
+  assertEqual(validateSubjects([{ id: 1 }])[0].longName, undefined);
+  assertWirft(() => validateSubjects([{ id: 1, longName: 5 }]), 'getSubjects');
+  assertEqual(validateRooms([{ id: 2, name: null }])[0].name, undefined);
+  assertWirft(() => validateRooms([{ name: 'R1' }]), 'getRooms');
+});
+
+// The session id is written into "Cookie: JSESSIONID=<id>".
+forAll(
+  'a session id from the plain token charset is accepted unchanged',
+  (random) => {
+    const alphabet = 'ABCDEFabcdef0123456789._-';
+    return Array.from({ length: randomInt(random, 1, 64) }, () => alphabet[randomInt(random, 0, alphabet.length - 1)]).join('');
+  },
+  (sessionId) => assertEqual(validateAuth({ sessionId, personId: 1 }).sessionId, sessionId)
+);
+forAll(
+  'a session id carrying header-breaking characters is always rejected',
+  (random) => insertAt(random, `${randomLabel(random, 4, 20)}${randomLabel(random, 2, 6)}`, pick(random, ['\r\n', '\n', ';', ',', ' ', '=', '"', '\u0000', 'ä'])),
+  (sessionId) => assertWirft(() => validateAuth({ sessionId }), 'unerwartete Antwort auf authenticate')
+);
+test('authenticate: missing, empty, overlong or non-string session id is rejected', () => {
+  for (const result of [null, {}, { sessionId: '' }, { sessionId: 'a'.repeat(201) }, { sessionId: 42 }]) {
+    assertWirft(() => validateAuth(result), 'unerwartete Antwort auf authenticate');
+  }
+});
+test('the generic message does not look like a rejected login (no "WebUntis authenticate:" prefix)', () => {
+  let message = '';
+  try { validateAuth(null); } catch (e) { message = e.message; }
+  assert(message && !message.startsWith('WebUntis authenticate:'), message);
+});
+
+test('JSON-RPC envelope: result, error with message, and every malformed shape', () => {
+  assertEqual(JSON.stringify(validateRpcEnvelope({ jsonrpc: '2.0', id: 1, result: [1] }, 'x')), '{"result":[1]}');
+  assertEqual(JSON.stringify(validateRpcEnvelope({ error: { message: 'nein', code: -1 } }, 'x')), '{"error":"nein"}');
+  for (const data of [null, [], 'x', {}, { error: {} }, { error: 'kaputt' }, { error: { message: 1 } }]) {
+    assertWirft(() => validateRpcEnvelope(data, 'getRooms'), 'unerwartete Antwort auf getRooms');
+  }
+});
+
+console.log('\nProperty: request body validation');
+
+forAll(
+  'a body with string fields keeps exactly the known fields and drops the rest',
+  (random) => ({
+    datum: '20261009',
+    webuntis: { server: `${randomLabel(random)}.webuntis.com`, user: randomLabel(random), password: randomLabel(random), klasse: randomLabel(random, 1, 3), extra: 'x' },
+    lunch: { provider: 'mensamax', base: 'https://parentsmensa.de', username: randomLabel(random), password: randomLabel(random), cccampus: { pin: randomLabel(random), unbekannt: 1 } },
+    unbekannt: { tief: true },
+  }),
+  (body) => {
+    const out = validateRequestBody(body);
+    assertEqual(out.webuntis.server, body.webuntis.server);
+    assertEqual(out.lunch.cccampus.pin, body.lunch.cccampus.pin);
+    assert(!('extra' in out.webuntis) && !('unbekannt' in out) && !('unbekannt' in out.lunch.cccampus), JSON.stringify(out));
+  }
+);
+forAll(
+  'a known field with a non-string value is always rejected',
+  (random) => {
+    const [section, field] = pick(random, [['webuntis', 'server'], ['webuntis', 'klasse'], ['lunch', 'base'], ['lunch', 'password'], ['top', 'datum']]);
+    const value = pick(random, [42, true, {}, [], ['a'], { toString: 'x' }]);
+    const body = { webuntis: { server: 'a.webuntis.com' }, lunch: {} };
+    if (section === 'top') body[field] = value; else body[section][field] = value;
+    return body;
+  },
+  (body) => assertWirft(() => validateRequestBody(body), 'Ungültiger Request-Body')
+);
+test('request body: not an object, section not an object, or an overlong field is rejected', () => {
+  for (const body of [null, [], 'x', 1, { webuntis: 'x' }, { lunch: [1] }, { lunch: { cccampus: 'x' } }, { webuntis: { user: 'a'.repeat(1001) } }]) {
+    assertWirft(() => validateRequestBody(body), 'Ungültiger Request-Body');
+  }
+});
+test('request body: missing sections become empty configs', () => {
+  assertEqual(JSON.stringify(validateRequestBody({})), '{"webuntis":{},"lunch":{}}');
+});
+
 // ── Proxy: Cache-Schlüssel ─────────────────────────────────────────────────
 //
 // Prüft, dass unterschiedliche Zugangsdaten immer zu unterschiedlichen
@@ -1100,6 +1247,76 @@ await testAsync('a full WebUntis success round-trip returns a sorted, deduplicat
   assertEqual(body.stunden[0].fach, 'Mathematik'); // sorted by start time: 08:00 first
   assertEqual(body.stunden[0].vertretung, true);
   assertEqual(body.stunden[1].fach, 'Deutsch');
+});
+
+await testAsync('REGRESSION: a malformed WebUntis answer is reported generically, not as a wrong password', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([{
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async () => new Response(JSON.stringify({ result: { sessionId: 'abc\r\nSet-Cookie: x=1' } })),
+  }]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' }, lunch: {}, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.stundenFehler, 'WebUntis: unerwartete Antwort auf authenticate');
+});
+
+await testAsync('REGRESSION: a session id with CR/LF never reaches a Cookie header', async () => {
+  globalThis.caches = makeCachesStub();
+  const cookies = [];
+  mockFetch([{
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async (url, options) => {
+      const requested = JSON.parse(options.body);
+      if (options.headers && options.headers.Cookie) cookies.push(options.headers.Cookie);
+      if (requested.method === 'authenticate') return new Response(JSON.stringify({ result: { sessionId: 'abc\r\nX-Injected: 1' } }));
+      return new Response(JSON.stringify({ result: [] }));
+    },
+  }]);
+  await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' }, lunch: {}, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  assertEqual(cookies.length, 0);
+});
+
+await testAsync('REGRESSION: a timetable entry with a broken shape fails the request instead of rendering garbage', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([{
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async (url, options) => {
+      const results = {
+        authenticate: { sessionId: 'abc123' },
+        getKlassen: [{ id: 1, name: '9c' }],
+        getTimetable: [{ id: 10, startTime: '0800', endTime: 845 }],
+        getSubjects: [], getRooms: [], logout: {},
+      };
+      return new Response(JSON.stringify({ result: results[JSON.parse(options.body).method] }));
+    },
+  }]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' }, lunch: {}, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  const body = await resp.json();
+  assertEqual(body.stundenFehler, 'WebUntis: unerwartete Antwort auf getTimetable');
+  assertEqual(body.stunden.length, 0);
+});
+
+await testAsync('REGRESSION: a request body with a non-string config field is rejected with 400, no network call', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: 9 }, lunch: {} }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  assertEqual(resp.status, 400);
 });
 
 await testAsync('a wrong WebUntis password produces the friendly login-failure message', async () => {
@@ -1671,7 +1888,7 @@ test('no date/history signal words in code comments', () => {
   // found it.
   const files = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
-    'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs',
+    'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs', 'proxy/validate.mjs', 'types/heute-schule.d.ts', 'tsconfig.json',
     'tools/headers.mjs', 'tools/check-live-headers.mjs', 'tools/require-clean-tree.sh',
     'web/index.html', 'web/sw.js', 'web/_headers',
   ];

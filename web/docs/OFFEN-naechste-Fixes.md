@@ -1,6 +1,6 @@
 # Offene Punkte
 
-**Stand: 01.09.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 09.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -55,6 +55,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (Peer-Review 01.09., Fund C-3) Apple-Touch-Icon nur als SVG — Annahme: iOS stellt SVG dafür nicht zuverlässig dar, PNG nötig | Am 09.10.2026 auf Björns iPhone (aktuelles iOS) geprüft: Das Homescreen-Icon zeigt `icon.svg` korrekt (grünes Quadrat `#2f6f4f` mit 📚), keinen Seiten-Screenshot. Kein PNG ergänzt; Restrisiko nur für deutlich ältere iOS-Versionen, im Wartungsmodus bewusst in Kauf genommen |
 | (Kosmetisch, Folge des Hostcheck-Fixes 09.10.) Frontend-Bereinigung des Server-Felds schnitt eine ohne Protokoll eingefügte Adresse nur an `/`, `#` und `?` ab, nicht an `\` | `extractWebUntisHostname` in `web/index.html` trennt jetzt an `/`, `\`, `#` und `?`. Im Browser gegengeprüft: `schule.webuntis.com\WebUntis` blieb vorher ungekürzt und wird jetzt zu `schule.webuntis.com` bereinigt; Kontrolle mit `/` griff in beiden Ständen (09.10.2026) |
 | 🟡 (Entwicklungsprozess Q38, Regel-Inventar EP-INV v1) Wartungs-Vorhaben „Prüfer nachziehen": falsches Grün im Live-Check bei unsauberem Arbeitsbaum, fehlende ESLint-Sicherheitsregeln, `npm audit` nur in der CI, kein Test der Sicherheits-Header, ES5-Ziel weder eingehalten noch geprüft | **Deploy nur aus sauberem Arbeitsbaum** (`tools/require-clean-tree.sh`, vor dem Schlüsselbund). **ESLint:** `no-eval`, `no-implied-eval`, `no-new-func`, Verbot von `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` (die fünf `innerHTML = ''` sind jetzt `textContent = ''`, keine Ausnahme nötig), `no-console` im Proxy. **`npm audit --audit-level=high` als Deploy-Gate**; dafür `wrangler` als exakt gepinnte Entwicklungsabhängigkeit ins Lockfile — das Audit fand sofort eine hohe Lücke in 4.144.0, jetzt 4.149.0. **Sicherheits-Header:** Test der Pflichtteile in `web/_headers` plus Live-Vergleich nach dem Deploy (`tools/headers.mjs`). **Syntax-Ziel ES2019** für `index.html`, `ueber.html`, `sw.js`, per ESLint durchgesetzt. Zusätzlich **Lizenztest** über das Lockfile. Gegenproben: je ein Mutant pro Prüfer (Arbeitsbaum-Prüfung wirkungslos, Sicherheitsregeln entfernt, Sprachstand 2022, Lizenzprüfung lässt alles durch, Header-Prüfung ignoriert CSP) macht 3–9 Tests rot; Audit-Gate einmalig mit `minimist@1.2.0` (Exit 1) gegen `1.2.8` (Exit 0) geprüft (09.10.2026) |
+| 🟡 (Entwicklungsprozess Q28/Q31) Keine Typprüfung — 13 JS-Dateien nur mit ESLint, Antworten der Upstream-Dienste ungeprüft verwendet | **Typprüfung:** `tsc --checkJs` strict über JSDoc, ohne Build-Schritt, `typescript@7.0.2` exakt gepinnt; geprüft werden `proxy/*`, `stundenplan.js`, `web/sw.js` (`npm run typecheck`, Gate in `deploy.sh` und CI). Fand beim Einführen eine echte Unschärfe im Service Worker (offline ohne Cache-Treffer `undefined` an `respondWith()`). **Laufzeitvalidierung** in `proxy/validate.mjs`: Request-Body aus dem Browser (nur bekannte Felder als Text, sonst 400) und jede WebUntis-Antwort (Strukturfehler → „unerwartete Antwort“, nicht mehr als „Passwort falsch“ fehlgedeutet; `sessionId` nur Token-Zeichen, weil sie in den `Cookie`-Header geht). Gegenproben: neue Worker-Tests gegen den alten Worker 4 rot; fünf Mutanten der Validierung je 1–3 rot; eingebauter Typfehler → `tsc` Exit 1 (09.10.2026). Nicht abgedeckt: Inline-Script in `index.html`, siehe „Noch offen“ |
 
 ## Noch offen
 
@@ -68,7 +69,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Datenschutzerklärung. Noch zu tun:
    - Einschätzung durch jemanden mit juristischem Hintergrund einholen
    - Speicherdauer der Cloudflare-Server-Logs klären
-4. **🟡 Workers-Recht des Deploy-Tokens gilt kontoweit.** Ein Token, der
+2. **🟡 Workers-Recht des Deploy-Tokens gilt kontoweit.** Ein Token, der
    nur den einen Worker `stundenplan-proxy` bearbeiten darf, lässt sich
    derzeit nicht anlegen — Cloudflare lehnt das mit
    „com.cloudflare.edge.worker.script is not a supported resource type" ab
@@ -76,13 +77,16 @@ Zeitpunkt-Momentaufnahmen unverändert.
    gilt deshalb für das ganze Konto und erreicht auch fremde Worker darin,
    etwa den von Spektrum. Gegenstück: dasselbe gilt dort umgekehrt.
    Wiedervorlage, sobald Cloudflare den Ressourcentyp unterstützt.
-
-6. **🟡 Typprüfung nachziehen** (Entwicklungsprozess Q28/Q31, 09.10.2026;
-   trotz Wartungsmodus gewollt). Stand 09.10.: 13 JS-Dateien, nur ESLint,
-   kein `@ts-check`, kein `tsc`. Ziel: JSDoc-Typen mit `tsc --checkJs`
-   (kein Build-Schritt), strict. Antworten der Upstream-Dienste im Proxy
-   zusätzlich per Laufzeitvalidierung absichern. `typescript` ist eine neue
-   devDependency und braucht vorher eine Freigabe.
+3. **🟡 Inline-Script in `web/index.html` ist nicht typgeprüft** (aus der
+   Planung vom 09.10.2026, bewusst zurückgestellt). `tsc` kann JavaScript in
+   HTML nicht lesen; der größte JS-Block des Projekts (rund 900 Zeilen) liegt
+   deshalb außerhalb der Typprüfung, ebenso die ccCampus-Antworten, die im
+   Browser verarbeitet werden. Abhilfe: das Script nach `web/app.js`
+   auslagern. Nebeneffekt: `'unsafe-inline'` könnte dann aus `script-src`
+   der CSP entfallen. Revidiert die Entscheidung „eine Datei“
+   (Entscheidungs-Log), braucht strict-Nacharbeit am DOM-Code und einen
+   sorgfältigen Test auf den echten Geräten — deshalb nicht im
+   Wartungs-Vorhaben.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

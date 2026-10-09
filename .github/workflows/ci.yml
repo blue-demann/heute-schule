@@ -31,6 +31,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Type check
+        run: npm run typecheck
+
       # High/critical only: Dependabot already tracks every severity on
       # its own weekly schedule (see .github/dependabot.yml) — this step
       # is a coarse per-push signal, not the primary vulnerability feed,

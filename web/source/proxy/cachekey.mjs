@@ -21,6 +21,12 @@
 // file: renaming them would be a breaking change for real, already-
 // configured users, not just an internal refactor.
 
+/**
+ * @param {string} datum
+ * @param {WebUntisConfig} [webuntisCfg]
+ * @param {LunchConfig} [lunchCfg]
+ * @returns {string}
+ */
 export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
   const cc = lunchCfg.cccampus || {};
   const keyFields = {

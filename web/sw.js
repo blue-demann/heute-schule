@@ -6,6 +6,10 @@
 // Deliberately NO caching of /api/status responses — that data should
 // come fresh from the proxy on every open.
 
+// `self` is the ServiceWorkerGlobalScope here; the cast only tells the type
+// check (tsc --checkJs) so, the events below then get their proper types.
+const sw = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
+
 const CACHE = 'heute-schule-v4';
 // Impressum/Datenschutz/Über are deliberately included: they're pages
 // with a legal obligation to be available, and without pre-caching they'd
@@ -15,21 +19,21 @@ const SHELL = [
   './impressum.html', './datenschutz.html', './ueber.html',
 ];
 
-self.addEventListener('install', (event) => {
+sw.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
-  self.skipWaiting();
+  sw.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+sw.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     )
   );
-  self.clients.claim();
+  sw.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
+sw.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   // API calls always live from the network, never from the cache.
   if (url.pathname.startsWith('/api/')) return;
@@ -44,6 +48,8 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE).then((c) => c.put(event.request, copy));
         return resp;
       })
-      .catch(() => caches.match(event.request))
+      // Offline: the cached copy if there is one, otherwise an explicit
+      // network error (respondWith() needs a Response, never undefined).
+      .catch(() => caches.match(event.request).then((cached) => cached || Response.error()))
   );
 });

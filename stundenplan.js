@@ -9,12 +9,26 @@
 // body, status messages) are deliberately still German — they're the
 // exact text real parents used to receive, not this file's own code.
 
+/**
+ * @typedef {{ CATERING?: unknown, SIGNED_OFF?: unknown }} LunchDay
+ * @typedef {Record<string, Record<string, Record<string, LunchDay>>>} LunchCalendar  year → month → day
+ * @typedef {{ AUSGEWAEHLT: string, MENUE_TEXT: string, PREIS: string }} LunchMenu
+ * @typedef {{ MENUES?: LunchMenu[] }} LunchDetails
+ * @typedef {import('./proxy/validate.mjs').WebUntisLesson} WebUntisLesson
+ * @typedef {{ kind: { name: string, klasse: string }, stunden: Lesson[], lunch: string, fehler: string | null }} ChildDay
+ */
+
 const WEEKDAYS = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
+/** @param {number} n */
 function pad(n) { return String(n).padStart(2, '0'); }
 
 // ── Cookie extraction ────────────────────────────────────────────────────
 
+/**
+ * @param {string | string[] | null | undefined} rawCookies
+ * @returns {string | null}
+ */
 function extractLastPhpsessid(rawCookies) {
   const cookieStr = Array.isArray(rawCookies) ? rawCookies.join(';') : (rawCookies || '');
   const allMatches = [...cookieStr.matchAll(/PHPSESSID=([^;]+)/g)];
@@ -22,6 +36,10 @@ function extractLastPhpsessid(rawCookies) {
   return `PHPSESSID=${allMatches[allMatches.length - 1][1]}`;
 }
 
+/**
+ * @param {string | string[] | null | undefined} rawCookies
+ * @returns {string | null}
+ */
 function extractUpdatedPhpsessid(rawCookies) {
   const cookieStr = Array.isArray(rawCookies) ? rawCookies.join(';') : (rawCookies || '');
   const allMatches = [...cookieStr.matchAll(/PHPSESSID=([^;]+)/g)];
@@ -31,9 +49,16 @@ function extractUpdatedPhpsessid(rawCookies) {
 
 // ── Lunch logic ──────────────────────────────────────────────────────────
 
+/**
+ * @param {LunchCalendar | null | undefined} cal
+ * @param {LunchDetails | null | undefined} details
+ * @param {Date} today
+ * @returns {string}
+ */
 function parseLunchStatus(cal, details, today) {
   if (!cal) return 'Schulessen: Daten nicht verfügbar';
   const y = today.getFullYear(); const m = today.getMonth() + 1; const d = today.getDate();
+  /** @type {LunchDay} */
   const day = ((cal[String(y)] || {})[String(m)] || {})[String(d)] || {};
   if (!day.CATERING)  return 'Kein Schulessen heute';
   if (day.SIGNED_OFF) return 'Abgemeldet (kein Essen)';
@@ -51,6 +76,12 @@ function parseLunchStatus(cal, details, today) {
 // shape proxy/worker.js's getTimetable() returns — deliberately not
 // translated on their own, see the note there.
 
+/**
+ * @param {WebUntisLesson[]} lessons
+ * @param {Record<number, string>} subjectsById
+ * @param {Record<number, string>} roomsById
+ * @returns {Lesson[]}
+ */
 function buildLessonList(lessons, subjectsById, roomsById) {
   const seen = new Set();
   return lessons
@@ -74,8 +105,13 @@ function buildLessonList(lessons, subjectsById, roomsById) {
     });
 }
 
+/**
+ * @param {Lesson[]} lessons
+ * @returns {string}
+ */
 function formatLessons(lessons) {
   if (!lessons.length) return '  (keine Stunden / schulfrei)';
+  /** @type {Record<string, Lesson[]>} */
   const slots = {};
   lessons.forEach(s => {
     const key = `${s.start}|${s.ende}`;
@@ -94,6 +130,11 @@ function formatLessons(lessons) {
 
 // ── Email ────────────────────────────────────────────────────────────────
 
+/**
+ * @param {ChildDay[]} childrenData
+ * @param {Date} today
+ * @returns {{ subject: string, body: string }}
+ */
 function buildEmail(childrenData, today) {
   const weekday = WEEKDAYS[today.getDay()];
   const date    = `${pad(today.getDate())}.${pad(today.getMonth()+1)}.${today.getFullYear()}`;

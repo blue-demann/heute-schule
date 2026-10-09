@@ -28,6 +28,7 @@ npm install
 npm test              # Testsuite (node run-tests.mjs)
 npm run test:coverage # dieselbe Suite mit Code-Coverage (c8)
 npm run lint           # ESLint
+npm run typecheck      # Typprüfung (tsc --checkJs, ohne Build-Schritt)
 ```
 
 Details zu den einzelnen Teilen: [web/README.md](web/README.md),

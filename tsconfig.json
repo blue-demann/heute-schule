@@ -1,0 +1,21 @@
+// Type check without a build step: tsc only reads the JSDoc types in the
+// JavaScript files and emits nothing (npm run typecheck, also a deploy gate).
+// Covered: the proxy (the trust boundary), the legacy logic in stundenplan.js
+// and the service worker. Not covered: the inline <script> in web/index.html
+// and web/ueber.html — tsc cannot read JavaScript inside HTML (see
+// OFFEN-naechste-Fixes.md). types/ holds shared shapes and the few
+// Cloudflare Workers types the proxy needs.
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "webworker"],
+    "types": []
+  },
+  "include": ["proxy/**/*.js", "proxy/**/*.mjs", "stundenplan.js", "web/sw.js", "types/*.d.ts"]
+}
