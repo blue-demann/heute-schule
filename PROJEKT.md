@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-**Stand: 09.10.2026 · Version 0.3.2**
+**Stand: 09.10.2026 · Version 0.3.3**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
