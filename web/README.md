@@ -11,8 +11,9 @@ python3 -m http.server 8934
 ```
 → http://localhost:8934
 
-Ohne konfigurierte Proxy-URL zeigt die Karte "Proxy nicht erreichbar" —
-das ist erwartet, solange der Proxy (`../proxy/`) noch nicht deployed ist.
+Lokal zeigt jede Karte „Failed to fetch“ — das ist erwartet: Der Proxy
+lässt per CORS nur die Produktionsdomain zu (`ALLOWED_ORIGIN`), nicht
+`localhost`.
 
 ## Tests
 

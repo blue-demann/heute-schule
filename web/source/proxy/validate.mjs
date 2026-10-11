@@ -24,12 +24,16 @@
  * @typedef {{ id: number, name?: string }} WebUntisRoom
  */
 
-// Deliberately not "WebUntis <method>: ..." — worker.js reads that prefix on
-// authenticate as "WebUntis rejected the login", which a malformed answer
-// is not.
-/** @param {string} method */
-function unexpected(method) {
-  return new Error(`WebUntis: unerwartete Antwort auf ${method}`);
+// The message names the method and the field that was off, never the
+// value: enough to tell which part of an answer changed, nothing from the
+// provider's content. Deliberately not "WebUntis <method>: ..." — that is
+// the format of messages WebUntis itself sent (see worker.js).
+/**
+ * @param {string} method
+ * @param {string} field
+ */
+function unexpected(method, field) {
+  return new Error(`WebUntis: unerwartete Antwort auf ${method} (${field})`);
 }
 
 /**
@@ -59,51 +63,65 @@ function isOptionalString(value) {
 
 /**
  * @param {unknown} value
- * @param {string} method
- * @returns {unknown[]}
- */
-function expectArray(value, method) {
-  if (!Array.isArray(value)) throw unexpected(method);
-  return value;
-}
-
-/**
- * @param {unknown} value
  * @returns {value is WebUntisRef[] | undefined}
  */
 function isOptionalRefList(value) {
   return value === undefined || (Array.isArray(value) && value.every((r) => isObject(r) && isId(r.id)));
 }
 
+/**
+ * Checks a list answer entry by entry: every entry must be an object and
+ * pass each named field check. The first failing check names the field.
+ * @param {unknown} result
+ * @param {string} method
+ * @param {Record<string, (value: unknown) => boolean>} fieldChecks
+ * @returns {Record<string, unknown>[]}
+ */
+function expectEntries(result, method, fieldChecks) {
+  if (!Array.isArray(result)) throw unexpected(method, 'Liste');
+  for (const entry of result) {
+    if (!isObject(entry)) throw unexpected(method, 'Eintrag');
+    for (const [field, check] of Object.entries(fieldChecks)) {
+      if (!check(entry[field])) throw unexpected(method, field);
+    }
+  }
+  return result;
+}
+
 // JSON-RPC 2.0 envelope: either { result } or { error: { message } }.
-// Returns the error message (a string WebUntis chose, shown to the parent
-// as before) or the still-unvalidated result.
+// Returns the error message (a string WebUntis chose, shown to the parent)
+// or the still-unvalidated result.
 /**
  * @param {unknown} data
  * @param {string} method
  * @returns {{ error: string } | { result: unknown }}
  */
 export function validateRpcEnvelope(data, method) {
-  if (!isObject(data)) throw unexpected(method);
+  if (!isObject(data)) throw unexpected(method, 'Antwort');
   if (data.error !== undefined && data.error !== null) {
-    if (!isObject(data.error) || typeof data.error.message !== 'string') throw unexpected(method);
+    if (!isObject(data.error) || typeof data.error.message !== 'string') throw unexpected(method, 'error');
     return { error: data.error.message };
   }
-  if (!('result' in data)) throw unexpected(method);
+  if (!('result' in data)) throw unexpected(method, 'result');
   return { result: data.result };
 }
 
-// The session id goes verbatim into "Cookie: JSESSIONID=<id>" — only a
-// plain token charset, so no CR/LF, ";" or "," can reach the header.
-const SESSION_ID = /^[A-Za-z0-9._-]{1,200}$/;
+// The session id goes verbatim into "Cookie: JSESSIONID=<id>". Allowed is
+// exactly what RFC 6265 allows in a cookie value (cookie-octet): printable
+// ASCII without space, double quote, comma, semicolon and backslash. That
+// keeps every separator out of the header — no second cookie via ";", no
+// line break — without betting on the id's current format (Base64
+// characters like + / = stay valid).
+const SESSION_ID = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]{1,200}$/;
 
 /**
  * @param {unknown} result
  * @returns {WebUntisAuth}
  */
 export function validateAuth(result) {
-  if (!isObject(result) || typeof result.sessionId !== 'string' || !SESSION_ID.test(result.sessionId)) {
-    throw unexpected('authenticate');
+  if (!isObject(result)) throw unexpected('authenticate', 'result');
+  if (typeof result.sessionId !== 'string' || !SESSION_ID.test(result.sessionId)) {
+    throw unexpected('authenticate', 'sessionId');
   }
   return { sessionId: result.sessionId };
 }
@@ -113,10 +131,8 @@ export function validateAuth(result) {
  * @returns {WebUntisClass[]}
  */
 export function validateClasses(result) {
-  return expectArray(result, 'getKlassen').map((k) => {
-    if (!isObject(k) || !isId(k.id) || typeof k.name !== 'string') throw unexpected('getKlassen');
-    return { id: /** @type {number} */ (k.id), name: k.name };
-  });
+  return expectEntries(result, 'getKlassen', { id: isId, name: (v) => typeof v === 'string' })
+    .map((k) => ({ id: /** @type {number} */ (k.id), name: /** @type {string} */ (k.name) }));
 }
 
 /**
@@ -124,20 +140,16 @@ export function validateClasses(result) {
  * @returns {WebUntisLesson[]}
  */
 export function validateLessons(result) {
-  return expectArray(result, 'getTimetable').map((l) => {
-    if (!isObject(l) || !isId(l.id) || !isClockTime(l.startTime) || !isClockTime(l.endTime)
-        || !isOptionalString(l.code) || !isOptionalRefList(l.su) || !isOptionalRefList(l.ro)) {
-      throw unexpected('getTimetable');
-    }
-    return {
-      id: /** @type {number} */ (l.id),
-      startTime: /** @type {number} */ (l.startTime),
-      endTime: /** @type {number} */ (l.endTime),
-      code: /** @type {string | null | undefined} */ (l.code),
-      su: /** @type {WebUntisRef[] | undefined} */ (l.su),
-      ro: /** @type {WebUntisRef[] | undefined} */ (l.ro),
-    };
-  });
+  return expectEntries(result, 'getTimetable', {
+    id: isId, startTime: isClockTime, endTime: isClockTime, code: isOptionalString, su: isOptionalRefList, ro: isOptionalRefList,
+  }).map((l) => ({
+    id: /** @type {number} */ (l.id),
+    startTime: /** @type {number} */ (l.startTime),
+    endTime: /** @type {number} */ (l.endTime),
+    code: /** @type {string | null | undefined} */ (l.code),
+    su: /** @type {WebUntisRef[] | undefined} */ (l.su),
+    ro: /** @type {WebUntisRef[] | undefined} */ (l.ro),
+  }));
 }
 
 /**
@@ -145,16 +157,12 @@ export function validateLessons(result) {
  * @returns {WebUntisSubject[]}
  */
 export function validateSubjects(result) {
-  return expectArray(result, 'getSubjects').map((s) => {
-    if (!isObject(s) || !isId(s.id) || !isOptionalString(s.name) || !isOptionalString(s.longName)) {
-      throw unexpected('getSubjects');
-    }
-    return {
+  return expectEntries(result, 'getSubjects', { id: isId, name: isOptionalString, longName: isOptionalString })
+    .map((s) => ({
       id: /** @type {number} */ (s.id),
       name: /** @type {string | undefined} */ (s.name ?? undefined),
       longName: /** @type {string | undefined} */ (s.longName ?? undefined),
-    };
-  });
+    }));
 }
 
 /**
@@ -162,18 +170,19 @@ export function validateSubjects(result) {
  * @returns {WebUntisRoom[]}
  */
 export function validateRooms(result) {
-  return expectArray(result, 'getRooms').map((r) => {
-    if (!isObject(r) || !isId(r.id) || !isOptionalString(r.name)) throw unexpected('getRooms');
-    return { id: /** @type {number} */ (r.id), name: /** @type {string | undefined} */ (r.name ?? undefined) };
-  });
+  return expectEntries(result, 'getRooms', { id: isId, name: isOptionalString })
+    .map((r) => ({ id: /** @type {number} */ (r.id), name: /** @type {string | undefined} */ (r.name ?? undefined) }));
 }
 
 // ── Request body from the browser ────────────────────────────────────────
 
 const MAX_FIELD_LENGTH = 1000;
 const WEBUNTIS_FIELDS = /** @type {const} */ (['server', 'user', 'password', 'klasse']);
+// No "cccampus" here on purpose: ccCampus runs entirely in the browser, the
+// proxy never needs its customer number or PIN. The frontend may still send
+// a stored cccampus block along with a Mensamax child's config — it is
+// dropped right here, like every other unknown field.
 const LUNCH_FIELDS = /** @type {const} */ (['provider', 'base', 'projekt', 'einrichtung', 'username', 'password']);
-const CCCAMPUS_FIELDS = /** @type {const} */ (['base', 'kundennummer', 'pin']);
 
 /**
  * Copies only the known fields; each must be a string (of sane length) or
@@ -204,11 +213,9 @@ function pickStrings(value, fields) {
 export function validateRequestBody(body) {
   if (!isObject(body)) throw new Error('Ungültiger Request-Body');
   const { datum } = pickStrings(body, /** @type {const} */ (['datum']));
-  const lunchRaw = body.lunch;
-  /** @type {LunchConfig} */
-  const lunch = pickStrings(lunchRaw, LUNCH_FIELDS);
-  if (isObject(lunchRaw) && lunchRaw.cccampus !== undefined && lunchRaw.cccampus !== null) {
-    lunch.cccampus = pickStrings(lunchRaw.cccampus, CCCAMPUS_FIELDS);
-  }
-  return { datum, webuntis: pickStrings(body.webuntis, WEBUNTIS_FIELDS), lunch };
+  return {
+    datum,
+    webuntis: pickStrings(body.webuntis, WEBUNTIS_FIELDS),
+    lunch: pickStrings(body.lunch, LUNCH_FIELDS),
+  };
 }

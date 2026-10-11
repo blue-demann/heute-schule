@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import stundenplan from './stundenplan.js';
 import { parseHeadersFile, checkSecurityHeaders, compareHeaders } from './tools/headers.mjs';
@@ -862,28 +863,32 @@ forAll('valid lessons (with extra fields) pass and keep id/times/code/refs', ran
 
 // Each class damages exactly one thing in an otherwise valid answer.
 const BAD_VALUES = [null, '12', -1, 1.5, Number.NaN, true, {}, []];
+// Third element: the field the error message has to name (never its value).
 const LESSON_DAMAGE = [
-  ['id of the wrong type or range', (l, random) => ({ ...l, id: pick(random, BAD_VALUES) })],
-  ['id missing', (l) => { const c = { ...l }; delete c.id; return c; }],
-  ['start time out of range (hour ≥ 24, minute ≥ 60, negative)', (l, random) => ({ ...l, startTime: pick(random, [2400, 1260, -5, 99999]) })],
-  ['end time of the wrong type', (l, random) => ({ ...l, endTime: pick(random, ['0800', null, 8.5]) })],
-  ['code not a string', (l, random) => ({ ...l, code: pick(random, [1, {}, []]) })],
-  ['subject refs not a list of ids', (l, random) => ({ ...l, su: pick(random, [{}, 'x', [null], [{}], [{ id: '1' }]]) })],
-  ['room refs not a list of ids', (l, random) => ({ ...l, ro: pick(random, [{}, [{ id: -1 }], [7]]) })],
-  ['entry not an object', (l, random) => pick(random, [null, 'x', 1, []])],
+  ['id of the wrong type or range', (l, random) => ({ ...l, id: pick(random, BAD_VALUES) }), 'id'],
+  ['id missing', (l) => { const c = { ...l }; delete c.id; return c; }, 'id'],
+  ['start time out of range (hour ≥ 24, minute ≥ 60, negative)', (l, random) => ({ ...l, startTime: pick(random, [2400, 1260, -5, 99999]) }), 'startTime'],
+  ['end time of the wrong type', (l, random) => ({ ...l, endTime: pick(random, ['0800', null, 8.5]) }), 'endTime'],
+  ['code not a string', (l, random) => ({ ...l, code: pick(random, [1, {}, []]) }), 'code'],
+  ['subject refs not a list of ids', (l, random) => ({ ...l, su: pick(random, [{}, 'x', [null], [{}], [{ id: '1' }]]) }), 'su'],
+  ['room refs not a list of ids', (l, random) => ({ ...l, ro: pick(random, [{}, [{ id: -1 }], [7]]) }), 'ro'],
+  ['entry not an object', (l, random) => pick(random, [null, 'x', 1, []]), 'Eintrag'],
 ];
-for (const [className, damage] of LESSON_DAMAGE) {
+for (const [className, damage, field] of LESSON_DAMAGE) {
   forAll(
-    `getTimetable answer with ${className} is always rejected`,
+    `getTimetable answer with ${className} is always rejected, naming "${field}"`,
     (random) => {
-      const lessons = [randomLesson(random), ...randomLessons(random)];
-      const at = randomInt(random, 0, lessons.length - 1);
-      lessons[at] = damage(lessons[at], random);
-      return lessons;
+      // The damaged entry comes first, so its field is the one reported.
+      return [damage(randomLesson(random), random), ...randomLessons(random)];
     },
-    (lessons) => assertWirft(() => validateLessons(lessons), 'unerwartete Antwort auf getTimetable')
+    (lessons) => assertWirft(() => validateLessons(lessons), `unerwartete Antwort auf getTimetable (${field})`)
   );
 }
+test('the error message names the field but never the offending value', () => {
+  let message = '';
+  try { validateLessons([{ id: 1, startTime: 'GEHEIM-4711', endTime: 800 }]); } catch (e) { message = e.message; }
+  assertEqual(message, 'WebUntis: unerwartete Antwort auf getTimetable (startTime)');
+});
 
 test('a non-array answer is rejected for every list method', () => {
   for (const [validate, method] of [[validateLessons, 'getTimetable'], [validateClasses, 'getKlassen'], [validateSubjects, 'getSubjects'], [validateRooms, 'getRooms']]) {
@@ -902,16 +907,16 @@ test('classes need a numeric id and a string name; subjects/rooms may lack names
 
 // The session id is written into "Cookie: JSESSIONID=<id>".
 forAll(
-  'a session id from the plain token charset is accepted unchanged',
+  'a session id from the RFC 6265 cookie-value charset (incl. Base64 characters) is accepted unchanged',
   (random) => {
-    const alphabet = 'ABCDEFabcdef0123456789._-';
+    const alphabet = 'ABCDEFabcdef0123456789._-+/=:~!*';
     return Array.from({ length: randomInt(random, 1, 64) }, () => alphabet[randomInt(random, 0, alphabet.length - 1)]).join('');
   },
   (sessionId) => assertEqual(validateAuth({ sessionId, personId: 1 }).sessionId, sessionId)
 );
 forAll(
-  'a session id carrying header-breaking characters is always rejected',
-  (random) => insertAt(random, `${randomLabel(random, 4, 20)}${randomLabel(random, 2, 6)}`, pick(random, ['\r\n', '\n', ';', ',', ' ', '=', '"', '\u0000', 'ä'])),
+  'a session id carrying a cookie separator, whitespace, control or non-ASCII character is always rejected',
+  (random) => insertAt(random, `${randomLabel(random, 4, 20)}${randomLabel(random, 2, 6)}`, pick(random, ['\r\n', '\n', '\t', ';', ',', ' ', '"', '\\', '\u0000', '\u007f', 'ä'])),
   (sessionId) => assertWirft(() => validateAuth({ sessionId }), 'unerwartete Antwort auf authenticate')
 );
 test('authenticate: missing, empty, overlong or non-string session id is rejected', () => {
@@ -940,14 +945,17 @@ forAll(
   (random) => ({
     datum: '20261009',
     webuntis: { server: `${randomLabel(random)}.webuntis.com`, user: randomLabel(random), password: randomLabel(random), klasse: randomLabel(random, 1, 3), extra: 'x' },
-    lunch: { provider: 'mensamax', base: 'https://parentsmensa.de', username: randomLabel(random), password: randomLabel(random), cccampus: { pin: randomLabel(random), unbekannt: 1 } },
+    lunch: { provider: 'mensamax', base: 'https://parentsmensa.de', username: randomLabel(random), password: randomLabel(random), cccampus: { pin: `PIN_${randomLabel(random, 4, 8)}`, kundennummer: `KD_${randomLabel(random, 4, 8)}`, unbekannt: 1 } },
     unbekannt: { tief: true },
   }),
   (body) => {
     const out = validateRequestBody(body);
     assertEqual(out.webuntis.server, body.webuntis.server);
-    assertEqual(out.lunch.cccampus.pin, body.lunch.cccampus.pin);
-    assert(!('extra' in out.webuntis) && !('unbekannt' in out) && !('unbekannt' in out.lunch.cccampus), JSON.stringify(out));
+    assertEqual(out.lunch.password, body.lunch.password);
+    assert(!('extra' in out.webuntis) && !('unbekannt' in out), JSON.stringify(out));
+    // Data minimization: the ccCampus PIN never gets past the validator.
+    const serialized = JSON.stringify(out);
+    assert(!('cccampus' in out.lunch) && !serialized.includes('PIN_') && !serialized.includes('KD_'), serialized);
   }
 );
 forAll(
@@ -962,7 +970,7 @@ forAll(
   (body) => assertWirft(() => validateRequestBody(body), 'Ungültiger Request-Body')
 );
 test('request body: not an object, section not an object, or an overlong field is rejected', () => {
-  for (const body of [null, [], 'x', 1, { webuntis: 'x' }, { lunch: [1] }, { lunch: { cccampus: 'x' } }, { webuntis: { user: 'a'.repeat(1001) } }]) {
+  for (const body of [null, [], 'x', 1, { webuntis: 'x' }, { lunch: [1] }, { webuntis: { user: 'a'.repeat(1001) } }]) {
     assertWirft(() => validateRequestBody(body), 'Ungültiger Request-Body');
   }
 });
@@ -1261,7 +1269,7 @@ await testAsync('REGRESSION: a malformed WebUntis answer is reported generically
   );
   restoreFetch();
   const body = await resp.json();
-  assertEqual(body.stundenFehler, 'WebUntis: unerwartete Antwort auf authenticate');
+  assertEqual(body.stundenFehler, 'WebUntis: unerwartete Antwort auf authenticate (sessionId)');
 });
 
 await testAsync('REGRESSION: a session id with CR/LF never reaches a Cookie header', async () => {
@@ -1304,7 +1312,7 @@ await testAsync('REGRESSION: a timetable entry with a broken shape fails the req
   );
   restoreFetch();
   const body = await resp.json();
-  assertEqual(body.stundenFehler, 'WebUntis: unerwartete Antwort auf getTimetable');
+  assertEqual(body.stundenFehler, 'WebUntis: unerwartete Antwort auf getTimetable (startTime)');
   assertEqual(body.stunden.length, 0);
 });
 
@@ -1317,6 +1325,79 @@ await testAsync('REGRESSION: a request body with a non-string config field is re
   );
   restoreFetch();
   assertEqual(resp.status, 400);
+});
+
+// Canned WebUntis answers for a full successful run; single methods can be
+// overridden to return something broken.
+function webuntisHandler(overrides = {}) {
+  return {
+    test: (url) => url.includes('/WebUntis/jsonrpc.do'),
+    respond: async (url, options) => {
+      const method = JSON.parse(options.body).method;
+      if (method in overrides) return overrides[method]();
+      const results = {
+        authenticate: { sessionId: 'abc123' },
+        getKlassen: [{ id: 1, name: '9c' }],
+        getTimetable: [{ id: 10, startTime: 800, endTime: 845, su: [{ id: 20 }], ro: [{ id: 2 }] }],
+        getSubjects: [{ id: 20, longName: 'Deutsch' }],
+        getRooms: [{ id: 2, name: 'R102' }],
+        logout: {},
+      };
+      return new Response(JSON.stringify({ result: results[method] }));
+    },
+  };
+}
+async function timetableVia(overrides) {
+  globalThis.caches = makeCachesStub();
+  mockFetch([webuntisHandler(overrides)]);
+  const resp = await proxyWorker.fetch(
+    apiRequest({ webuntis: { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' }, lunch: {}, datum: '20260901' }),
+    TEST_ENV, makeCtx()
+  );
+  restoreFetch();
+  return resp.json();
+}
+
+await testAsync('the canned WebUntis run used below succeeds when nothing is overridden', async () => {
+  const body = await timetableVia({});
+  assertEqual(body.stundenFehler, null);
+  assertEqual(body.stunden[0].fach, 'Deutsch');
+});
+
+// Every validator the worker calls needs a test through the worker itself —
+// otherwise a validator call can be removed there without any test noticing.
+const BROKEN_ANSWERS = [
+  ['getKlassen', { result: [{ id: 'eins', name: '9c' }] }, 'WebUntis: unerwartete Antwort auf getKlassen (id)'],
+  ['getTimetable', { result: [{ id: 10, startTime: 800 }] }, 'WebUntis: unerwartete Antwort auf getTimetable (endTime)'],
+  ['getSubjects', { result: [{ id: 20, longName: { x: 1 } }] }, 'WebUntis: unerwartete Antwort auf getSubjects (longName)'],
+  ['getRooms', { result: { id: 2 } }, 'WebUntis: unerwartete Antwort auf getRooms (Liste)'],
+];
+for (const [method, answer, expected] of BROKEN_ANSWERS) {
+  await testAsync(`REGRESSION: a broken ${method} answer fails the request with its generic message`, async () => {
+    const body = await timetableVia({ [method]: () => new Response(JSON.stringify(answer)) });
+    assertEqual(body.stundenFehler, expected);
+    assertEqual(body.stunden.length, 0);
+  });
+}
+
+// "Check your password" is only true when WebUntis itself rejected the
+// login. A maintenance page, an empty body or a redirect on authenticate
+// must not be reported as a wrong password.
+const NON_JSON_LOGIN_ANSWERS = [
+  ['an HTML maintenance page', () => new Response('<html>Wartung</html>', { status: 503 })],
+  ['an empty body', () => new Response('', { status: 200 })],
+  ['a redirect', () => new Response(null, { status: 302, headers: { Location: 'https://schule.webuntis.com/login' } })],
+];
+for (const [name, respond] of NON_JSON_LOGIN_ANSWERS) {
+  await testAsync(`REGRESSION: ${name} on authenticate is not reported as a wrong password`, async () => {
+    const body = await timetableVia({ authenticate: respond });
+    assert(body.stundenFehler.includes('keine gültige JSON-Antwort'), body.stundenFehler);
+    assert(!body.stundenFehler.includes('Passwort'), body.stundenFehler);
+  });
+}
+await testAsync('a JSON-RPC error on a later call (not the login) passes through as WebUntis phrased it', async () => {
+  const body = await timetableVia({ getTimetable: () => new Response(JSON.stringify({ error: { message: 'no right for timetable' } })) });
+  assertEqual(body.stundenFehler, 'WebUntis getTimetable: no right for timetable');
 });
 
 await testAsync('a wrong WebUntis password produces the friendly login-failure message', async () => {
@@ -1608,7 +1689,7 @@ delete globalThis.caches;
 
 console.log('\ntools/require-clean-tree.sh');
 
-const CLEAN_TREE_SCRIPT = new URL('./tools/require-clean-tree.sh', import.meta.url).pathname;
+const CLEAN_TREE_SCRIPT = fileURLToPath(new URL('./tools/require-clean-tree.sh', import.meta.url));
 
 function withTempRepo(setup) {
   const dir = mkdtempSync(join(tmpdir(), 'heute-schule-cleantree-'));
@@ -1646,6 +1727,12 @@ test('staged but uncommitted change is rejected', () => {
 test('untracked, not ignored file is rejected', () => {
   assertEqual(withTempRepo(({ dir }) => writeFileSync(join(dir, 'neu.txt'), 'x\n')), 1);
 });
+test('a changed file hidden by skip-worktree is rejected', () => {
+  assertEqual(withTempRepo(({ dir, git }) => { git('update-index', '--skip-worktree', 'datei.txt'); writeFileSync(join(dir, 'datei.txt'), 'zwei\n'); }), 1);
+});
+test('a changed file hidden by assume-unchanged is rejected', () => {
+  assertEqual(withTempRepo(({ dir, git }) => { git('update-index', '--assume-unchanged', 'datei.txt'); writeFileSync(join(dir, 'datei.txt'), 'zwei\n'); }), 1);
+});
 test('a folder that is no Git repository is rejected', () => {
   const dir = mkdtempSync(join(tmpdir(), 'heute-schule-nogit-'));
   try {
@@ -1655,6 +1742,126 @@ test('a folder that is no Git repository is rejected', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ── Deploy check: which commit is the proxy actually serving? ─────────────
+//
+// tools/check-proxy-deploy.sh asks wrangler for the active deployment and
+// looks for the commit hash in each active version's details. Tested here
+// against a stand-in for wrangler that prints canned JSON — the real
+// answer's exact layout is deliberately irrelevant to the script.
+
+console.log('\ntools/check-proxy-deploy.sh');
+
+const PROXY_CHECK_SCRIPT = fileURLToPath(new URL('./tools/check-proxy-deploy.sh', import.meta.url));
+const COMMIT_A = 'a'.repeat(40);
+const COMMIT_B = 'b'.repeat(40);
+const DEPLOYMENT_ID = '11111111-1111-4111-8111-111111111111';
+const VERSION_1 = '22222222-2222-4222-8222-222222222222';
+const VERSION_2 = '33333333-3333-4333-8333-333333333333';
+
+// scenario: { status: string | null (null = command fails), versions: { [id]: json string } }
+function runProxyCheck(commit, scenario) {
+  const dir = mkdtempSync(join(tmpdir(), 'heute-schule-proxycheck-'));
+  try {
+    const stub = join(dir, 'wrangler-stub.sh');
+    const lines = ['#!/usr/bin/env bash', 'if [ "$1 $2" = "deployments status" ]; then'];
+    lines.push(scenario.status === null ? '  exit 1' : `  cat <<'JSON'\n${scenario.status}\nJSON\n  exit 0`);
+    lines.push('fi', 'if [ "$1 $2" = "versions view" ]; then', '  case "$3" in');
+    for (const [id, json] of Object.entries(scenario.versions || {})) lines.push(`    ${id}) cat <<'JSON'\n${json}\nJSON\n    exit 0;;`);
+    lines.push('    *) exit 1;;', '  esac', 'fi', 'exit 1');
+    writeFileSync(stub, lines.join('\n') + '\n');
+    try {
+      execFileSync('bash', [PROXY_CHECK_SCRIPT, commit], { cwd: dir, stdio: 'pipe', env: { ...process.env, WRANGLER: `bash ${stub}` } });
+      return 0;
+    } catch (e) {
+      return e.status;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const statusWith = (...versionIds) => JSON.stringify({ id: DEPLOYMENT_ID, versions: versionIds.map((id) => ({ version_id: id, percentage: 100 / versionIds.length })) });
+const versionWith = (commit) => JSON.stringify({ id: VERSION_1, annotations: { 'workers/message': commit } });
+
+test('the active version carries the commit → confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: statusWith(VERSION_1), versions: { [VERSION_1]: versionWith(COMMIT_A) } }), 0);
+});
+test('the commit sits in a differently named field → still confirmed (layout-independent)', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: statusWith(VERSION_1), versions: { [VERSION_1]: JSON.stringify({ meta: [{ note: `deploy ${COMMIT_A}` }] }) } }), 0);
+});
+test('the active version carries another commit → not confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: statusWith(VERSION_1), versions: { [VERSION_1]: versionWith(COMMIT_B) } }), 1);
+});
+test('the commit only exists in a version that is not active → not confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: statusWith(VERSION_1), versions: { [VERSION_1]: versionWith(COMMIT_B), [VERSION_2]: versionWith(COMMIT_A) } }), 1);
+});
+test('two active versions, one of them from the commit → confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: statusWith(VERSION_1, VERSION_2), versions: { [VERSION_1]: versionWith(COMMIT_B), [VERSION_2]: versionWith(COMMIT_A) } }), 0);
+});
+test('deployment status cannot be fetched → not confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: null }), 1);
+});
+test('deployment status without any version id → not confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: '{"versions":[]}' }), 1);
+});
+test('version details cannot be fetched → not confirmed', () => {
+  assertEqual(runProxyCheck(COMMIT_A, { status: statusWith(VERSION_1), versions: {} }), 1);
+});
+test('anything but a full commit hash as argument is rejected', () => {
+  assertEqual(runProxyCheck('abc123', { status: statusWith(VERSION_1), versions: { [VERSION_1]: versionWith('abc123') } }), 1);
+});
+
+// ── Deploy and CI wiring ─────────────────────────────────────────────────
+//
+// The gates only help if deploy.sh and the CI actually call them, in a
+// form that cannot go blind. These read the scripts as text: coarse, but a
+// removed gate or a dropped flag turns a test red instead of going unseen.
+
+console.log('\ndeploy.sh and CI wiring');
+
+const DEPLOY_SH = readFileSync(new URL('./deploy.sh', import.meta.url), 'utf-8');
+const CI_YML = readFileSync(new URL('./.github/workflows/ci.yml', import.meta.url), 'utf-8');
+const deployCommands = DEPLOY_SH.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n');
+const ciCommands = CI_YML.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n');
+
+test('deploy.sh: every npm audit call includes devDependencies', () => {
+  // Only real invocations (with flags), not the echo line announcing the step.
+  const calls = deployCommands.match(/npm audit --[^\n]*/g) || [];
+  assert(calls.length >= 1, 'no npm audit call in deploy.sh');
+  for (const call of calls) assert(call.includes('--include=dev') && call.includes('--audit-level=high'), call);
+});
+test('CI: every npm audit call includes devDependencies', () => {
+  const calls = ciCommands.match(/npm audit --[^\n]*/g) || [];
+  assert(calls.length >= 1, 'no npm audit call in ci.yml');
+  for (const call of calls) assert(call.includes('--include=dev'), call);
+});
+test('deploy.sh: installs fresh from the lockfile (incl. devDependencies) before anything from node_modules runs', () => {
+  const ci = deployCommands.indexOf('npm ci --include=dev');
+  assert(ci !== -1, 'npm ci --include=dev missing');
+  assert(ci < deployCommands.indexOf('npx --no-install c8'), 'npm ci must run before the first tool from node_modules');
+});
+test('deploy.sh: no npx call may fetch a package ad hoc', () => {
+  const calls = deployCommands.match(/npx [^\n"]*/g) || [];
+  assert(calls.length >= 4, `expected the npx calls for c8, eslint, tsc and wrangler, got ${calls.length}`);
+  for (const call of calls) assert(call.startsWith('npx --no-install '), call);
+});
+test('deploy.sh: gates run in order — clean tree first, all checks before the first deploy', () => {
+  const order = ['require-clean-tree.sh', 'npm ci --include=dev', 'security find-generic-password', 'run-tests.mjs', 'eslint .', 'tsc -p', 'npm audit --', '$WRANGLER deploy'];
+  let last = -1;
+  for (const marker of order) {
+    const at = deployCommands.indexOf(marker);
+    assert(at > last, `"${marker}" missing or out of order`);
+    last = at;
+  }
+});
+test('deploy.sh: the proxy deploy passes the commit along and checks it afterwards', () => {
+  assert(/\$WRANGLER deploy --message "\$\(git rev-parse HEAD\)"/.test(deployCommands), 'deploy without --message <commit>');
+  assert(deployCommands.indexOf('check-proxy-deploy.sh') > deployCommands.indexOf('$WRANGLER deploy --message'), 'proxy check missing or before the deploy');
+});
+test('CI: read-only token and no install scripts', () => {
+  assert(/permissions:\s*\n\s+contents: read/.test(ciCommands), 'permissions: contents: read missing');
+  assert(ciCommands.includes('npm ci --ignore-scripts'), 'npm ci without --ignore-scripts');
 });
 
 // ── Security headers in web/_headers ────────────────────────────────────
@@ -1689,6 +1896,10 @@ const HEADER_MUTATIONS = [
   ['CSP unsafe-eval added', () => withCsp((v) => v.replace("script-src 'self'", "script-src 'self' 'unsafe-eval'")), 'unsafe-eval'],
   ['CSP wildcard source added', () => withCsp((v) => v.replace("img-src 'self'", "img-src 'self' *")), '* als Quelle'],
   ['CSP foreign script host added', () => withCsp((v) => v.replace("script-src 'self'", "script-src 'self' https://cdn.example")), 'script-src erlaubt fremde Quellen'],
+  ['CSP script-src-elem with a foreign host', () => withCsp((v) => `${v}; script-src-elem 'self' https://cdn.example`), 'script-src-elem erlaubt fremde Quellen'],
+  ['CSP connect-src opened to every https host', () => withCsp((v) => v.replace("connect-src 'self'", "connect-src 'self' https:")), 'connect-src erlaubt mit https: jeden Host'],
+  ['CSP img-src opened to every https host', () => withCsp((v) => v.replace("img-src 'self' data:", "img-src 'self' data: https:")), 'img-src erlaubt mit https: jeden Host'],
+  ['CSP data: outside img-src', () => withCsp((v) => v.replace("font-src 'self'", "font-src 'self' data:")), 'font-src erlaubt data:'],
   ['nosniff removed', () => { const h = { ...SITE_HEADERS }; delete h['X-Content-Type-Options']; return h; }, 'X-Content-Type-Options'],
   ['X-Frame-Options weakened', () => ({ ...SITE_HEADERS, 'X-Frame-Options': 'SAMEORIGIN' }), 'X-Frame-Options'],
   ['Referrer-Policy leaks full URL', () => ({ ...SITE_HEADERS, 'Referrer-Policy': 'unsafe-url' }), 'Referrer-Policy'],
@@ -1722,7 +1933,7 @@ test('live comparison: a missing and a changed header are each reported by name'
 
 console.log('\nESLint configuration');
 
-const eslint = new ESLint({ cwd: new URL('.', import.meta.url).pathname });
+const eslint = new ESLint({ cwd: fileURLToPath(new URL('.', import.meta.url)) });
 const inHtml = (js) => `<!doctype html><html><body><script>\n${js}\n</script></body></html>\n`;
 
 async function lintMessages(code, filePath) {
@@ -1777,12 +1988,25 @@ for (const [filePath, wrap] of ES2019_FILES) {
   }
 }
 
+// Regex lookbehind is ES2018 syntax, so ecmaVersion 2019 lets it through —
+// but Safari only knows it from 16.4 on. Banned separately in device code.
+for (const [filePath, wrap] of ES2019_FILES) {
+  await testAsync(`${filePath}: regex lookbehind is flagged, lookahead is not`, async () => {
+    const flagged = await lintMessages(wrap('self.a = /(?<=x)y/.test(self.b); self.c = /(?<!x)y/.test(self.b);'), filePath);
+    assertEqual(flagged.filter((m) => m.ruleId === 'no-restricted-syntax').length, 2);
+    const allowed = await lintMessages(wrap('self.a = /x(?=y)/.test(self.b);'), filePath);
+    assertEqual(allowed.filter((m) => m.ruleId === 'no-restricted-syntax').length, 0);
+  });
+}
+
 // ── Licenses of all dependencies ─────────────────────────────────────────
 //
 // The project is MIT-licensed and ships none of its dependencies: all of
 // them are build/test/deploy tools. This keeps it that way: every package
 // in the lockfile must be a devDependency under a permissive license. An
-// SPDX "OR" needs one allowed alternative, an "AND" needs all parts.
+// SPDX "OR" needs one allowed alternative, an "AND" needs all parts. An
+// expression mixing both would need a real parser for its parentheses —
+// it is reported instead, to be judged by hand.
 
 console.log('\nDependency licenses (package-lock.json)');
 
@@ -1798,6 +2022,7 @@ function licenseAllowed(packagePath, expression) {
   const term = (t) => PERMISSIVE_LICENSES.has(t)
     || LICENSE_EXCEPTIONS.some((ex) => packagePath.startsWith(ex.packagePrefix) && ex.license === t);
   const clean = expression.replace(/[()]/g, '').trim();
+  if (/\sOR\s/.test(clean) && /\sAND\s/.test(clean)) return false;
   if (/\sOR\s/.test(clean)) return clean.split(/\s+OR\s+/).some((alt) => licenseAllowed(packagePath, alt));
   return clean.split(/\s+AND\s+/).every(term);
 }
@@ -1825,6 +2050,7 @@ const LICENSE_CASES = [
   ['package without a license field', lockWith('node_modules/x', { dev: true }), 1],
   ['runtime (non-dev) dependency', lockWith('node_modules/x', { license: 'MIT' }), 1],
   ['AND with one non-permissive part', lockWith('node_modules/x', { dev: true, license: 'MIT AND GPL-2.0-only' }), 1],
+  ['expression mixing AND and OR (would need a real SPDX parser)', lockWith('node_modules/x', { dev: true, license: '(MIT OR GPL-3.0-only) AND LGPL-3.0-or-later' }), 1],
   ['OR with one permissive alternative', lockWith('node_modules/x', { dev: true, license: '(GPL-2.0-only OR MIT)' }), 0],
   ['LGPL within the named sharp exception', lockWith('node_modules/@img/sharp-libvips-test', { dev: true, license: 'Apache-2.0 AND LGPL-3.0-or-later' }), 0],
 ];
@@ -1889,7 +2115,7 @@ test('no date/history signal words in code comments', () => {
   const files = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
     'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs', 'proxy/validate.mjs', 'types/heute-schule.d.ts', 'tsconfig.json',
-    'tools/headers.mjs', 'tools/check-live-headers.mjs', 'tools/require-clean-tree.sh',
+    'tools/headers.mjs', 'tools/check-live-headers.mjs', 'tools/require-clean-tree.sh', 'tools/check-proxy-deploy.sh',
     'web/index.html', 'web/sw.js', 'web/_headers',
   ];
   const signalWords = /vorher|Korrektur \(|Fix vom|Betatest \(|Versehen|monatelang|Passiert seit|bestätigt \(\d|verifiziert \(\d|wurde behoben|nachträglich geändert|fix from|beta test \(|for months|has happened since|confirmed \(\d|verified \(\d|\bwas fixed\b|changed later/;

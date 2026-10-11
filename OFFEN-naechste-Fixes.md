@@ -1,6 +1,8 @@
 # Offene Punkte
 
-**Stand: 09.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+HS-OFF · v1 · 2026-10-11 · f9856b48 · lebend · gültig
+
+**Stand: 11.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -20,7 +22,11 @@ Befund bisher: den nicht deployten SSRF-Fix, siehe unten und
 Eine sechste Runde am 09.10.2026 (frische Sitzung, kein Vorwissen über die
 Fix-Sitzung) prüfte gezielt den Fix der Host-Verwechslung im
 WebUntis-Hostcheck und fand drei weitere 🟡-Punkte im selben Umfeld, siehe
-unten und [PEER-REVIEW-2026-10-09.md](PEER-REVIEW-2026-10-09.md).
+unten und [PEER-REVIEW-2026-10-09.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-09.md).
+Eine siebte Runde, ebenfalls am 09.10.2026 und wieder ohne Vorwissen, prüfte
+das Wartungs-Vorhaben (Version 0.3.3): kein 🔴, vier 🟡 an den Rändern der
+neuen Gates, siehe unten und
+[PEER-REVIEW-2026-10-09b.md](PEER-REVIEW-2026-10-09b.md).
 (Links zu Berichten, die nicht Teil des `web/docs/`-Dumps sind, zeigen
 bewusst auf GitHub statt auf eine relative Datei — dort würde ein
 relativer Link ins Leere laufen.) Alle Berichte bleiben als
@@ -56,6 +62,9 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | (Kosmetisch, Folge des Hostcheck-Fixes 09.10.) Frontend-Bereinigung des Server-Felds schnitt eine ohne Protokoll eingefügte Adresse nur an `/`, `#` und `?` ab, nicht an `\` | `extractWebUntisHostname` in `web/index.html` trennt jetzt an `/`, `\`, `#` und `?`. Im Browser gegengeprüft: `schule.webuntis.com\WebUntis` blieb vorher ungekürzt und wird jetzt zu `schule.webuntis.com` bereinigt; Kontrolle mit `/` griff in beiden Ständen (09.10.2026) |
 | 🟡 (Entwicklungsprozess Q38, Regel-Inventar EP-INV v1) Wartungs-Vorhaben „Prüfer nachziehen": falsches Grün im Live-Check bei unsauberem Arbeitsbaum, fehlende ESLint-Sicherheitsregeln, `npm audit` nur in der CI, kein Test der Sicherheits-Header, ES5-Ziel weder eingehalten noch geprüft | **Deploy nur aus sauberem Arbeitsbaum** (`tools/require-clean-tree.sh`, vor dem Schlüsselbund). **ESLint:** `no-eval`, `no-implied-eval`, `no-new-func`, Verbot von `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` (die fünf `innerHTML = ''` sind jetzt `textContent = ''`, keine Ausnahme nötig), `no-console` im Proxy. **`npm audit --audit-level=high` als Deploy-Gate**; dafür `wrangler` als exakt gepinnte Entwicklungsabhängigkeit ins Lockfile — das Audit fand sofort eine hohe Lücke in 4.144.0, jetzt 4.149.0. **Sicherheits-Header:** Test der Pflichtteile in `web/_headers` plus Live-Vergleich nach dem Deploy (`tools/headers.mjs`). **Syntax-Ziel ES2019** für `index.html`, `ueber.html`, `sw.js`, per ESLint durchgesetzt. Zusätzlich **Lizenztest** über das Lockfile. Gegenproben: je ein Mutant pro Prüfer (Arbeitsbaum-Prüfung wirkungslos, Sicherheitsregeln entfernt, Sprachstand 2022, Lizenzprüfung lässt alles durch, Header-Prüfung ignoriert CSP) macht 3–9 Tests rot; Audit-Gate einmalig mit `minimist@1.2.0` (Exit 1) gegen `1.2.8` (Exit 0) geprüft (09.10.2026) |
 | 🟡 (Entwicklungsprozess Q28/Q31) Keine Typprüfung — 13 JS-Dateien nur mit ESLint, Antworten der Upstream-Dienste ungeprüft verwendet | **Typprüfung:** `tsc --checkJs` strict über JSDoc, ohne Build-Schritt, `typescript@7.0.2` exakt gepinnt; geprüft werden `proxy/*`, `stundenplan.js`, `web/sw.js` (`npm run typecheck`, Gate in `deploy.sh` und CI). Fand beim Einführen eine echte Unschärfe im Service Worker (offline ohne Cache-Treffer `undefined` an `respondWith()`). **Laufzeitvalidierung** in `proxy/validate.mjs`: Request-Body aus dem Browser (nur bekannte Felder als Text, sonst 400) und jede WebUntis-Antwort (Strukturfehler → „unerwartete Antwort“, nicht mehr als „Passwort falsch“ fehlgedeutet; `sessionId` nur Token-Zeichen, weil sie in den `Cookie`-Header geht). Gegenproben: neue Worker-Tests gegen den alten Worker 4 rot; fünf Mutanten der Validierung je 1–3 rot; eingebauter Typfehler → `tsc` Exit 1 (09.10.2026). Nicht abgedeckt: Inline-Script in `index.html`, siehe „Noch offen“ |
+| 🟡 (Peer-Review 09.10., siebte Runde, Funde A-1 bis A-4) Ränder der neuen Gates: (1) `npm audit` wurde mit `NODE_ENV=production` blind (alle Pakete sind Entwicklungsabhängigkeiten) und prüfte nur das Lockfile, nicht `node_modules`; (2) eine Nicht-JSON-Antwort beim WebUntis-Login (Wartungsseite, leerer Body, Weiterleitung) hieß weiter „Passwort prüfen“; (3) die Aufrufe von `validateClasses`/`validateSubjects`/`validateRooms` ließen sich im Worker entfernen, ohne dass ein Test es merkte; (4) ob der Proxy den Stand von HEAD ausliefert, prüfte nichts | (1) `deploy.sh` installiert vor jedem Deploy frisch mit `npm ci --include=dev` und auditiert mit `--include=dev`, CI ebenso. (2) Eigene Fehlerklasse für „WebUntis hat abgelehnt“ statt Erkennung am Textanfang. (3) Worker-Test je Prüfung. (4) `wrangler deploy --message <Commit>`, danach liest `tools/check-proxy-deploy.sh` die aktive Version zurück. Gegenproben: gegen Version 0.3.3 45 Tests rot; 16 Mutanten je von mindestens einem Test erkannt; Audit mit `minimist@1.2.0` und `NODE_ENV=production` Exit 0, mit `--include=dev` Exit 1 (11.10.2026, Version 0.3.4). Der Proxy-Check ist gegen einen `wrangler`-Stellvertreter getestet; die echte Bestätigung ist der erste Deploy mit 0.3.4 |
+| 🟢 (dieselbe Runde, A-5 bis A-8, B-1, D-2, D-3, K-1 bis K-3) CSP-Prüfung übersah `script-src-elem` und pauschale `https:`-Quellen; Arbeitsbaum-Gate per `skip-worktree` umgehbar; CI führte Install-Skripte aus und hatte ein Schreib-Token; Validierungsmeldung nannte das Feld nicht; `sessionId`-Zeichensatz enger als RFC 6265 (Risiko: alle Familien ausgesperrt bei Formatwechsel); Proxy übernahm ccCampus-PIN und Kundennummer, die er nie braucht; Lookbehind in regulären Ausdrücken im ES2019-Umfang erlaubt, in Safari erst ab 16.4; Lizenztest wertete gemischte `AND`/`OR`-Ausdrücke falsch aus; drei Doku-Ungenauigkeiten | Alle behoben, je mit Test und Mutant. Doku: Zeilenumbrüche in der `sessionId` lehnen die Laufzeiten ohnehin ab (Härtung), tatsächlich geschlossen ist das Anhängen weiterer Cookies über `;`. Bewusst nicht umgesetzt: weitere HTML-Umwege für ESLint (`href`, `DOMParser`) — geringer Nutzen (11.10.2026, Version 0.3.4) |
+| 🔴 (Hinweis aus dem Entwicklungsprozess, 11.10.2026) Datenverlust in der App: `loadConfig` lieferte bei jedem Lesefehler still eine leere Konfiguration — kaputtes JSON, unerwartete Form, auch jeder Fehler in der Nachrüst-Schleife für ältere Konfigurationen. Die App zeigte das leere Formular, das nächste Speichern überschrieb die Daten der Familie ohne Rückfrage | `web/index.html` unterscheidet „nichts gespeichert“ von „vorhanden, aber nicht lesbar“. Im zweiten Fall bleibt der gespeicherte Wert unberührt, die App zeigt einen Hinweis, und Speichern fragt ausdrücklich, ob überschrieben werden darf. „Alle Daten löschen“ meldet jetzt ehrlich, wenn der Speicher sich nicht leeren ließ. Im Browser gegengeprüft: vorher war der gespeicherte Eintrag nach „Kind hinzufügen“ + „Speichern“ ohne Rückfrage weg; jetzt bleibt er bei Ablehnen erhalten und wird erst nach Bestätigen überschrieben; gültige Konfiguration, kaputtes JSON, falsche Form, keine Daten und Löschen als Kontrollfälle (Version 0.3.4) |
 
 ## Noch offen
 
@@ -87,6 +96,11 @@ Zeitpunkt-Momentaufnahmen unverändert.
    (Entscheidungs-Log), braucht strict-Nacharbeit am DOM-Code und einen
    sorgfältigen Test auf den echten Geräten — deshalb nicht im
    Wartungs-Vorhaben.
+4. **Kosmetisch: Meldung bei abgelehnter Anfrage** (Peer-Review 09.10.,
+   siebte Runde, C-1). Lehnt der Proxy eine Anfrage mit 400 ab (Feld kein
+   Text), zeigt die Karte nur „HTTP 400“. Tritt mit der App selbst nicht
+   auf, weil sie nur Text schickt; eine verständliche Meldung wäre trotzdem
+   besser. Betrifft das Inline-Script, passt zu Punkt 3.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

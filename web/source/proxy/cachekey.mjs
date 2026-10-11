@@ -45,8 +45,9 @@ export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
       einrichtung: lunchCfg.einrichtung,
       username: lunchCfg.username,
       password: lunchCfg.password,
-      // ccCampus runs in the browser, but could in theory be sent along
-      // anyway — if so, it must also be able to affect the key.
+      // ccCampus runs in the browser and validate.mjs drops its block
+      // before it gets here. Kept in the key anyway: should a later change
+      // let it through, it must also be able to affect the key.
       cccampus: { base: cc.base, kundennummer: cc.kundennummer, pin: cc.pin },
     },
   };

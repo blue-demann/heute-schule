@@ -16,8 +16,11 @@ Account-ID aus dem macOS-Schlüsselbund, den Claude Code aus der Sandbox nicht
 erreicht (und nicht erreichen soll). Claude committet, Björn deployt.
 
 **Vor jedem Deploy zwingend:** `./deploy.sh` (nie `wrangler` direkt aufrufen) —
-löst Tests, Lint, Coverage-Info, Datei-Dump-Konsistenz-Gate und einen
-Live-vs-HEAD-Check aus. Bei fehlschlagenden Tests wird nicht deployed.
+deployt nur aus einem sauberen Arbeitsbaum und löst `npm ci`, Tests, Lint,
+Typprüfung, `npm audit` und das Datei-Dump-Konsistenz-Gate aus, danach die
+Prüfung, ob Proxy und Website den Stand von HEAD ausliefern (Reihenfolge:
+`PROJEKT.md` Abschnitt 10). Schlägt eine Prüfung fehl, wird nicht deployed.
+Während eines Deploys schreibt keine andere Sitzung in dieses Repo.
 
 **Projektspezifische Konventionen** (Warum jeweils in `PROJEKT.md`):
 - Code (Bezeichner + Kommentare) Englisch, Anzeigesprache/UI bleibt Deutsch

@@ -1,6 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-**Stand: 09.10.2026 · Version 0.3.3**
+HS-PRJ · v1 · 2026-10-11 · 7f4ae7ea · lebend · gültig
+
+**Stand: 11.10.2026 · Version 0.3.4**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -194,7 +196,9 @@ Chrome 66 (2018). ESLint parst diese Dateien mit `ecmaVersion: 2019`, neuere
 Syntax wie `?.` oder `??` ist damit ein Lint-Fehler und blockiert den Deploy.
 Grenze: geprüft wird nur Syntax, nicht die Verfügbarkeit neuerer
 Browser-Funktionen (etwa `replaceChildren()`); dort im Zweifel die ältere
-Variante wählen. `var` bleibt im Inline-Script erlaubt, kein Umbau ohne Anlass.
+Variante wählen. Eine Syntax-Ausnahme ist eigens verboten: Lookbehind in
+regulären Ausdrücken gehört zum ES2018-Umfang, Safari kann ihn aber erst
+ab 16.4. `var` bleibt im Inline-Script erlaubt, kein Umbau ohne Anlass.
 **Warum:** Zielgruppe nutzt teils ältere Familien-Geräte; ein Build-Schritt
 hätte zusätzliche Werkzeuge und einen Wartungspfad eingeführt, der für die
 Projektgröße nicht gerechtfertigt war. Nebeneffekt: keine
@@ -255,7 +259,7 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 |---|---|---|
 | Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst. Mensamax-URLs entstehen nur aus `origin` der geprüften Basis-URL plus festem Pfad (kein eigener Port). Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` zentral in `fetchWithTimeout`) — die Host-Prüfung gilt nur für die erste URL |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
-| Laufzeitvalidierung an der Vertrauensgrenze | `proxy/validate.mjs` | Ungeprüfte Daten im Proxy: Der Request-Body aus dem Browser darf nur bekannte Felder als Text enthalten (sonst 400, unbekannte Felder fallen weg); jede WebUntis-Antwort wird vor der Verwendung auf genau die genutzten Felder geprüft und bei Strukturfehlern als Ganzes abgelehnt („WebUntis: unerwartete Antwort auf …“, ohne Inhalte des Anbieters). Die `sessionId` darf nur Token-Zeichen enthalten, weil sie in den `Cookie`-Header geht — kein Zeilenumbruch, kein `;` |
+| Laufzeitvalidierung an der Vertrauensgrenze | `proxy/validate.mjs` | Ungeprüfte Daten im Proxy: Der Request-Body aus dem Browser darf nur bekannte Felder als Text enthalten (sonst 400, unbekannte Felder fallen weg); jede WebUntis-Antwort wird vor der Verwendung auf genau die genutzten Felder geprüft und bei Strukturfehlern als Ganzes abgelehnt („WebUntis: unerwartete Antwort auf …“, ohne Inhalte des Anbieters). Die Meldung nennt Methode und Feld, nie den Wert. Die `sessionId` geht in den `Cookie`-Header und darf deshalb nur Zeichen enthalten, die RFC 6265 in einem Cookie-Wert erlaubt — kein `;` oder `,`, mit dem sich ein zweites Cookie anhängen ließe (Zeilenumbrüche lehnen die Laufzeiten ohnehin ab; das ist dort Härtung, keine geschlossene Lücke). Den ccCampus-Block (PIN, Kundennummer) verwirft der Proxy, weil er ihn nie braucht. Als „Passwort prüfen“ meldet der Worker nur eine echte Ablehnung durch WebUntis, nicht jede fehlgeschlagene Anmeldung |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
 | Security-Header (CSP, HSTS, X-Frame-Options, Permissions-Policy) | `web/_headers` | Clickjacking, Nachladen fremden Codes; CSP mit `unsafe-inline`, weil bewusst kein Build-Schritt existiert (siehe Nicht-Ziele) |
@@ -347,7 +351,9 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | `checkSecurityHeaders()`, `compareHeaders()` | `tools/headers.mjs`, `web/_headers` | Pflichtteile der Sicherheits-Header (HSTS ≥ 1 Jahr, CSP-Kern, `nosniff`, Referrer-Policy, `X-Frame-Options`, Permissions-Policy); jede Anforderung einzeln entfernt bzw. abgeschwächt muss namentlich gemeldet werden. Derselbe Code vergleicht in `deploy.sh` die Live-Header mit der Datei |
 | ESLint-Konfiguration | `eslint.config.mjs` | Prüft die Prüfer: Jede Sicherheitsregel (`no-eval`, `no-implied-eval`, `no-new-func`, `innerHTML` & Co., `no-console` im Proxy) muss ihr Konstrukt melden, die erlaubte Variante nicht; ES2020-Syntax in `index.html`/`ueber.html`/`sw.js` muss ein Parse-Fehler sein |
 | Lizenzen | `package-lock.json` | Alle Pakete reine Entwicklungsabhängigkeiten unter freigegebener Lizenz (MIT, ISC, Apache-2.0, BSD, BlueOak, 0BSD, CC0); benannte Ausnahme LGPL nur für `@img/sharp-*` (kommt über `wrangler`, wird nie ausgeliefert) |
-| `validateRequestBody()`, `validateRpcEnvelope()`, `validateAuth()`, `validateLessons()` u. a. (Property-Tests) | `proxy/validate.mjs` | Gültige Antworten mit beliebigen Zusatzfeldern gehen unverändert durch; je eine benannte Schadensklasse (falscher Typ oder Bereich der `id`, fehlende `id`, Uhrzeit außerhalb 0–2359 oder Minute ≥ 60, `code` kein Text, Fach-/Raum-Verweise ohne gültige `id`, Eintrag kein Objekt) wird immer abgelehnt; `sessionId` mit Zeichen, die einen Header brechen, ebenso; Request-Body mit Nicht-Text-Feld oder überlangem Feld → abgelehnt. Dazu Worker-Tests: kaputte Antwort wird nicht als „Passwort falsch“ gemeldet, eine `sessionId` mit CR/LF erreicht nie einen `Cookie`-Header |
+| `validateRequestBody()`, `validateRpcEnvelope()`, `validateAuth()`, `validateLessons()` u. a. (Property-Tests) | `proxy/validate.mjs` | Gültige Antworten mit beliebigen Zusatzfeldern gehen unverändert durch; je eine benannte Schadensklasse (falscher Typ oder Bereich der `id`, fehlende `id`, Uhrzeit außerhalb 0–2359 oder Minute ≥ 60, `code` kein Text, Fach-/Raum-Verweise ohne gültige `id`, Eintrag kein Objekt) wird immer abgelehnt; `sessionId` mit Zeichen, die einen Header brechen, ebenso; Request-Body mit Nicht-Text-Feld oder überlangem Feld → abgelehnt. Dazu Worker-Tests: Für jede Prüfung, die der Worker aufruft, läuft eine kaputte Antwort durch den Worker selbst (sonst ließe sich ein Aufruf dort unbemerkt entfernen); eine Wartungsseite, ein leerer Body oder eine Weiterleitung beim Login werden nicht als „Passwort falsch“ gemeldet |
+| `tools/check-proxy-deploy.sh` | Deploy-Prüfung | Welcher Commit läuft auf dem Proxy? Gegen einen `wrangler`-Stellvertreter mit festen Antworten: Commit in der aktiven Version → bestätigt; anderer Commit, Commit nur in einer inaktiven Version, nicht abrufbar → nicht bestätigt |
+| Verdrahtung | `deploy.sh`, `.github/workflows/ci.yml` | Die Gates müssen auch aufgerufen werden: Reihenfolge, `npm ci`, `npm audit --include=dev`, kein `npx` ohne `--no-install`, Commit als Versionsnachricht, CI mit Lese-Token und ohne Install-Skripte |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -454,7 +460,7 @@ relativer Link würde dort ins Leere laufen:
   per `./deploy.sh proxy` behoben und ebenso live nachverifiziert. Fand
   außerdem den kaputten Live-vs-HEAD-Check (Dotfile-Problem, s. o.) und
   den zu pauschalen ESLint-Ausschluss von `web/**` (beide ebenfalls behoben)
-- [`PEER-REVIEW-2026-10-09.md`](PEER-REVIEW-2026-10-09.md) — sechste Runde,
+- [`PEER-REVIEW-2026-10-09.md`](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-09.md) — sechste Runde,
   frische Sitzung ohne Vorwissen über die Fix-Sitzung, gezielt auf den Fix
   der Host-Verwechslung (Version 0.3.1) statt auf die ganze Website, Rolle
   aus `prompts/peer-review-bester-freund.md`, angepasst auf einen Code-Fix
@@ -463,6 +469,14 @@ relativer Link würde dort ins Leere laufen:
   Weiterleitungen wurden gefolgt, Mensamax-URLs aus dem rohen
   `base`-String, zwei per Mutationstest unentdeckte Regressionen — alle in
   Version 0.3.2 behoben
+- [`PEER-REVIEW-2026-10-09b.md`](PEER-REVIEW-2026-10-09b.md) — siebte Runde,
+  frische Sitzung, Prüfobjekt die neun Commits des Wartungs-Vorhabens
+  (Version 0.3.3). Kein 🔴; vier 🟡 an den Rändern der neuen Gates: Das
+  Audit-Gate wurde mit `NODE_ENV=production` blind und prüfte das Lockfile
+  statt `node_modules`; eine Nicht-JSON-Antwort beim Login hieß weiter
+  „Passwort prüfen“; drei Prüfaufrufe im Worker ließen sich unbemerkt
+  entfernen; ob der Proxy den richtigen Stand ausliefert, prüfte nichts —
+  alle in Version 0.3.4 behoben
 
 Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
 Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
@@ -470,7 +484,7 @@ c't-Stil-/Peer-Review-Berichte verlinkt — die Website zeigt den aktuellen
 Stand, nicht die Historie. Die früheren Runden
 bleiben hier im Repository nachvollziehbar.
 
-**Methodik — wichtig für die Einordnung:** Keine der sechs Audit-Runden
+**Methodik — wichtig für die Einordnung:** Keine der sieben Audit-Runden
 wurde **von menschlichen Prüfer:innen durchgeführt**, sondern von Claude
 (Anthropics KI-Assistent) anhand strukturierter, von Björn selbst
 formulierter Prompts — mit echtem Zugriff auf die Live-Website und den
@@ -506,21 +520,37 @@ Reihenfolge der Prüfungen in `deploy.sh` — jede bricht den Deploy ab:
 
 1. **Sauberer Arbeitsbaum** (`tools/require-clean-tree.sh`), noch vor dem
    Zugriff auf den Schlüsselbund. Sonst meldete der Live-Check am Ende „Live
-   entspricht HEAD“, obwohl nicht committete Änderungen deployt wurden.
-2. Zugangsdaten aus dem Schlüsselbund, Formatprüfung
-3. Testsuite (mit Coverage-Info), Lint, Typprüfung
-4. **`npm audit --audit-level=high`** — deckt alle Entwicklungsabhängigkeiten
-   ab, auch `wrangler` selbst. Ist die Registry nicht erreichbar, wird nicht
-   deployt.
-5. Datei-Dump (`web/source/`, `web/docs/`) aktuell
-6. Deploy Proxy und/oder Website, danach Live-vs-HEAD-Check und Vergleich der
-   Live-Sicherheits-Header mit `web/_headers` (beides nach dem Deploy, daher
-   als Warnung)
+   entspricht HEAD“, obwohl nicht committete Änderungen deployt wurden. Auch
+   per `skip-worktree`/`assume-unchanged` versteckte Dateien werden abgelehnt.
+2. **`npm ci --include=dev`** — installiert `node_modules` frisch aus dem
+   Lockfile, jedes Paket gegen seine Prüfsumme. Nur so ist das, was danach
+   läuft, dasselbe wie das, was das Audit prüft.
+3. Zugangsdaten aus dem Schlüsselbund, Formatprüfung
+4. Testsuite (mit Coverage-Info), Lint, Typprüfung
+5. **`npm audit --audit-level=high --include=dev`** — deckt alle
+   Entwicklungsabhängigkeiten ab, auch `wrangler` selbst. Ist die Registry
+   nicht erreichbar, wird nicht deployt. `--include=dev` ist Pflicht: Ohne
+   es überspringt `npm audit` bei `NODE_ENV=production` alle Pakete und
+   meldet „0 vulnerabilities“.
+6. Datei-Dump (`web/source/`, `web/docs/`) aktuell
+7. Deploy Proxy (mit dem Commit-Hash als Versionsnachricht) und/oder Website
+8. Nach dem Deploy, daher als Warnung statt Abbruch: aktive Proxy-Version
+   trägt den Commit von HEAD (`tools/check-proxy-deploy.sh`), Website liefert
+   `deploy-commit.txt` von HEAD, Live-Sicherheits-Header entsprechen
+   `web/_headers`
 
-Gegenprobe für das Audit-Gate (09.10.2026, einmalig von Hand, braucht Netz):
-Ein Lockfile mit `minimist@1.2.0` (bekannte kritische Lücke) ließ
+Grenzen, bewusst benannt: Zwischen Arbeitsbaum-Prüfung und Upload liegt ein
+Zeitfenster — eine parallele Sitzung, die in dieser Zeit committet, würde
+mit deployt. Deshalb gilt: während eines Deploys schreibt keine andere
+Sitzung in dieses Repo. Der Proxy-Check ist gegen einen
+`wrangler`-Stellvertreter getestet; er sucht den Commit formunabhängig in
+den Versionsdetails.
+
+Gegenprobe für das Audit-Gate (einmalig von Hand, braucht Netz): Ein
+Lockfile mit `minimist@1.2.0` (bekannte kritische Lücke) ließ
 `npm audit --audit-level=high` mit Exit 1 abbrechen, dasselbe mit
-`minimist@1.2.8` lief mit Exit 0 durch.
+`minimist@1.2.8` lief mit Exit 0 durch. Mit `NODE_ENV=production` lief auch
+die verwundbare Fassung mit Exit 0 durch, mit `--include=dev` wieder Exit 1.
 
 **Bekannte Stolperfalle (28.08.2026, in `deploy.sh` dokumentiert):** Seit
 das Projekt unter Git-Versionsverwaltung steht, erkennt `wrangler pages
@@ -667,6 +697,16 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   kleineren offenen Punkte (Hinweistext, WCAG-Leitlinie, Backslash im
   Server-Feld, Apple-Touch-Icon geprüft). Jede neue Prüfung mit Gegenprobe
   gegen den alten Stand oder gezielte Mutanten.
+- **Folge-Härtung aus der siebten Prüfrunde** (11.10.2026, Version 0.3.4) —
+  `npm ci` vor jedem Deploy und `npm audit --include=dev`, Prüfung des
+  aktiven Proxy-Stands gegen HEAD, „Passwort prüfen“ nur noch bei echter
+  Ablehnung durch WebUntis, Worker-Tests für jede Prüfung, Feldname in der
+  Validierungsmeldung, `sessionId` nach RFC 6265, ccCampus-Block wird im
+  Proxy verworfen, strengere CSP-Prüfung, Lookbehind-Verbot, CI mit
+  Lese-Token und ohne Install-Skripte. Außerdem behoben: Die App lieferte
+  bei nicht lesbaren gespeicherten Einstellungen still ein leeres Formular,
+  und das nächste Speichern überschrieb die Daten der Familie — jetzt
+  Hinweis und ausdrückliche Rückfrage vor dem Überschreiben.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

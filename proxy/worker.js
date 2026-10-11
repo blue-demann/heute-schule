@@ -177,6 +177,12 @@ function jsonResponse(obj, status, corsHeaders) {
 
 // ── WebUntis ─────────────────────────────────────────────────────────────
 
+// WebUntis answered with a well-formed JSON-RPC error, i.e. it understood
+// the request and said no. Its own class, so callers can tell "WebUntis
+// rejected this" (e.g. wrong password) from "WebUntis could not be reached
+// or answered something else" without parsing message texts.
+class WebUntisRejection extends Error {}
+
 /**
  * @param {string} server
  * @param {string | null} cookie
@@ -202,7 +208,7 @@ async function webuntisRpc(server, cookie, method, params) {
     throw new Error(`WebUntis ${method}: keine gültige JSON-Antwort (HTTP ${resp.status})`, { cause: e });
   }
   const envelope = validateRpcEnvelope(data, method);
-  if ('error' in envelope) throw new Error(`WebUntis ${method}: ${envelope.error}`);
+  if ('error' in envelope) throw new WebUntisRejection(`WebUntis ${method}: ${envelope.error}`);
   return envelope.result;
 }
 
@@ -222,13 +228,11 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
       user, password, client: 'stundenplan-proxy',
     }));
   } catch (e) {
-    // Distinguish: did WebUntis respond and reject the login (wrong
-    // username/password), or was it a connection problem? Only in the
-    // first case is a "check your password" message worth showing — in
-    // the second it would be misleading, so we pass the original message
-    // through instead.
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.indexOf('WebUntis authenticate:') === 0) {
+    // Only when WebUntis itself rejected the login is "check your password"
+    // worth showing. For anything else — no connection, a maintenance page
+    // instead of JSON, a redirect, a malformed answer — it would be
+    // misleading, so the original message passes through.
+    if (e instanceof WebUntisRejection) {
       throw new Error('WebUntis-Login fehlgeschlagen — Benutzername oder Passwort prüfen.', { cause: e });
     }
     throw e;

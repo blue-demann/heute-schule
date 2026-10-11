@@ -39,6 +39,21 @@ echo ""
 # ad hoc — without `npm ci` there is no deploy.
 WRANGLER="npx --no-install wrangler"
 
+# What actually runs below comes from node_modules, while the audit further
+# down reads package-lock.json. A fresh "npm ci" makes both the same thing:
+# it removes node_modules and installs exactly the locked versions, each
+# verified against its integrity hash. (A mere "npm ls" would miss added
+# packages and changed file contents under an unchanged version number.)
+# --include=dev: everything here is a devDependency; without it,
+# NODE_ENV=production or omit=dev would install nothing.
+echo "▶ Abhängigkeiten frisch aus package-lock.json installieren (npm ci)…"
+if ! npm ci --include=dev --no-fund --no-audit; then
+  echo ""
+  echo "✗ npm ci fehlgeschlagen — Deploy abgebrochen."
+  exit 1
+fi
+echo ""
+
 # Cloudflare access: an API token limited to Workers + Pages plus the account
 # ID, both kept in the macOS keychain (README, section "Zugang"). Deliberately
 # no account-wide `wrangler login`: that stores a long-lived OAuth token in
@@ -71,7 +86,7 @@ export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 # Browser und taucht bewusst nicht auf, siehe .c8rc.json). Ausführliche
 # Zahlen inkl. HTML-Report: npm run test:coverage.
 echo "▶ Testsuite läuft (mit Code-Coverage)…"
-if ! npx c8 --reporter=text-summary node run-tests.mjs; then
+if ! npx --no-install c8 --reporter=text-summary node run-tests.mjs; then
   echo ""
   echo "✗ Tests fehlgeschlagen — Deploy abgebrochen."
   exit 1
@@ -79,7 +94,7 @@ fi
 echo ""
 
 echo "▶ Lint (Google JavaScript Style Guide, siehe eslint.config.mjs)…"
-if ! npx eslint .; then
+if ! npx --no-install eslint .; then
   echo ""
   echo "✗ Lint-Fehler — Deploy abgebrochen."
   exit 1
@@ -99,8 +114,11 @@ echo ""
 # High/critical only, like the CI step. Covers every devDependency,
 # including wrangler itself. Fails closed: if the registry can't be
 # reached, npm audit exits non-zero and nothing gets deployed.
+# --include=dev is essential: every package here is a devDependency, and
+# with NODE_ENV=production or omit=dev set, a plain "npm audit" skips them
+# all and reports "0 vulnerabilities".
 echo "▶ Abhängigkeiten auf bekannte Lücken prüfen (npm audit)…"
-if ! npm audit --audit-level=high; then
+if ! npm audit --audit-level=high --include=dev; then
   echo ""
   echo "✗ npm audit meldet Lücken ab „high“ oder ist nicht erreichbar — Deploy abgebrochen."
   exit 1
@@ -121,7 +139,7 @@ for PAIR in \
   "PROJEKT.md:web/docs/PROJEKT.md" \
   "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md" \
   "QA-Bericht-2026-08-31.md:web/docs/QA-Bericht-2026-08-31.md" \
-  "PEER-REVIEW-2026-10-09.md:web/docs/PEER-REVIEW-2026-10-09.md" \
+  "PEER-REVIEW-2026-10-09b.md:web/docs/PEER-REVIEW-2026-10-09b.md" \
   "prompts/README.md:web/docs/prompts/README.md" \
   "prompts/ct-stil-analyse.md:web/docs/prompts/ct-stil-analyse.md" \
   "prompts/peer-review-bester-freund.md:web/docs/prompts/peer-review-bester-freund.md"; do
@@ -144,7 +162,18 @@ echo ""
 
 if [ "$TARGET" = "alles" ] || [ "$TARGET" = "proxy" ]; then
   echo "▶ Proxy deployen…"
-  ( cd proxy && $WRANGLER deploy )
+  # The commit hash travels along as the version message, so the check
+  # right after can ask Cloudflare which commit is actually serving.
+  ( cd proxy && $WRANGLER deploy --message "$(git rev-parse HEAD)" )
+  echo ""
+
+  echo "▶ Aktiven Proxy-Stand gegen HEAD prüfen…"
+  if ( cd proxy && WRANGLER="$WRANGLER" ../tools/check-proxy-deploy.sh "$(git rev-parse HEAD)" ); then
+    echo "  ✓ Aktive Proxy-Version stammt aus HEAD ($(git rev-parse HEAD))"
+  else
+    echo "  ⚠ Der aktive Proxy-Stand ließ sich nicht als HEAD bestätigen (siehe oben)."
+    echo "    Prüfen: cd proxy && $WRANGLER deployments status"
+  fi
   echo ""
 fi
 

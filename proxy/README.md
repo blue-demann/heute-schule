@@ -13,7 +13,8 @@ Anfrage bringt ihre Login-Daten selbst mit.
 
 Deploy ausschließlich über `../deploy.sh` (siehe `../README.md`, Abschnitte
 „Deployen“ und „Zugang“): API-Token mit zwei Rechten aus dem
-Schlüsselbund statt `wrangler login`, vorher Tests, Lint und `npm audit`.
+Schlüsselbund statt `wrangler login`, vorher Tests, Lint, Typprüfung und
+`npm audit`.
 
 ```bash
 cd ..
@@ -21,8 +22,10 @@ cd ..
 ```
 
 Am Ende zeigt `wrangler` die Worker-URL an, z. B.
-`https://stundenplan-proxy.<dein-name>.workers.dev`. Diese URL trägst du
-in der Website unter „Einstellungen → Proxy-URL" ein.
+`https://stundenplan-proxy.<dein-name>.workers.dev`. Die Website kennt den
+Proxy über die Konstante `PROXY_URL` in `../web/index.html` (kein
+Nutzer-Setting) und über `connect-src` in `../web/_headers`; bei einer neuen
+Worker-URL beide Stellen anpassen.
 
 ## Lokal testen
 

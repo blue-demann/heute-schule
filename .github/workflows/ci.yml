@@ -10,6 +10,11 @@ on:
   push:
     branches: [main]
 
+# Read-only token: this workflow only checks out and tests, it never needs
+# to write to the repository.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,7 +26,10 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # --ignore-scripts: tests, lint and type check need no package's
+      # install script (esbuild/workerd binaries are only for deploying),
+      # so none of them gets to run code on the CI machine.
+      - run: npm ci --ignore-scripts
 
       # Same command deploy.sh uses locally — one run gives both the pass/
       # fail signal and the coverage summary, no separate step needed.
@@ -39,4 +47,4 @@ jobs:
       # is a coarse per-push signal, not the primary vulnerability feed,
       # so it stays quiet on low-severity noise.
       - name: Security audit
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=high --include=dev

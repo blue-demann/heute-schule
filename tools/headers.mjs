@@ -79,9 +79,26 @@ export function checkSecurityHeaders(headers) {
     const all = Object.values(csp).flat();
     if (all.includes("'unsafe-eval'")) problems.push("Content-Security-Policy: 'unsafe-eval' ist nicht erlaubt");
     if (all.includes('*')) problems.push('Content-Security-Policy: * als Quelle ist nicht erlaubt');
-    const scriptSrc = csp['script-src'] || csp['default-src'] || [];
-    const foreignScript = scriptSrc.filter((s) => !["'self'", "'none'", "'unsafe-inline'"].includes(s));
-    if (foreignScript.length) problems.push(`Content-Security-Policy: script-src erlaubt fremde Quellen (${foreignScript.join(' ')})`);
+    // A bare scheme allows every host of that scheme. data:/blob: are only
+    // tolerable for images.
+    for (const [directive, sources] of Object.entries(csp)) {
+      for (const source of sources) {
+        if (/^(https?|wss?):$/i.test(source)) {
+          problems.push(`Content-Security-Policy: ${directive} erlaubt mit ${source} jeden Host`);
+        }
+        if (/^(data|blob|filesystem):$/i.test(source) && directive !== 'img-src') {
+          problems.push(`Content-Security-Policy: ${directive} erlaubt ${source}`);
+        }
+      }
+    }
+    // script-src-elem/-attr override script-src for their part, so each one
+    // present has to meet the same bar.
+    for (const directive of ['script-src', 'script-src-elem', 'script-src-attr']) {
+      const sources = directive === 'script-src' ? (csp['script-src'] || csp['default-src'] || []) : csp[directive];
+      if (!sources) continue;
+      const foreign = sources.filter((s) => !["'self'", "'none'", "'unsafe-inline'"].includes(s));
+      if (foreign.length) problems.push(`Content-Security-Policy: ${directive} erlaubt fremde Quellen (${foreign.join(' ')})`);
+    }
   }
 
   if ((headerValue(headers, 'X-Content-Type-Options') || '').toLowerCase() !== 'nosniff') {

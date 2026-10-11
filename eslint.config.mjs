@@ -12,7 +12,10 @@
 // ueber.html, sw.js), wird mit ecmaVersion 2019 geparst — das ist das
 // Syntax-Ziel (iOS ab 11.3, Chrome ab 66). Neuere Syntax wie `?.` oder
 // `??` ist damit ein Parse-Fehler statt einer leeren App auf einem alten
-// Gerät. Prüft nur Syntax, keine neueren Browser-APIs.
+// Gerät. Prüft nur Syntax, keine neueren Browser-APIs. Eine Ausnahme vom
+// ES2019-Umfang: Lookbehind in regulären Ausdrücken (`(?<=…)`, `(?<!…)`)
+// gehört zu ES2018, Safari kann ihn aber erst ab 16.4 — dort ist er ein
+// Syntaxfehler, der das ganze Skript verwirft. Deshalb eigens verboten.
 //
 // Sicherheitsregeln gelten für den ganzen Code: kein eval und Verwandte,
 // kein HTML aus Strings (innerHTML & Co.), kein console im Proxy.
@@ -32,6 +35,13 @@ const SECURITY_RULES = {
     { object: 'document', property: 'write', message: 'document.write ist nicht erlaubt.' },
     { object: 'document', property: 'writeln', message: 'document.writeln ist nicht erlaubt.' },
   ],
+};
+
+const DEVICE_SYNTAX_RULES = {
+  'no-restricted-syntax': ['error', {
+    selector: 'Literal[regex.pattern=/\\(\\?<[=!]/]',
+    message: 'Kein Regex-Lookbehind im Geräte-Code — Safari kann ihn erst ab 16.4.',
+  }],
 };
 
 export default [
@@ -79,6 +89,7 @@ export default [
       sourceType: 'script',
       globals: { ...globals.serviceworker },
     },
+    rules: DEVICE_SYNTAX_RULES,
   },
 
   // run-tests.mjs, tools/ und eslint.config.mjs: echtes Node.
@@ -120,6 +131,7 @@ export default [
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'one-var': ['error', 'never'],
       'no-unused-vars': 'warn',
+      ...DEVICE_SYNTAX_RULES,
     },
   },
 
