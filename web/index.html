@@ -244,6 +244,12 @@
       Verfügbarkeit. Es kann jederzeit geändert oder abgeschaltet werden.
     </p>
 
+    <p class="demo-hinweis hidden" id="configUnreadable" role="alert">
+      ⚠ Auf diesem Gerät sind bereits Einstellungen gespeichert, sie ließen
+      sich aber nicht lesen. Sie sind noch vorhanden und werden erst
+      überschrieben, wenn Du neu speicherst und das ausdrücklich bestätigst.
+    </p>
+
     <p class="setup-intro">
       Dazu musst Du die Zugangsdaten einmalig eingeben. Sie werden dann lokal auf
       Deinem Gerät (localStorage) gespeichert. Um den Stundenplan und die gebuchten
@@ -417,16 +423,38 @@
   // but Björn ever needs to know or change the URL.
   var PROXY_URL = 'https://stundenplan-proxy.bluedemann.workers.dev';
 
+  // True while settings are stored on this device but could not be read
+  // (broken JSON, an unexpected shape, storage not accessible). The stored
+  // value is then left untouched: the app starts with an empty form, shows
+  // a notice, and saveConfig() asks before writing over it — otherwise the
+  // next "save" would silently replace a family's data with the empty form.
+  var storedConfigUnreadable = false;
+
+  function emptyConfig(){
+    return { proxyUrl: PROXY_URL, children: [] };
+  }
+
   function loadConfig(){
+    var raw;
     try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { proxyUrl: PROXY_URL, children: [] };
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      // No access to storage at all; whatever is in there cannot be judged.
+      storedConfigUnreadable = true;
+      return emptyConfig();
+    }
+    if (raw === null || raw === '') return emptyConfig(); // nothing stored yet
+
+    try {
       var parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed.children)) parsed.children = [];
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.children)) {
+        throw new Error('stored config has an unexpected shape');
+      }
       parsed.proxyUrl = PROXY_URL; // overwrites any stale/empty stored value
       // Back-compat: older stored configs don't yet know about
       // hiddenFaecher or multi-provider support for school lunch.
       parsed.children.forEach(function(c){
+        if (!c || typeof c !== 'object') throw new Error('stored child has an unexpected shape');
         if (!Array.isArray(c.hiddenFaecher)) c.hiddenFaecher = [];
         if (!c.lunch) c.lunch = {};
         if (!c.lunch.provider) c.lunch.provider = 'mensamax';
@@ -436,20 +464,40 @@
       });
       return parsed;
     } catch {
-      return { proxyUrl: PROXY_URL, children: [] };
+      // Deliberately no details in the console: a JSON parse error message
+      // can quote part of the stored text, which contains credentials.
+      console.warn('Gespeicherte Einstellungen sind vorhanden, aber nicht lesbar — sie bleiben unverändert.');
+      storedConfigUnreadable = true;
+      return emptyConfig();
     }
   }
 
+  // Returns true when saved, false when storage refused, and null when the
+  // user declined to overwrite unreadable stored settings.
   function saveConfig(cfg){
+    if (storedConfigUnreadable){
+      var overwrite = window.confirm(
+        'Auf diesem Gerät sind bereits Einstellungen gespeichert, die sich nicht lesen ließen. '
+        + 'Speichern überschreibt sie endgültig. Trotzdem speichern?'
+      );
+      if (!overwrite) return null;
+    }
     // Must never block an in-progress action — some preview/sandbox
     // environments (e.g. data: URLs) forbid localStorage entirely.
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+      storedConfigUnreadable = false;
+      updateUnreadableNotice();
       return true;
     } catch (e) {
       console.warn('Konnte Konfiguration nicht speichern:', e);
       return false;
     }
+  }
+
+  function updateUnreadableNotice(){
+    var notice = document.getElementById('configUnreadable');
+    if (notice) notice.classList.toggle('hidden', !storedConfigUnreadable);
   }
 
   function uid(){
@@ -744,6 +792,7 @@
 
   btnSave.addEventListener('click', function(){
     var saved = saveConfig(cfg);
+    if (saved === null) return; // overwrite declined — stay in the form
     showDashboard();
     if (!saved){
       toast('⚠ Konnte nicht dauerhaft gespeichert werden (Speicher in dieser Vorschau gesperrt). Auf der echten Seite funktioniert das normal.');
@@ -759,19 +808,28 @@
     var question = count === 1
       ? 'Wirklich alle Daten von 1 Kind auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.'
       : 'Wirklich alle Daten von ' + count + ' Kindern auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.';
+    if (storedConfigUnreadable){
+      question = 'Wirklich alle auf diesem Gerät gespeicherten Daten löschen, auch die nicht lesbaren Einstellungen? Das lässt sich nicht rückgängig machen.';
+    }
     if (!window.confirm(question)) return;
 
+    var removed = true;
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
       // Private mode or similar — the in-memory state gets cleared either way.
+      removed = false;
     }
-    cfg = { proxyUrl: PROXY_URL, children: [] };
+    cfg = emptyConfig();
+    if (removed) storedConfigUnreadable = false;
+    updateUnreadableNotice();
     cardsById = {};
     lastDataById = {};
     renderSetup();
     renderDashboard();
-    toast('Alle Daten auf diesem Gerät wurden gelöscht.');
+    toast(removed
+      ? 'Alle Daten auf diesem Gerät wurden gelöscht.'
+      : '⚠ Der Speicher dieses Geräts ließ sich nicht leeren. Was dort liegt, ist noch vorhanden.');
   });
 
   // ── Dashboard view ──
@@ -1175,6 +1233,7 @@
     dashboard.classList.add('hidden');
     btnRefresh.classList.add('hidden');
     setup.classList.remove('hidden');
+    updateUnreadableNotice();
     renderSetup();
   }
 
