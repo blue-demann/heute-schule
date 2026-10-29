@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v1 · 2026-10-11 · 7f4ae7ea · lebend · gültig
+HS-PRJ · v2 · 2026-10-29 · ffb984f7 · gültig
 
 **Stand: 11.10.2026 · Version 0.3.4**
 
@@ -577,14 +577,17 @@ Umgebungsvariable in `~/.zshrc`: der Schlüsselbund schützt den Wert im Ruhezus
 eine Profildatei nicht.
 
 `wrangler` ist eine exakt gepinnte Entwicklungsabhängigkeit (`package.json`,
-derzeit `4.149.0`), `deploy.sh` ruft sie mit `npx --no-install` aus
+derzeit `4.153.0`), `deploy.sh` ruft sie mit `npx --no-install` aus
 `node_modules` auf. Ein ungepinntes `npx wrangler` zöge bei jedem Deploy die
 gerade neueste Version — eine stille Änderung an genau dem Werkzeug, das die
 Zugangsdaten zum Konto in der Hand hält. Bis 09.10.2026 lief es über
 `npx --yes wrangler@4.144.0` außerhalb des Lockfiles: ohne Prüfsumme und für
 `npm audit` unsichtbar. Beim Umzug ins Lockfile meldete das Audit sofort eine
 hohe Lücke in genau dieser Version (über `miniflare` → `sharp`, librsvg);
-behoben mit `4.149.0`.
+behoben mit `4.149.0`. Am 29.10.2026 brach das Audit-Gate den ersten Deploy
+von 0.3.4 ab, bevor etwas hochgeladen wurde: hohe Lücken in `undici` (über
+`miniflare`), betroffen `wrangler` bis `4.152.0`. Angehoben auf `4.153.0`,
+die älteste Version ohne Befund (Audit und Lizenztest sauber).
 
 **Rollback:** Kein automatisierter Rollback-Mechanismus. Cloudflare hält
 eine Historie vergangener Deployments vor (abrufbar über `wrangler pages
@@ -706,7 +709,9 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   Lese-Token und ohne Install-Skripte. Außerdem behoben: Die App lieferte
   bei nicht lesbaren gespeicherten Einstellungen still ein leeres Formular,
   und das nächste Speichern überschrieb die Daten der Familie — jetzt
-  Hinweis und ausdrückliche Rückfrage vor dem Überschreiben.
+  Hinweis und ausdrückliche Rückfrage vor dem Überschreiben. Vor dem
+  Deploy `wrangler` auf `4.153.0` angehoben, nachdem das Audit-Gate eine
+  hohe Lücke in `undici` gemeldet und den Deploy gestoppt hatte.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen
