@@ -1,6 +1,6 @@
 # Offene Punkte
 
-HS-OFF · v4 · 2026-10-29 · 183ca839 · gültig
+HS-OFF · v5 · 2026-10-29 · 35ce4dd9 · gültig
 
 **Stand: 11.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
@@ -113,7 +113,10 @@ Zeitpunkt-Momentaufnahmen unverändert.
      Weiterleitung (302) auf `www.sams-on.de`; der Proxy meldet dann „Instanz
      … nicht gefunden“. Dieselbe Abfrage aus dem Cloudflare-Netz bekam eine
      echte Antwort von sams-on, eine Sperre wie bei ccCampus gibt es dort
-     also nicht; ob der Login durchgeht, zeigt der erste echte Abruf.
+     also nicht.
+   - Erledigt am 29.10.: Erster echter Abruf über den Live-Proxy mit dem
+     Konto der Familie funktioniert (Login, Bestellstatus „Kein Essen
+     bestellt“, Guthaben-Anzeige wie erwartet).
    - Guthaben: Format `creditAmount` („0,00“) am Testkonto gesehen; mit
      echtem Guthaben gegenprüfen, ob es dasselbe Format bleibt.
    - Danach: unabhängige Prüfrunde, wie bei neuem Code mit Zugangsdaten
