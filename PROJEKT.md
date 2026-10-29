@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v2 · 2026-10-29 · ffb984f7 · gültig
+HS-PRJ · v3 · 2026-10-29 · d276b838 · gültig
 
 **Stand: 11.10.2026 · Version 0.3.4**
 
@@ -588,6 +588,11 @@ behoben mit `4.149.0`. Am 29.10.2026 brach das Audit-Gate den ersten Deploy
 von 0.3.4 ab, bevor etwas hochgeladen wurde: hohe Lücken in `undici` (über
 `miniflare`), betroffen `wrangler` bis `4.152.0`. Angehoben auf `4.153.0`,
 die älteste Version ohne Befund (Audit und Lizenztest sauber).
+`deploy.sh` setzt `WRANGLER_SEND_METRICS=false` und
+`WRANGLER_SEND_ERROR_REPORTS=false`: Ohne das schickt `wrangler` bei jedem
+Lauf Nutzungsdaten an Cloudflare und fragt bei einem Absturz, ob es seine
+Ausgabe mitsenden darf. Geprüft mit `wrangler telemetry status` („Disabled
+(set by WRANGLER_SEND_METRICS)“).
 
 **Rollback:** Kein automatisierter Rollback-Mechanismus. Cloudflare hält
 eine Historie vergangener Deployments vor (abrufbar über `wrangler pages

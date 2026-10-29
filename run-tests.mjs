@@ -1859,6 +1859,13 @@ test('deploy.sh: the proxy deploy passes the commit along and checks it afterwar
   assert(/\$WRANGLER deploy --message "\$\(git rev-parse HEAD\)"/.test(deployCommands), 'deploy without --message <commit>');
   assert(deployCommands.indexOf('check-proxy-deploy.sh') > deployCommands.indexOf('$WRANGLER deploy --message'), 'proxy check missing or before the deploy');
 });
+test('deploy.sh: wrangler telemetry and crash reports are switched off before the first wrangler call', () => {
+  const firstCall = deployCommands.indexOf('$WRANGLER ');
+  for (const line of ['export WRANGLER_SEND_METRICS=false', 'export WRANGLER_SEND_ERROR_REPORTS=false']) {
+    const at = deployCommands.indexOf(line);
+    assert(at !== -1 && at < firstCall, `"${line}" missing or after the first wrangler call`);
+  }
+});
 test('CI: read-only token and no install scripts', () => {
   assert(/permissions:\s*\n\s+contents: read/.test(ciCommands), 'permissions: contents: read missing');
   assert(ciCommands.includes('npm ci --ignore-scripts'), 'npm ci without --ignore-scripts');

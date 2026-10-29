@@ -39,6 +39,13 @@ echo ""
 # ad hoc — without `npm ci` there is no deploy.
 WRANGLER="npx --no-install wrangler"
 
+# Data minimization: no usage metrics to Cloudflare (wrangler sends them by
+# default on every run) and no crash reports (otherwise wrangler asks
+# mid-deploy whether to send its output). Exported, so every wrangler call
+# below — including the one in tools/check-proxy-deploy.sh — inherits it.
+export WRANGLER_SEND_METRICS=false
+export WRANGLER_SEND_ERROR_REPORTS=false
+
 # What actually runs below comes from node_modules, while the audit further
 # down reads package-lock.json. A fresh "npm ci" makes both the same thing:
 # it removes node_modules and installs exactly the locked versions, each
