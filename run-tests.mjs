@@ -12,15 +12,16 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 import { ESLint } from 'eslint';
 import stundenplan from './stundenplan.js';
 import { parseHeadersFile, checkSecurityHeaders, compareHeaders } from './tools/headers.mjs';
 import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost, samsonOrigin } from './proxy/hostcheck.mjs';
-import { samsonMealName } from './proxy/text.mjs';
+import { samsonMealName, decodeHtmlEntities } from './proxy/text.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
 import {
   validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
-  validateSamsonAccount, validateSamsonOrders, samsonCredit,
+  validateSamsonAccount, validateSamsonOrders, samsonCredit, samsonCreditHidden,
 } from './proxy/validate.mjs';
 import proxyWorker from './proxy/worker.js';
 
@@ -1011,11 +1012,11 @@ for (const [className, generator] of SAMSON_INSTANCE_ATTACKS) {
   forAll(
     `an instance name with ${className} is always rejected`,
     generator,
-    (name) => assertWirft(() => samsonOrigin(name), 'Ungültige sams-on-Instanz')
+    (name) => assertWirft(() => samsonOrigin(name), 'Ungültige sams-on-Adresse der Schule')
   );
 }
 test('empty, missing and overlong instance names are rejected; 63 characters still pass', () => {
-  for (const name of ['', '   ', null, undefined, 'a'.repeat(64)]) assertWirft(() => samsonOrigin(name), 'Ungültige sams-on-Instanz');
+  for (const name of ['', '   ', null, undefined, 'a'.repeat(64)]) assertWirft(() => samsonOrigin(name), 'Ungültige sams-on-Adresse der Schule');
   assertEqual(samsonOrigin('a'.repeat(63)), `https://${'a'.repeat(63)}.sams-on.de`);
 });
 
@@ -1031,6 +1032,33 @@ test('a title without a code line keeps every line; a lone code-like line is not
   assertEqual(samsonMealName('Kürbisschaumsuppe<br/>mit Baguette'), 'Kürbisschaumsuppe mit Baguette');
   assertEqual(samsonMealName('Fleisch'), 'Fleisch');
   assertEqual(samsonMealName('a, g'), 'a, g');
+});
+// What counts as a code: a single letter, or a number of one or two digits
+// with an optional letter ("10a"). Words of two or more letters are food.
+const randomCode = (random) => pick(random, [
+  randomLabel(random, 1, 1).replace(/[^a-z]/g, 'a'),
+  String(randomInt(random, 1, 99)),
+  `${randomInt(random, 1, 99)}${pick(random, ['a', 'b', 'c'])}`,
+]);
+const randomWord = (random) => Array.from({ length: randomInt(random, 2, 6) }, () => pick(random, [...'abcdefghijklmnopqrstuvwxyzäöü'])).join('');
+forAll(
+  'a last line of codes is removed, whatever mix of letters, numbers and suffixed numbers',
+  (random) => `Nudeln<br/>${Array.from({ length: randomInt(random, 1, 8) }, () => randomCode(random)).join(pick(random, [', ', ',', ' , ']))}${pick(random, ['', '<br/>', ','])}`,
+  (title) => assertEqual(samsonMealName(title), 'Nudeln')
+);
+forAll(
+  'a last line holding one short word (e.g. "Ei") is part of the meal and stays',
+  (random) => {
+    const word = randomWord(random);
+    return [`Kartoffelsuppe<br/>${pick(random, [word, word[0].toUpperCase() + word.slice(1)])}`, word];
+  },
+  ([title, word]) => assertEqual(samsonMealName(title).toLowerCase(), `kartoffelsuppe ${word}`)
+);
+test('numeric character references: valid ones are decoded, the rest stays as written instead of throwing', () => {
+  assertEqual(decodeHtmlEntities('&#228;&#x1F600;&#X41;'), 'ä😀&#X41;');
+  for (const ref of ['&#0;', '&#x0;', '&#55296;', '&#xDFFF;', '&#1114112;', '&#x110000;', '&#99999999;', `&#${'9'.repeat(400)};`]) {
+    assertEqual(decodeHtmlEntities(`a${ref}b`), `a${ref}b`);
+  }
 });
 test('other tags are removed, encoded markup stays text', () => {
   assertEqual(samsonMealName('<b>Pizza</b> <span class="x">Margherita</span>'), 'Pizza Margherita');
@@ -1072,10 +1100,19 @@ test('sams-on orders: day and title are kept, everything else is dropped', () =>
   assertEqual(JSON.stringify(orders), '[{"dayId":"2026-11-03","title":"Pasta"}]');
   assertEqual(validateSamsonOrders({ orders: [] }).length, 0);
 });
+test('sams-on orders: the day may carry a local time of day, it is cut to the date', () => {
+  for (const dayId of ['2026-11-03', '2026-11-03T00:00:00', '2026-11-03 00:00', '2026-11-03T11:45', '2026-11-03T00:00:00.000']) {
+    assertEqual(validateSamsonOrders({ orders: [{ dayId, title: 'x' }] })[0].dayId, '2026-11-03');
+  }
+});
 test('sams-on orders: every broken shape is rejected, naming the field', () => {
   const cases = [
     [null, 'Antwort'], [{}, 'orders'], [{ orders: {} }, 'orders'], [{ orders: [null] }, 'Eintrag'],
     [{ orders: [{ title: 'x' }] }, 'dayId'], [{ orders: [{ dayId: '03.11.2026', title: 'x' }] }, 'dayId'],
+    // A time zone could shift the date by a day — refused, not guessed.
+    [{ orders: [{ dayId: '2026-11-02T23:00:00Z', title: 'x' }] }, 'dayId'], [{ orders: [{ dayId: '2026-11-03T00:00:00+01:00', title: 'x' }] }, 'dayId'],
+    [{ orders: [{ dayId: 1793660400, title: 'x' }] }, 'dayId'], [{ orders: [{ dayId: '2026-11-03T', title: 'x' }] }, 'dayId'],
+    [{ orders: [{ dayId: '2026-11-03x', title: 'x' }] }, 'dayId'],
     [{ orders: [{ dayId: '2026-11-03', title: 5 }] }, 'title'], [{ orders: [{ dayId: '2026-11-03', title: 'x'.repeat(2001) }] }, 'title'],
   ];
   for (const [data, field] of cases) assertWirft(() => validateSamsonOrders(data), `sams-on: unerwartete Antwort auf orders/view (${field})`);
@@ -1089,6 +1126,12 @@ test('a sams-on balance in any other form is treated as not available', () => {
   for (const data of [null, {}, { creditAmount: 12.4 }, { creditAmount: '12.40' }, { creditAmount: '12,4' }, { creditAmount: '12,40 €' }, { creditAmount: '' }, { creditAmount: '<b>1,00</b>' }]) {
     assertEqual(samsonCredit(data), null);
   }
+});
+test('sams-on instance info: whether the school hides the credit', () => {
+  for (const hideCredit of ['1', 1, true]) assertEqual(samsonCreditHidden({ hideCredit }), true);
+  for (const hideCredit of ['0', 0, false, null, undefined]) assertEqual(samsonCreditHidden({ hideCredit }), false);
+  assertEqual(samsonCreditHidden({}), false);
+  for (const info of [null, 'x', [], { hideCredit: 'ja' }, { hideCredit: '2' }, { hideCredit: {} }]) assertEqual(samsonCreditHidden(info), null);
 });
 test('request body: the balance switch must be a boolean', () => {
   assertEqual(validateRequestBody({ lunch: { samson: { guthabenAnzeigen: true } } }).lunch.samson.guthabenAnzeigen, true);
@@ -1721,7 +1764,7 @@ await testAsync('a redirect on the Mensamax plan page is reported as unavailable
 // the instance info starts a session cookie, the login swaps it for a new
 // one, account and orders answer only with the logged-in session. Records
 // every request so tests can check where and how the worker went.
-function samsonServer({ password = 'richtig', orders = [], userId = '8', credit = '12,40', overrides = {} } = {}) {
+function samsonServer({ password = 'richtig', orders = [], userId = '8', credit = '12,40', hideCredit = '0', overrides = {} } = {}) {
   const calls = [];
   let loggedInSession = null;
   const json = (body, status = 200, cookies = []) => new Response(JSON.stringify(body), {
@@ -1741,7 +1784,7 @@ function samsonServer({ password = 'richtig', orders = [], userId = '8', credit 
           ? new Response(null, { status: 302, headers: { Location: 'https://www.sams-on.de' } })
           : new Response('', { status: 599 });
       }
-      if (key === 'GET /api/instance/lessing') return json({ short: 'lessing', companyName: 'x' }, 200, ['PHPSESSID=anonym; path=/; secure; HttpOnly']);
+      if (key === 'GET /api/instance/lessing') return json({ short: 'lessing', companyName: 'x', lowCreditWarning: null, hideCredit }, 200, ['PHPSESSID=anonym; path=/; secure; HttpOnly']);
       if (key === 'POST /api/login') {
         const sent = JSON.parse(options.body);
         if (sent.password !== password) return json({ error: 'LOGIN.ERROR' }, 401);
@@ -1765,9 +1808,52 @@ const samsonLunch = (over = {}) => ({ provider: 'samson', samson: { instanz: 'le
 async function lunchVia(server, lunch, datum = '20261103') {
   globalThis.caches = makeCachesStub();
   mockFetch([server.handler]);
-  const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch, datum }), TEST_ENV, makeCtx());
+  const ctx = makeCtx();
+  const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch, datum }), TEST_ENV, ctx);
+  await ctx.drain(); // the logout runs after the answer
   restoreFetch();
   return resp.json();
+}
+
+// Lets a test decide when a time limit runs out instead of waiting for it:
+// timers are only recorded, and fire(ms) runs those set with that delay.
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+function fakeTimers() {
+  const pending = new Map();
+  let nextId = 1;
+  globalThis.setTimeout = (fn, ms) => { const id = nextId++; pending.set(id, { fn, ms }); return id; };
+  globalThis.clearTimeout = (id) => { pending.delete(id); };
+  return {
+    fire(ms) {
+      for (const [id, timer] of [...pending]) {
+        if (timer.ms === ms) { pending.delete(id); timer.fn(); }
+      }
+    },
+    restore() { globalThis.setTimeout = realSetTimeout; globalThis.clearTimeout = realClearTimeout; },
+  };
+}
+// A request that never gets an answer, only ends when it is aborted. Calls
+// reached() once it is under way, so the test knows when to let time run out.
+function hangingRequest(reached = () => {}) {
+  return (u, options) => new Promise((_, reject) => {
+    options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+    reached();
+  });
+}
+// Fails instead of hanging when a promise does not settle in real time.
+async function settlesWithin(promise, what) {
+  const outcome = await Promise.race([promise, new Promise((resolve) => realSetTimeout(resolve, 2000, settlesWithin))]);
+  if (outcome === settlesWithin) throw new Error(`${what} did not settle`);
+  return outcome;
+}
+// Starts a sams-on request against the stand-in, under fake timers.
+function startLunch(server, lunch) {
+  globalThis.caches = makeCachesStub();
+  mockFetch([server.handler]);
+  const ctx = makeCtx();
+  const response = proxyWorker.fetch(apiRequest({ webuntis: {}, lunch, datum: '20261103' }), TEST_ENV, ctx);
+  return { ctx, response };
 }
 
 await testAsync('sams-on: an order for the day is shown as plain meal name', async () => {
@@ -1795,6 +1881,73 @@ await testAsync('sams-on: no order for the requested day → "Kein Essen bestell
   const server = samsonServer({ orders: [{ dayId: '2026-11-04', title: 'Pasta', orderNmb: '1' }] });
   assertEqual((await lunchVia(server, samsonLunch())).lunch, 'Kein Essen bestellt');
 });
+await testAsync('sams-on: the logout carries the logged-in session, also when the orders answer is broken', async () => {
+  for (const orders of [[], [{ dayId: 'kaputt', title: 'x' }]]) {
+    const server = samsonServer({ orders });
+    await lunchVia(server, samsonLunch());
+    const last = server.calls[server.calls.length - 1];
+    assertEqual(`${last.method} ${new URL(last.url).pathname}`, 'POST /api/logout');
+    assert(String(last.cookie).includes('PHPSESSID=angemeldet'), `logout without the session: ${last.cookie}`);
+  }
+});
+await testAsync('sams-on: the answer does not wait for the logout', async () => {
+  const timers = fakeTimers();
+  try {
+    const server = samsonServer({ overrides: { 'POST /api/logout': hangingRequest() } });
+    const { ctx, response } = startLunch(server, samsonLunch());
+    const answer = await settlesWithin(response, 'the answer (waiting for the logout?)');
+    assertEqual((await answer.json()).lunch, 'Kein Essen bestellt');
+    timers.fire(10000); // the logout's own timeout ends it
+    await settlesWithin(ctx.drain(), 'the logout');
+  } finally {
+    timers.restore();
+    restoreFetch();
+  }
+});
+await testAsync('sams-on: a request that hangs ends after its own timeout, with a message', async () => {
+  const timers = fakeTimers();
+  try {
+    let reached;
+    const loginStarted = new Promise((resolve) => { reached = resolve; });
+    const server = samsonServer({ overrides: { 'POST /api/login': hangingRequest(reached) } });
+    const { ctx, response } = startLunch(server, samsonLunch());
+    await loginStarted;
+    timers.fire(10000);
+    assertEqual((await (await settlesWithin(response, 'the answer')).json()).lunchFehler, 'Zeitüberschreitung beim Zugriff auf lessing.sams-on.de (>10s)');
+    await settlesWithin(ctx.drain(), 'the logout');
+  } finally {
+    timers.restore();
+    restoreFetch();
+  }
+});
+await testAsync('sams-on: the whole sequence has one shared time limit; the logout still goes out', async () => {
+  const timers = fakeTimers();
+  try {
+    let reached;
+    const ordersStarted = new Promise((resolve) => { reached = resolve; });
+    const server = samsonServer({ overrides: { 'GET /api/users/8/orders/view': hangingRequest(reached) } });
+    const { ctx, response } = startLunch(server, samsonLunch());
+    await ordersStarted;
+    timers.fire(15000);
+    assertEqual((await (await settlesWithin(response, 'the answer')).json()).lunchFehler, 'Zeitüberschreitung beim Zugriff auf lessing.sams-on.de (Gesamtzeit überschritten)');
+    await settlesWithin(ctx.drain(), 'the logout');
+    const last = server.calls[server.calls.length - 1];
+    assertEqual(`${last.method} ${new URL(last.url).pathname}`, 'POST /api/logout');
+  } finally {
+    timers.restore();
+    restoreFetch();
+  }
+});
+await testAsync('sams-on: a login refused with 403 is a failed login, no order is requested', async () => {
+  const server = samsonServer({ overrides: { 'POST /api/login': () => new Response('{}', { status: 403 }) } });
+  const body = await lunchVia(server, samsonLunch());
+  assertEqual(body.lunch, 'Schulessen: Login fehlgeschlagen');
+  assert(!server.calls.some((c) => c.url.includes('/orders/')), 'orders were requested without a login');
+});
+await testAsync('sams-on: an order whose day carries a time of day is still found', async () => {
+  const server = samsonServer({ orders: [{ dayId: '2026-11-03T00:00:00', title: 'Pasta', orderNmb: '1' }] });
+  assertEqual((await lunchVia(server, samsonLunch())).lunch, 'Essen bestellt: Pasta');
+});
 await testAsync('sams-on: a wrong password is reported as failed login, no order is requested', async () => {
   const server = samsonServer();
   const body = await lunchVia(server, samsonLunch({ passwort: 'falsch' }));
@@ -1817,7 +1970,7 @@ await testAsync('sams-on: an instance that is no plain name never reaches the ne
     const server = samsonServer();
     const body = await lunchVia(server, samsonLunch({ instanz }));
     assertEqual(server.calls.length, 0);
-    assert(body.lunchFehler.includes('Ungültige sams-on-Instanz'), `${instanz}: ${body.lunchFehler}`);
+    assert(body.lunchFehler.includes('Ungültige sams-on-Adresse der Schule'), `${instanz}: ${body.lunchFehler}`);
   }
 });
 await testAsync('sams-on: a broken orders answer fails generically, naming the field', async () => {
@@ -1850,13 +2003,32 @@ await testAsync('sams-on: a session cookie with separators from the server is no
 await testAsync('sams-on balance switched off: no balance anywhere in the answer', async () => {
   const server = samsonServer({ credit: '987,65' });
   const resp = await lunchVia(server, samsonLunch());
-  assert(!('guthaben' in resp) && !('guthabenKnapp' in resp), JSON.stringify(resp));
+  assert(!('guthaben' in resp) && !('guthabenKnapp' in resp) && !('guthabenGefuehrt' in resp), JSON.stringify(resp));
   assert(!JSON.stringify(resp).includes('987'), 'the balance leaked into the answer');
+});
+await testAsync('sams-on balance switched off: an unreadable instance info does not matter', async () => {
+  const server = samsonServer({ overrides: { 'GET /api/instance/lessing': () => new Response('<html>', { status: 200 }) } });
+  const resp = await lunchVia(server, samsonLunch());
+  assertEqual(`${resp.lunch} ${resp.lunchFehler}`, 'Kein Essen bestellt null');
+});
+await testAsync('sams-on balance at a school that hides it: "not kept", no amount anywhere', async () => {
+  for (const hideCredit of ['1', 1, true]) {
+    const resp = await lunchVia(samsonServer({ credit: '987,65', hideCredit }), samsonLunch({ guthabenAnzeigen: true }));
+    assertEqual(`${resp.guthaben} ${resp.guthabenKnapp} ${resp.guthabenGefuehrt}`, 'null false false');
+    assert(!JSON.stringify(resp).includes('987'), 'the hidden balance leaked into the answer');
+  }
+});
+await testAsync('sams-on balance when the instance info does not say clearly: not available, the meal status still works', async () => {
+  const unreadable = { 'GET /api/instance/lessing': () => new Response('<html>', { status: 200 }) };
+  for (const server of [samsonServer({ hideCredit: 'ja' }), samsonServer({ overrides: unreadable })]) {
+    const resp = await lunchVia(server, samsonLunch({ guthabenAnzeigen: true }));
+    assertEqual(`${resp.guthaben} ${resp.guthabenKnapp} ${resp.guthabenGefuehrt} ${resp.lunch}`, 'null false true Kein Essen bestellt');
+  }
 });
 await testAsync('sams-on balance switched on: amount passed on, not highlighted at 5,00 € or more', async () => {
   for (const credit of ['12,40', '5,00', '1234,00']) {
     const resp = await lunchVia(samsonServer({ credit }), samsonLunch({ guthabenAnzeigen: true }));
-    assertEqual(`${resp.guthaben} ${resp.guthabenKnapp}`, `${credit} false`);
+    assertEqual(`${resp.guthaben} ${resp.guthabenKnapp} ${resp.guthabenGefuehrt}`, `${credit} false true`);
   }
 });
 await testAsync('sams-on balance below 5,00 € (or negative) is highlighted', async () => {
@@ -2125,6 +2297,13 @@ test('CI: every npm audit call includes devDependencies', () => {
   assert(calls.length >= 1, 'no npm audit call in ci.yml');
   for (const call of calls) assert(call.includes('--include=dev'), call);
 });
+test('CI: every action is pinned to a commit, and Dependabot watches the actions', () => {
+  const uses = ciCommands.match(/uses: \S+/g) || [];
+  assert(uses.length >= 2, `expected checkout and setup-node, got ${uses.length}`);
+  for (const use of uses) assert(/@[0-9a-f]{40}$/.test(use), `not pinned to a commit: ${use}`);
+  const dependabot = readFileSync(new URL('./.github/dependabot.yml', import.meta.url), 'utf-8');
+  assert(/package-ecosystem: "github-actions"/.test(dependabot), 'Dependabot does not watch the actions');
+});
 test('deploy.sh: installs fresh from the lockfile (incl. devDependencies) before anything from node_modules runs', () => {
   const ci = deployCommands.indexOf('npm ci --include=dev');
   assert(ci !== -1, 'npm ci --include=dev missing');
@@ -2355,6 +2534,158 @@ for (const [name, lock, expectedProblems] of LICENSE_CASES) {
     assertEqual(checkLockfile(lock).length, expectedProblems);
   });
 }
+
+// ── Browser: which credentials leave the device ─────────────────────────
+//
+// lunchRequestFields() decides what the browser sends to the proxy, and
+// extractSamsonInstance() whether a sams-on child can be saved. Both live in
+// the inline script of web/index.html; until that moves into its own file,
+// the tests cut exactly these definitions out of the page and run them in a
+// separate context.
+
+/**
+ * @param {string[]} names  `var` constants and functions of the inline script
+ */
+function inlineScriptDefinitions(names, sandbox = { URL }) {
+  const html = readFileSync(new URL('./web/index.html', import.meta.url), 'utf-8');
+  const sources = names.map((name) => {
+    const varStart = html.indexOf(`var ${name} = `);
+    if (varStart !== -1) return html.slice(varStart, html.indexOf(';\n', varStart) + 1);
+    const fnStart = html.indexOf(`function ${name}(`);
+    assert(fnStart !== -1, `${name} not found in web/index.html — test itself broken?`);
+    let depth = 0;
+    for (let i = html.indexOf('{', fnStart); i < html.length; i++) {
+      if (html[i] === '{') depth++;
+      if (html[i] === '}' && --depth === 0) return html.slice(fnStart, i + 1);
+    }
+    throw new Error(`${name}: end of function not found`);
+  });
+  return runInNewContext(`${sources.join('\n')}\n;({ ${names.join(', ')} })`, sandbox);
+}
+const browser = inlineScriptDefinitions(['SAMSON_INSTANCE', 'SAMSON_NOT_A_SCHOOL', 'extractSamsonInstance', 'lunchRequestFields']);
+
+console.log('\nProperty: extractSamsonInstance() — what parents paste, and what must not pass');
+
+const randomSchool = (random) => {
+  const name = randomRfcLabel(random);
+  return ['account', 'www', 'cockpit'].includes(name) ? `${name}x` : name;
+};
+const SAMSON_PASTES = [
+  ['the bare school name', (name) => name],
+  ['the name in upper case with whitespace around it', (name) => ` ${name.toUpperCase()}\t`],
+  ['the address from the browser bar', (name, random) => `https://${name}.sams-on.de/${pick(random, ['user/dashboard', '', 'user/orders?von=1', '#/start'])}`],
+  ['the address without https://', (name, random) => `${name}.sams-on.de${pick(random, ['', '/', '/user/dashboard'])}`],
+  ['the shared login page naming the school', (name) => `https://account.sams-on.de/login?instance=${name}`],
+];
+for (const [className, paste] of SAMSON_PASTES) {
+  forAll(
+    `${className} becomes the school name`,
+    (random) => { const name = randomSchool(random); return [paste(name, random), name]; },
+    ([input, name]) => assertEqual(browser.extractSamsonInstance(input), name)
+  );
+}
+const SAMSON_NOT_USABLE = [
+  ['a look-alike host that only starts with the school address', (name, random) => `${pick(random, ['https://', ''])}${name}.sams-on.de.${pick(random, ['evil.example', 'com'])}/`],
+  ['a foreign host naming the school in its query', (name) => `https://evil.example/login?instance=${name}`],
+  ['userinfo in front of another host', (name, random) => `${pick(random, ['https://', ''])}${name}.sams-on.de@evil.example/`],
+  ['a deeper subdomain', (name) => `https://a.${name}.sams-on.de/`],
+  ['a sams-on host that is no school', (name, random) => `https://${pick(random, ['www', 'account', 'cockpit'])}.sams-on.de/${pick(random, ['', 'login', '?instance=www'])}`],
+  ['a bare name with a dot or a path', (name, random) => `${name}${pick(random, ['.de', '.example', '/x', '\\x'])}`],
+];
+for (const [className, paste] of SAMSON_NOT_USABLE) {
+  forAll(
+    `${className} is no usable address`,
+    (random) => paste(randomSchool(random), random),
+    (input) => assertEqual(browser.extractSamsonInstance(input), null)
+  );
+}
+test('an empty or missing address is no usable address', () => {
+  for (const input of ['', '   ', null, undefined]) assertEqual(browser.extractSamsonInstance(input), null);
+});
+
+console.log('\nProperty: lunchRequestFields() — only the selected provider\'s fields leave the device');
+
+// A child that has used every provider at some point: each block carries
+// marked values, so any field of another provider in the request shows up.
+const randomStoredLunch = (random) => ({
+  base: 'https://MM-base.parentsmensa.de', projekt: 'MM-projekt', einrichtung: 'MM-einrichtung', username: 'MM-user', password: 'MM-pass',
+  cccampus: { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: 'CC-kunde', pin: 'CC-pin' },
+  samson: {
+    instanz: pick(random, ['lessing', 'https://lessing.sams-on.de/user/dashboard', 'LESSING ']),
+    benutzername: 'SO-user', passwort: 'SO-pass', guthabenAnzeigen: pick(random, [true, false, 'true', 1, undefined]),
+  },
+  ...(random() < 0.5 ? { [`extra${randomLabel(random)}`]: 'XX-extra' } : {}),
+});
+const LUNCH_PROVIDERS = [
+  ['sams-on', 'samson', (out, stored) => {
+    assertEqual(Object.keys(out).join(','), 'provider,samson');
+    assertEqual(Object.keys(out.samson).join(','), 'instanz,benutzername,passwort,guthabenAnzeigen');
+    assertEqual(out.samson.instanz, 'lessing');
+    assertEqual(out.samson.guthabenAnzeigen, stored.samson.guthabenAnzeigen === true);
+  }, 'SO-'],
+  ['Mensamax', 'mensamax', (out) => assertEqual(Object.keys(out).join(','), 'provider,base,projekt,einrichtung,username,password'), 'MM-'],
+  ['Mensamax by default (no provider stored)', undefined, (out) => assertEqual(`${out.provider} ${Object.keys(out).length}`, 'mensamax 6'), 'MM-'],
+  ['ccCampus (runs in the browser)', 'cccampus', (out) => assertEqual(JSON.stringify(out), '{"provider":"cccampus"}'), null],
+  ['an unknown provider', 'irgendwas', (out) => assertEqual(JSON.stringify(out), '{"provider":"irgendwas"}'), null],
+];
+for (const [className, provider, shape, ownMarker] of LUNCH_PROVIDERS) {
+  forAll(
+    `a child with ${className} sends only its own fields`,
+    (random) => ({ ...randomStoredLunch(random), ...(provider === undefined ? {} : { provider }) }),
+    (stored) => {
+      const out = JSON.parse(JSON.stringify(browser.lunchRequestFields(stored)));
+      shape(out, stored);
+      for (const marker of ['MM-', 'CC-', 'SO-', 'XX-'].filter((m) => m !== ownMarker)) {
+        assert(!JSON.stringify(out).includes(marker), `${marker} fields leave the device: ${JSON.stringify(out)}`);
+      }
+    }
+  );
+}
+
+console.log('\nStored settings that cannot be read are never overwritten silently');
+
+// One page start under the given storage. Returns which notice shows and
+// what saving asks, with every write the page tried.
+function startWithStorage(getItem, answer) {
+  const notices = { configUnreadable: true, storageBlocked: true }; // true = hidden
+  const writes = [];
+  const questions = [];
+  const sandbox = {
+    localStorage: { getItem, setItem: (key, value) => writes.push(value) },
+    document: { getElementById: (id) => ({ classList: { toggle: (cls, hidden) => { notices[id] = hidden; } } }) },
+    window: { confirm: (q) => { questions.push(q); return answer; } },
+    console: { warn() {} },
+  };
+  const page = inlineScriptDefinitions(
+    ['STORAGE_KEY', 'PROXY_URL', 'storedConfigUnreadable', 'storageBlocked', 'emptyConfig', 'loadConfig', 'saveConfig', 'updateUnreadableNotice'],
+    sandbox
+  );
+  page.loadConfig();
+  page.updateUnreadableNotice();
+  const shown = Object.keys(notices).filter((id) => !notices[id]).join(',') || 'none';
+  const saved = page.saveConfig({ children: [] });
+  return { shown, saved, questions, writes };
+}
+const STORAGE_STATES = [
+  ['storage that cannot be opened', () => { throw new Error('SecurityError'); }, 'storageBlocked', 'ließ sich nicht prüfen'],
+  ['stored text that is no JSON', () => '{kaputt', 'configUnreadable', 'nicht lesen ließen'],
+  ['stored JSON of the wrong shape', () => '{"proxyUrl":"x"}', 'configUnreadable', 'nicht lesen ließen'],
+];
+for (const [className, getItem, notice, question] of STORAGE_STATES) {
+  test(`${className}: its own notice, and saving asks first`, () => {
+    const declined = startWithStorage(getItem, false);
+    assertEqual(declined.shown, notice);
+    assert(declined.questions.length === 1 && declined.questions[0].includes(question), JSON.stringify(declined.questions));
+    assertEqual(`${declined.saved} ${declined.writes.length}`, 'null 0');
+    assertEqual(startWithStorage(getItem, true).writes.length, 1);
+  });
+}
+test('nothing stored yet, or readable settings: no notice, no question', () => {
+  for (const stored of [null, '', JSON.stringify({ children: [] })]) {
+    const start = startWithStorage(() => stored, false);
+    assertEqual(`${start.shown} ${start.questions.length} ${start.saved}`, 'none 0 true');
+  }
+});
 
 // ── ccCampus domain allowlist: index.html and _headers must agree ────────
 //

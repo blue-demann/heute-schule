@@ -153,7 +153,7 @@ const SAMSON_DOMAIN = 'sams-on.de';
 export function samsonOrigin(instance) {
   const name = String(instance ?? '').trim().toLowerCase();
   if (!HOSTNAME_LABEL.test(name)) {
-    throw new Error('Ungültige sams-on-Instanz');
+    throw new Error('Ungültige sams-on-Adresse der Schule');
   }
   const host = checkSafeHostname(`${name}.${SAMSON_DOMAIN}`, { requiredSuffix: `.${SAMSON_DOMAIN}` });
   return new URL(httpsUrlForHost(host, '/')).origin;

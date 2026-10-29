@@ -1,8 +1,8 @@
 # Offene Punkte
 
-HS-OFF · v5 · 2026-10-29 · 35ce4dd9 · gültig
+HS-OFF · v6 · 2026-10-29 · 4b234ae3 · gültig
 
-**Stand: 11.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 29.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -26,7 +26,10 @@ unten und [PEER-REVIEW-2026-10-09.md](https://github.com/blue-demann/heute-schul
 Eine siebte Runde, ebenfalls am 09.10.2026 und wieder ohne Vorwissen, prüfte
 das Wartungs-Vorhaben (Version 0.3.3): kein 🔴, vier 🟡 an den Rändern der
 neuen Gates, siehe unten und
-[PEER-REVIEW-2026-10-09b.md](PEER-REVIEW-2026-10-09b.md).
+[PEER-REVIEW-2026-10-09b.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-09b.md).
+Eine achte Runde am 29.10.2026 prüfte die sams-on-Anbindung (Version 0.4.0):
+kein 🔴, Korrekturen am Datenschutztext und Testlücken, siehe unten und
+[Prüfbericht der achten Runde (IDHDKM8)](PEER-REVIEW-2026-10-29.md).
 (Links zu Berichten, die nicht Teil des `web/docs/`-Dumps sind, zeigen
 bewusst auf GitHub statt auf eine relative Datei — dort würde ein
 relativer Link ins Leere laufen.) Alle Berichte bleiben als
@@ -63,8 +66,11 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (Entwicklungsprozess Q38, Regel-Inventar EP-INV v1) Wartungs-Vorhaben „Prüfer nachziehen": falsches Grün im Live-Check bei unsauberem Arbeitsbaum, fehlende ESLint-Sicherheitsregeln, `npm audit` nur in der CI, kein Test der Sicherheits-Header, ES5-Ziel weder eingehalten noch geprüft | **Deploy nur aus sauberem Arbeitsbaum** (`tools/require-clean-tree.sh`, vor dem Schlüsselbund). **ESLint:** `no-eval`, `no-implied-eval`, `no-new-func`, Verbot von `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` (die fünf `innerHTML = ''` sind jetzt `textContent = ''`, keine Ausnahme nötig), `no-console` im Proxy. **`npm audit --audit-level=high` als Deploy-Gate**; dafür `wrangler` als exakt gepinnte Entwicklungsabhängigkeit ins Lockfile — das Audit fand sofort eine hohe Lücke in 4.144.0, jetzt 4.149.0. **Sicherheits-Header:** Test der Pflichtteile in `web/_headers` plus Live-Vergleich nach dem Deploy (`tools/headers.mjs`). **Syntax-Ziel ES2019** für `index.html`, `ueber.html`, `sw.js`, per ESLint durchgesetzt. Zusätzlich **Lizenztest** über das Lockfile. Gegenproben: je ein Mutant pro Prüfer (Arbeitsbaum-Prüfung wirkungslos, Sicherheitsregeln entfernt, Sprachstand 2022, Lizenzprüfung lässt alles durch, Header-Prüfung ignoriert CSP) macht 3–9 Tests rot; Audit-Gate einmalig mit `minimist@1.2.0` (Exit 1) gegen `1.2.8` (Exit 0) geprüft (09.10.2026) |
 | 🟡 (Entwicklungsprozess Q28/Q31) Keine Typprüfung — 13 JS-Dateien nur mit ESLint, Antworten der Upstream-Dienste ungeprüft verwendet | **Typprüfung:** `tsc --checkJs` strict über JSDoc, ohne Build-Schritt, `typescript@7.0.2` exakt gepinnt; geprüft werden `proxy/*`, `stundenplan.js`, `web/sw.js` (`npm run typecheck`, Gate in `deploy.sh` und CI). Fand beim Einführen eine echte Unschärfe im Service Worker (offline ohne Cache-Treffer `undefined` an `respondWith()`). **Laufzeitvalidierung** in `proxy/validate.mjs`: Request-Body aus dem Browser (nur bekannte Felder als Text, sonst 400) und jede WebUntis-Antwort (Strukturfehler → „unerwartete Antwort“, nicht mehr als „Passwort falsch“ fehlgedeutet; `sessionId` nur Token-Zeichen, weil sie in den `Cookie`-Header geht). Gegenproben: neue Worker-Tests gegen den alten Worker 4 rot; fünf Mutanten der Validierung je 1–3 rot; eingebauter Typfehler → `tsc` Exit 1 (09.10.2026). Nicht abgedeckt: Inline-Script in `index.html`, siehe „Noch offen“ |
 | 🟡 (Peer-Review 09.10., siebte Runde, Funde A-1 bis A-4) Ränder der neuen Gates: (1) `npm audit` wurde mit `NODE_ENV=production` blind (alle Pakete sind Entwicklungsabhängigkeiten) und prüfte nur das Lockfile, nicht `node_modules`; (2) eine Nicht-JSON-Antwort beim WebUntis-Login (Wartungsseite, leerer Body, Weiterleitung) hieß weiter „Passwort prüfen“; (3) die Aufrufe von `validateClasses`/`validateSubjects`/`validateRooms` ließen sich im Worker entfernen, ohne dass ein Test es merkte; (4) ob der Proxy den Stand von HEAD ausliefert, prüfte nichts | (1) `deploy.sh` installiert vor jedem Deploy frisch mit `npm ci --include=dev` und auditiert mit `--include=dev`, CI ebenso. (2) Eigene Fehlerklasse für „WebUntis hat abgelehnt“ statt Erkennung am Textanfang. (3) Worker-Test je Prüfung. (4) `wrangler deploy --message <Commit>`, danach liest `tools/check-proxy-deploy.sh` die aktive Version zurück. Gegenproben: gegen Version 0.3.3 45 Tests rot; 16 Mutanten je von mindestens einem Test erkannt; Audit mit `minimist@1.2.0` und `NODE_ENV=production` Exit 0, mit `--include=dev` Exit 1 (11.10.2026, Version 0.3.4). Der Proxy-Check ist gegen einen `wrangler`-Stellvertreter getestet; die echte Bestätigung ist der erste Deploy mit 0.3.4 |
-| 🟢 (dieselbe Runde, A-5 bis A-8, B-1, D-2, D-3, K-1 bis K-3) CSP-Prüfung übersah `script-src-elem` und pauschale `https:`-Quellen; Arbeitsbaum-Gate per `skip-worktree` umgehbar; CI führte Install-Skripte aus und hatte ein Schreib-Token; Validierungsmeldung nannte das Feld nicht; `sessionId`-Zeichensatz enger als RFC 6265 (Risiko: alle Familien ausgesperrt bei Formatwechsel); Proxy übernahm ccCampus-PIN und Kundennummer, die er nie braucht; Lookbehind in regulären Ausdrücken im ES2019-Umfang erlaubt, in Safari erst ab 16.4; Lizenztest wertete gemischte `AND`/`OR`-Ausdrücke falsch aus; drei Doku-Ungenauigkeiten | Alle behoben, je mit Test und Mutant. Doku: Zeilenumbrüche in der `sessionId` lehnen die Laufzeiten ohnehin ab (Härtung), tatsächlich geschlossen ist das Anhängen weiterer Cookies über `;`. Bewusst nicht umgesetzt: weitere HTML-Umwege für ESLint (`href`, `DOMParser`) — geringer Nutzen (11.10.2026, Version 0.3.4) |
+| 🟢 (dieselbe Runde, A-5 bis A-8, B-1, D-2, D-3, K-1 bis K-3) CSP-Prüfung übersah `script-src-elem` und pauschale `https:`-Quellen; Arbeitsbaum-Gate per `skip-worktree` umgehbar; CI führte Install-Skripte aus und hatte ein Schreib-Token; Validierungsmeldung nannte das Feld nicht; `sessionId`-Zeichensatz enger als RFC 6265 (Risiko: alle Familien ausgesperrt bei Formatwechsel); Proxy übernahm ccCampus-PIN und Kundennummer, die er nie braucht; Lookbehind in regulären Ausdrücken im ES2019-Umfang erlaubt, in Safari erst ab 16.4; Lizenztest wertete gemischte `AND`/`OR`-Ausdrücke falsch aus; drei Doku-Ungenauigkeiten | Alle behoben, je mit Test und Mutant — bis auf einen Teil von A-7: das Pinnen der GitHub Actions auf Commit-SHAs und Dependabot für Actions kamen erst mit 0.4.1 (siehe unten). Doku: Zeilenumbrüche in der `sessionId` lehnen die Laufzeiten ohnehin ab (Härtung), tatsächlich geschlossen ist das Anhängen weiterer Cookies über `;`. Bewusst nicht umgesetzt: weitere HTML-Umwege für ESLint (`href`, `DOMParser`) — geringer Nutzen (11.10.2026, Version 0.3.4) |
 | 🔴 (Hinweis aus dem Entwicklungsprozess, 11.10.2026) Datenverlust in der App: `loadConfig` lieferte bei jedem Lesefehler still eine leere Konfiguration — kaputtes JSON, unerwartete Form, auch jeder Fehler in der Nachrüst-Schleife für ältere Konfigurationen. Die App zeigte das leere Formular, das nächste Speichern überschrieb die Daten der Familie ohne Rückfrage | `web/index.html` unterscheidet „nichts gespeichert“ von „vorhanden, aber nicht lesbar“. Im zweiten Fall bleibt der gespeicherte Wert unberührt, die App zeigt einen Hinweis, und Speichern fragt ausdrücklich, ob überschrieben werden darf. „Alle Daten löschen“ meldet jetzt ehrlich, wenn der Speicher sich nicht leeren ließ. Im Browser gegengeprüft: vorher war der gespeicherte Eintrag nach „Kind hinzufügen“ + „Speichern“ ohne Rückfrage weg; jetzt bleibt er bei Ablehnen erhalten und wird erst nach Bestätigen überschrieben; gültige Konfiguration, kaputtes JSON, falsche Form, keine Daten und Löschen als Kontrollfälle (Version 0.3.4) |
+
+| 🟡 (achte Runde, Prüfbericht IDHDKM8, Funde K-1/B-1, K-2, A-1, A-3, D-1) Datenschutzerklärung, Formular und Doku versprachen, der Proxy frage das sams-on-Guthaben ohne Häkchen „gar nicht ab“ — sams-on schickt es aber bei jeder Anmeldung mit; die 5-€-Schwelle wurde fälschlich als sams-on-eigene Schwelle begründet; Logout, 403 und Zeitüberschreitung ungetestet; die Browser-Funktionen, die bestimmen, welche Zugangsdaten das Gerät verlassen, ungetestet; das Datumsformat der Bestellungen nur angenommen | Text in Datenschutzerklärung (vom User freigegeben), Formular, `PROJEKT.md` und `proxy/README.md` korrigiert: Der Proxy erhält den Kontostand immer und gibt ihn nur bei Häkchen weiter. 5 € als eigene Festlegung. Neue Worker-Tests: Logout mit der angemeldeten Session (auch nach kaputter Antwort), Antwort wartet nicht auf den Logout, 403, Zeitüberschreitung je Anfrage und gemeinsames Zeitlimit. Property-Tests für `extractSamsonInstance` und `lunchRequestFields` (aus `web/index.html` herausgeschnitten), Tests für die Hinweise bei nicht lesbaren Einstellungen. Datum einer Bestellung darf eine Uhrzeit tragen, mit Zeitzone wird abgelehnt. Gegenproben für diese und die nächste Zeile: 19 Mutanten, jeder von mindestens einem Test erkannt (29.10.2026, Version 0.4.1) |
+| 🟢 (dieselbe Runde, A-4, A-5/K-5, B-3, C-1 bis C-4, D-2, D-3, K-3, K-4, K-6) Bis zu rund 50 s Wartezeit bei hängendem sams-on; Actions an beweglichen Tags; „Guthaben 0,00 € — bald aufladen“ bei Schulen, die das Guthaben ausblenden; „Instanz“ als Entwicklersprache; Speichersperre ohne Kindnamen; falscher Hinweis bei gesperrtem Speicher; Fehlertext nicht ans Feld gebunden (WCAG 2.2, 1.3.1 A, 4.1.3 AA); „Ei“ als Allergen-Code entfernt, ungültige Zeichenreferenz warf; gemischte Anführungszeichen; CORS-Begründung für sams-on ungenau; veralteter Stand und Kopfkommentar | Gemeinsames Zeitlimit von 15 s, Logout per `ctx.waitUntil` nach der Antwort. Actions auf Commit-SHAs, Dependabot für `github-actions`. `hideCredit` aus der Instanz-Info: „Guthaben wird bei dieser Schule nicht geführt“, ohne Betrag. „Schule … nicht gefunden — Adresse in den Einstellungen prüfen“. Speichersperre nennt das Kind und springt zum Feld. Eigener Hinweis bei gesperrtem Speicher. Fehlertext als dauerhaft vorhandene `role="alert"`-Region, Hinweise per `aria-describedby`. Allergen-Codes nur noch einzelne Buchstaben oder Zahlen mit optionalem Buchstaben, Zeichenreferenzen außerhalb von Unicode bleiben stehen. Doku korrigiert (29.10.2026, Version 0.4.1) |
 
 ## Noch offen
 
@@ -107,24 +113,28 @@ Zeitpunkt-Momentaufnahmen unverändert.
    - Enthält `title` in `orders/view` den Menünamen oder nur die Kategorie
      („Fleisch“, „vegetarisch“)? Bei der Kategorie den Namen aus anderer
      Quelle holen.
-   - Erreicht der Proxy sams-on aus dem Cloudflare-Netz überhaupt (ccCampus
-     blockiert das)? Zeigt sich beim ersten Abruf nach dem Deploy.
-   - Erledigt am 29.10.: Eine unbekannte Schule beantwortet sams-on mit einer
-     Weiterleitung (302) auf `www.sams-on.de`; der Proxy meldet dann „Instanz
-     … nicht gefunden“. Dieselbe Abfrage aus dem Cloudflare-Netz bekam eine
-     echte Antwort von sams-on, eine Sperre wie bei ccCampus gibt es dort
-     also nicht.
-   - Erledigt am 29.10.: Erster echter Abruf über den Live-Proxy mit dem
-     Konto der Familie funktioniert (Login, Bestellstatus „Kein Essen
-     bestellt“, Guthaben-Anzeige wie erwartet).
+   - Kommt `dayId` als reines Datum? Seit 0.4.1 ist auch eine Uhrzeit dahinter
+     erlaubt; mit Zeitzone oder in anderer Form zeigt die Karte eine
+     Fehlermeldung statt eines falschen Status.
+   - Tauchen stornierte Bestellungen in `orders/view` auf?
+   - Beendet ein Login über den Proxy eine gleichzeitig offene Sitzung der
+     Eltern im sams-on-Browser?
    - Guthaben: Format `creditAmount` („0,00“) am Testkonto gesehen; mit
      echtem Guthaben gegenprüfen, ob es dasselbe Format bleibt.
-   - Danach: unabhängige Prüfrunde, wie bei neuem Code mit Zugangsdaten
-     üblich. Mensamax-Anbindung entfernen, sobald sie niemand mehr braucht.
-   - Hinweis für die Familien: sams-on läuft mit PHP auf Apache, der
-     Konstellation, die von den PHP-Lücken CVE-2026-109618/-109619 (Oktober
-     2026) besonders betroffen ist. Ob sams-on das Update eingespielt hat,
-     ist von außen nicht prüfbar — bei der Schule nachfragen.
+   - Belegt am 29.10.: Erster echter Abruf über den Live-Proxy mit dem Konto
+     der Familie funktioniert (Login, „Kein Essen bestellt“, Guthaben wie
+     erwartet); eine Sperre wie bei ccCampus gibt es nicht. Eine unbekannte
+     Schule beantwortet sams-on mit einer Weiterleitung (302) auf
+     `www.sams-on.de`; die Meldung „Schule … nicht gefunden“ dafür steht im
+     Repo seit 29.10. und ist live ab dem Deploy von 0.4.1.
+   - Mensamax-Anbindung entfernen, sobald sie niemand mehr braucht.
+   - PHP bei sams-on: Der Server meldet im Header `X-Powered-By: PHP/8.2.33`.
+     Die kritischen PHP-Lücken CVE-2026-109618/-109619 (Fixes seit
+     21.10.2026) sind im 8.2-Zweig erst ab 8.2.35 behoben
+     ([Unit 42](https://unit42.paloaltonetworks.com/cve-2026-109618-cve-2026-109619.md?lg=en&pdf=print)).
+     Die Versionsnummer ist ein Indiz, kein Beweis: AlmaLinux-Pakete können
+     Korrekturen zurückportieren, ohne sie zu ändern. Der User weist den
+     Betreiber darauf hin.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

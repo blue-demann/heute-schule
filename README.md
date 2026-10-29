@@ -13,8 +13,9 @@ Stundenplan der Kinder heute aus (WebUntis), und gibt's Schulessen
   Framework. Zugangsdaten liegen ausschließlich lokal im Browser
   (`localStorage`), nie auf einem eigenen Server.
 - **`proxy/`** — ein Cloudflare Worker, der die Anfragen an WebUntis,
-  Mensamax und sams-on stellt (die senden keine CORS-Freigabe, ein Browser
-  darf sie also nicht direkt fragen). ccCampus läuft strukturell umgekehrt und
+  Mensamax und sams-on stellt (ihre CORS-Einstellungen lassen keine
+  Browser-Anfragen von fremden Seiten zu, bei sams-on keine mit
+  Session-Cookie). ccCampus läuft strukturell umgekehrt und
   deshalb ohne Proxy direkt im Browser.
 
 Ausführliche Architektur, Entscheidungs-Log und Sicherheitsmodell:

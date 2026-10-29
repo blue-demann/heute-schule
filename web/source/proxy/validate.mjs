@@ -178,9 +178,10 @@ export function validateRooms(result) {
 // ── sams-on ──────────────────────────────────────────────────────────────
 //
 // Only what the worker uses: the account's user id (to ask for its orders),
-// the credit only if the parent switched its display on, and per order the
-// day and the meal title. Everything else sams-on sends along — name,
-// e-mail, ID card number — is not even copied.
+// per order the day and the meal title, and — only if the parent switched
+// the balance on — the credit and whether the school hides it. Everything
+// else sams-on sends along — name, e-mail, ID card number — is received
+// with the answer but never copied.
 
 /**
  * @typedef {{ dayId: string, title: string }} SamsonOrder
@@ -202,6 +203,21 @@ export function samsonCredit(data) {
 }
 
 /**
+ * Whether the school hides the credit from its users (`hideCredit` in the
+ * instance info, e.g. when it bills by invoice): true or false, or null if
+ * the value is missing from a readable answer in no known form.
+ * @param {unknown} info
+ * @returns {boolean | null}
+ */
+export function samsonCreditHidden(info) {
+  if (!isObject(info)) return null;
+  const value = info.hideCredit;
+  if (value === '1' || value === 1 || value === true) return true;
+  if (value === '0' || value === 0 || value === false || value === null || value === undefined) return false;
+  return null;
+}
+
+/**
  * GET /api/login while logged in.
  * @param {unknown} data
  * @returns {string} the user id, as decimal digits
@@ -214,6 +230,11 @@ export function validateSamsonAccount(data) {
   return text;
 }
 
+// The day of an order: a date, possibly with a local time of day after it
+// ("2026-11-03", "2026-11-03T00:00:00", "2026-11-03 00:00"). A time zone
+// would make the date ambiguous, so it is refused rather than guessed.
+const SAMSON_DAY = /^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?$/;
+
 /**
  * GET /api/users/{id}/orders/view
  * @param {unknown} data
@@ -224,9 +245,10 @@ export function validateSamsonOrders(data) {
   if (!Array.isArray(data.orders)) throw unexpected('orders/view', 'orders', 'sams-on');
   return data.orders.map((o) => {
     if (!isObject(o)) throw unexpected('orders/view', 'Eintrag', 'sams-on');
-    if (typeof o.dayId !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(o.dayId)) throw unexpected('orders/view', 'dayId', 'sams-on');
+    const day = typeof o.dayId === 'string' ? SAMSON_DAY.exec(o.dayId) : null;
+    if (!day) throw unexpected('orders/view', 'dayId', 'sams-on');
     if (typeof o.title !== 'string' || o.title.length > 2000) throw unexpected('orders/view', 'title', 'sams-on');
-    return { dayId: o.dayId, title: o.title };
+    return { dayId: day[1], title: o.title };
   });
 }
 

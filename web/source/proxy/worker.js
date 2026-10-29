@@ -3,36 +3,41 @@
 /**
  * Stundenplan proxy — Cloudflare Worker
  *
- * Takes WebUntis and Mensamax requests off the plain browser website's
- * hands (solves their CORS problem) and returns plain JSON. Stores NOTHING
- * itself — every request brings its own login data, sourced by the
- * frontend from localStorage.
+ * Takes WebUntis, Mensamax and sams-on requests off the plain browser
+ * website's hands and returns plain JSON. Stores NOTHING itself — every
+ * request brings its own login data, sourced by the frontend from
+ * localStorage.
  *
- * Logic ported 1:1 from stundenplan_agent.gs / stundenplan.js (verified
- * production code of the pre-existing Apps Script agent), only UrlFetchApp
- * was swapped for fetch().
+ * The WebUntis and Mensamax logic was ported 1:1 from stundenplan_agent.gs /
+ * stundenplan.js (verified production code of the pre-existing Apps Script
+ * agent), only UrlFetchApp was swapped for fetch(). sams-on has its own
+ * section further down.
  *
- * WebUntis and Mensamax don't send an Access-Control-Allow-Origin header —
- * that's why this proxy exists: direct browser requests to these providers
- * are technically impossible (see ../PROJEKT.md, section 5).
+ * Why the proxy exists: WebUntis and Mensamax don't send an
+ * Access-Control-Allow-Origin header. sams-on does ("*"), but its session
+ * lives in a cookie, and with "*" browsers refuse requests that carry
+ * cookies. Direct browser requests to these providers are therefore
+ * technically impossible (see ../PROJEKT.md, section 5).
  *
- * Mensamax cookie handling uses response.headers.getSetCookie(), which the
- * Cloudflare Workers runtime supports.
+ * Cookie handling (Mensamax, sams-on) uses response.headers.getSetCookie(),
+ * which the Cloudflare Workers runtime supports.
  *
  * Setup: see README.md in this folder.
  *
- * Deliberately easy on WebUntis/Mensamax (matters once more than just our
- * own family reads along — see the legal assessment in the project doc):
+ * Deliberately easy on the providers (matters once more than just our own
+ * family reads along — see the legal assessment in the project doc):
  *  - Short result caching (Cloudflare Cache API, ~4 minutes) — several
  *    parents/refreshes from the same family don't hit the outside servers
  *    again on every click.
- *  - An explicit timeout on every outbound fetch, so a hung request to
- *    WebUntis/Mensamax doesn't keep running indefinitely.
+ *  - An explicit timeout on every outbound fetch, so a hung request doesn't
+ *    keep running indefinitely; the sams-on sequence also has one shared
+ *    time limit for all its requests.
  *
  * Response fields that reach the frontend (`stunden`, `fach`, `raum`,
  * `start`, `ende`, `vertretung`, `lunch`, `datum`, `stundenFehler`,
- * `lunchFehler`) and the shared config-object shape (`server`, `klasse`,
- * `provider`, `base`, `projekt`, `einrichtung`, `cccampus`, ...) are
+ * `lunchFehler`, `guthaben`, `guthabenKnapp`, `guthabenGefuehrt`) and the
+ * shared config-object shape (`server`, `klasse`, `provider`, `base`,
+ * `projekt`, `einrichtung`, `cccampus`, `samson`, `instanz`, ...) are
  * deliberately still German — they're a wire contract with web/index.html
  * (and, for the config shape, already-saved localStorage data in real
  * users' browsers), not this file's internal code. Renaming them belongs
@@ -44,7 +49,7 @@ import { decodeHtmlEntities, samsonMealName } from './text.mjs';
 import { buildCacheKeyMaterial } from './cachekey.mjs';
 import {
   validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
-  validateSamsonAccount, validateSamsonOrders, samsonCredit,
+  validateSamsonAccount, validateSamsonOrders, samsonCredit, samsonCreditHidden,
 } from './validate.mjs';
 
 const FETCH_TIMEOUT_MS = 10000;
@@ -102,7 +107,7 @@ async function isRateLimited(request, ctx) {
   return false;
 }
 
-// Wrapper around every request to WebUntis/Mensamax.
+// Wrapper around every request to a provider.
 // - Timeout: stops a hung third-party server from blocking the worker (and
 //   the parent's request) indefinitely.
 // - Never follows redirects: the host check only covers the first URL. A
@@ -113,15 +118,18 @@ async function isRateLimited(request, ctx) {
 /**
  * @param {string} url
  * @param {RequestInit} [options]
+ * @param {AbortSignal} [budget]  a time limit shared by several requests in a row
  */
-async function fetchWithTimeout(url, options) {
+async function fetchWithTimeout(url, options, budget) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const signal = budget ? AbortSignal.any([controller.signal, budget]) : controller.signal;
   try {
-    return await fetch(url, { ...options, redirect: 'manual', signal: controller.signal });
+    return await fetch(url, { ...options, redirect: 'manual', signal });
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (>${FETCH_TIMEOUT_MS / 1000}s)`, { cause: e });
+      const limit = budget?.aborted ? 'Gesamtzeit überschritten' : `>${FETCH_TIMEOUT_MS / 1000}s`;
+      throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (${limit})`, { cause: e });
     }
     throw e;
   } finally {
@@ -374,9 +382,10 @@ async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', user
 /**
  * @param {LunchConfig} lunchCfg
  * @param {string} datumStr
+ * @param {ExecutionContext} ctx
  * @returns {Promise<LunchResult>}
  */
-async function getLunchStatus(lunchCfg, datumStr) {
+async function getLunchStatus(lunchCfg, datumStr, ctx) {
   const provider = lunchCfg.provider || 'mensamax';
   if (provider === 'cccampus') {
     // ccCampus runs exclusively in the browser (see the section further
@@ -386,7 +395,7 @@ async function getLunchStatus(lunchCfg, datumStr) {
     return { lunch: 'Schulessen: ccCampus wird direkt im Browser abgefragt, nicht über den Proxy' };
   }
   if (provider === 'samson') {
-    return getLunchStatusSamson(lunchCfg.samson, datumStr);
+    return getLunchStatusSamson(lunchCfg.samson, datumStr, ctx);
   }
   if (provider !== 'mensamax') {
     return { lunch: `Schulessen: unbekannter Anbieter "${provider}"` };
@@ -443,9 +452,9 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
 // The JSON API behind the sams-on web app, used the way that app uses it:
 // fetch the instance info (starts the session cookie), log in, read the
 // account's user id, ask for the orders of exactly the requested day, log
-// out. The API answers browser requests from other sites without CORS
-// headers, hence the proxy. Read-only: no request here can order, cancel or
-// change anything.
+// out. The session lives in a cookie, which sams-on's CORS setting ("*")
+// does not allow in browser requests from other sites, hence the proxy.
+// Read-only: no request here can order, cancel or change anything.
 
 // What the sams-on web app sends as Content-Type (sic, leading slash).
 const SAMSON_CONTENT_TYPE = '/application/vnd.akquinet.samson.v2';
@@ -485,73 +494,108 @@ async function samsonJson(resp, method) {
   }
 }
 
-// Below this credit (in euros) the card highlights the balance — the same
-// threshold sams-on uses for its own "credit is running low" notice.
+// Below this credit (in euros) the card highlights the balance. Our own
+// choice: sams-on lets each school set a threshold for its own notice
+// (lowCreditWarning in the instance info), but a school may leave it unset,
+// and sams-on then warns not at all.
 const SAMSON_LOW_CREDIT = 5;
+
+// One limit for the whole sams-on sequence (up to four requests before the
+// answer), on top of the per-request timeout: a hanging sams-on then costs
+// at most this long per child, not four timeouts in a row.
+const SAMSON_BUDGET_MS = 15000;
 
 /**
  * @param {string | null} amount  e.g. "12,40"
- * @returns {{ betrag: string | null, knapp: boolean }}
+ * @param {boolean | null} hidden  whether the school hides the credit; null if unknown
+ * @returns {SamsonBalance}
  */
-function samsonBalance(amount) {
-  return { betrag: amount, knapp: amount !== null && Number(amount.replace(',', '.')) < SAMSON_LOW_CREDIT };
+function samsonBalance(amount, hidden) {
+  if (hidden === true) return { betrag: null, knapp: false, gefuehrt: false };
+  const betrag = hidden === false ? amount : null;
+  return { betrag, knapp: betrag !== null && Number(betrag.replace(',', '.')) < SAMSON_LOW_CREDIT, gefuehrt: true };
 }
 
 /**
  * @param {SamsonConfig | undefined} samsonCfg
  * @param {string} datumStr  YYYYMMDD
+ * @param {ExecutionContext} ctx
  * @returns {Promise<LunchResult>}
  */
-async function getLunchStatusSamson(samsonCfg, datumStr) {
+async function getLunchStatusSamson(samsonCfg, datumStr, ctx) {
   const { instanz, benutzername, passwort, guthabenAnzeigen = false } = samsonCfg || {};
   if (!instanz || !benutzername || !passwort) {
-    throw new Error('sams-on-Konfiguration unvollständig (Instanz/Benutzername/Passwort)');
+    throw new Error('sams-on-Konfiguration unvollständig (Schuladresse/Benutzername/Passwort)');
   }
   const origin = samsonOrigin(instanz);
   const instanceName = new URL(origin).hostname.split('.')[0];
   const jar = new Map();
   const headers = () => ({ 'Content-Type': SAMSON_CONTENT_TYPE, Accept: 'application/json', ...(jar.size ? { Cookie: cookieHeader(jar) } : {}) });
-
-  const instanceResp = await fetchWithTimeout(`${origin}/api/instance/${instanceName}`, { headers: headers() });
-  // An unknown school name: sams-on redirects to its homepage (seen live,
-  // 302 to www.sams-on.de); a 404 would mean the same.
-  const unknownSchool = instanceResp.status === 404 || (instanceResp.status >= 300 && instanceResp.status < 400);
-  if (unknownSchool) throw new Error(`sams-on: Instanz „${instanceName}“ nicht gefunden`);
-  if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
-  collectCookies(jar, instanceResp);
-
-  const loginResp = await fetchWithTimeout(`${origin}/api/login`, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify({ username: benutzername, password: passwort }),
-  });
-  if (loginResp.status === 401 || loginResp.status === 403) return { lunch: 'Schulessen: Login fehlgeschlagen' };
-  if (!loginResp.ok) throw new Error(`sams-on: Anmeldung nicht möglich (HTTP ${loginResp.status})`);
-  collectCookies(jar, loginResp);
+  const budget = new AbortController();
+  const budgetTimer = setTimeout(() => budget.abort(), SAMSON_BUDGET_MS);
+  /**
+   * @param {string} path
+   * @param {RequestInit} [init]
+   */
+  const samsonFetch = (path, init) => fetchWithTimeout(`${origin}${path}`, { ...init, headers: headers() }, budget.signal);
 
   try {
-    const accountResp = await fetchWithTimeout(`${origin}/api/login?forceUserarea=false`, { headers: headers() });
-    // Not logged in after all: sams-on answers a failed login like this.
-    if (accountResp.status === 401) return { lunch: 'Schulessen: Login fehlgeschlagen' };
-    const account = await samsonJson(accountResp, 'login');
-    const userId = validateSamsonAccount(account);
-    // The credit is read only when the parent asked for it on this child.
-    const balance = guthabenAnzeigen ? { guthaben: samsonBalance(samsonCredit(account)) } : {};
+    const instanceResp = await samsonFetch(`/api/instance/${instanceName}`);
+    // An unknown school name: sams-on redirects to its homepage (seen live,
+    // 302 to www.sams-on.de); a 404 would mean the same.
+    const unknownSchool = instanceResp.status === 404 || (instanceResp.status >= 300 && instanceResp.status < 400);
+    if (unknownSchool) throw new Error(`sams-on: Schule „${instanceName}“ nicht gefunden — Adresse in den Einstellungen prüfen`);
+    if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
+    collectCookies(jar, instanceResp);
+    // Whether the school keeps a balance for its users at all — only looked
+    // at when the balance is to be shown. An unreadable instance info makes
+    // the balance "not available", it does not fail the meal status.
+    let creditHidden = /** @type {boolean | null} */ (false);
+    if (guthabenAnzeigen) {
+      try {
+        creditHidden = samsonCreditHidden(JSON.parse(await instanceResp.text()));
+      } catch {
+        creditHidden = null;
+      }
+    }
 
-    const day = `${datumStr.slice(0, 4)}-${datumStr.slice(4, 6)}-${datumStr.slice(6, 8)}`;
-    const ordersResp = await fetchWithTimeout(
-      `${origin}/api/users/${userId}/orders/view?dateFrom=${day}&dateTill=${day}`,
-      { headers: headers() }
-    );
-    const meals = validateSamsonOrders(await samsonJson(ordersResp, 'orders/view'))
-      .filter((o) => o.dayId === day)
-      .map((o) => samsonMealName(o.title))
-      .filter((name) => name !== '');
-    return { lunch: meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt', ...balance };
-  } finally {
+    const loginResp = await samsonFetch('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: benutzername, password: passwort }),
+    });
+    if (loginResp.status === 401 || loginResp.status === 403) return { lunch: 'Schulessen: Login fehlgeschlagen' };
+    if (!loginResp.ok) throw new Error(`sams-on: Anmeldung nicht möglich (HTTP ${loginResp.status})`);
+    collectCookies(jar, loginResp);
+
     try {
-      await fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' });
-    } catch { /* not worth failing over — the session expires on its own */ }
+      const accountResp = await samsonFetch('/api/login?forceUserarea=false');
+      // Not logged in after all: sams-on answers a failed login like this.
+      if (accountResp.status === 401) return { lunch: 'Schulessen: Login fehlgeschlagen' };
+      // sams-on sends name, e-mail, ID card number and credit with this
+      // answer, always; only the user id and, if switched on, the credit
+      // are taken from it.
+      const account = await samsonJson(accountResp, 'login');
+      const userId = validateSamsonAccount(account);
+      const balance = guthabenAnzeigen ? { guthaben: samsonBalance(samsonCredit(account), creditHidden) } : {};
+
+      const day = `${datumStr.slice(0, 4)}-${datumStr.slice(4, 6)}-${datumStr.slice(6, 8)}`;
+      const ordersResp = await samsonFetch(`/api/users/${userId}/orders/view?dateFrom=${day}&dateTill=${day}`);
+      const meals = validateSamsonOrders(await samsonJson(ordersResp, 'orders/view'))
+        .filter((o) => o.dayId === day)
+        .map((o) => samsonMealName(o.title))
+        .filter((name) => name !== '');
+      return { lunch: meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt', ...balance };
+    } finally {
+      // Sent after the answer, outside the shared time limit, so a slow
+      // sams-on does not hold up the card. Not worth failing over: if it
+      // does not go through, the session expires on its own.
+      ctx.waitUntil(
+        fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' })
+          .then(() => {}, () => {})
+      );
+    }
+  } finally {
+    clearTimeout(budgetTimer);
   }
 }
 
@@ -637,7 +681,7 @@ export default {
 
     const [lessonsResult, lunchResult] = await Promise.allSettled([
       getTimetable(webuntisCfg, datum),
-      getLunchStatus(lunchCfg, datum),
+      getLunchStatus(lunchCfg, datum, ctx),
     ]);
 
     const result = {
@@ -648,7 +692,11 @@ export default {
       lunchFehler: lunchResult.status === 'rejected' ? String(lunchResult.reason.message || lunchResult.reason) : null,
       // Only present when the parent switched the balance on (sams-on).
       ...(lunchResult.status === 'fulfilled' && lunchResult.value.guthaben
-        ? { guthaben: lunchResult.value.guthaben.betrag, guthabenKnapp: lunchResult.value.guthaben.knapp }
+        ? {
+          guthaben: lunchResult.value.guthaben.betrag,
+          guthabenKnapp: lunchResult.value.guthaben.knapp,
+          guthabenGefuehrt: lunchResult.value.guthaben.gefuehrt,
+        }
         : {}),
     };
 

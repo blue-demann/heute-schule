@@ -1,8 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v5 · 2026-10-29 · 717dca70 · gültig
+HS-PRJ · v6 · 2026-10-29 · 91977871 · gültig
 
-**Stand: 29.10.2026 · Version 0.4.0**
+**Stand: 29.10.2026 · Version 0.4.1**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -120,15 +120,19 @@ Vergessenes missverstanden werden:
   `ueber.html`), `theme.css` als gemeinsames Stylesheet, `sw.js` als Service
   Worker (Network-first mit Cache-Fallback), `_headers` für Security-Header.
 - **`proxy/`** — ein Cloudflare Worker (`worker.js`), der WebUntis-,
-  Mensamax- und sams-on-Anfragen serverseitig stellt (löst deren fehlende
-  CORS-Freigabe), plus ausgelagerte, testbare Module: `hostcheck.mjs`
+  Mensamax- und sams-on-Anfragen serverseitig stellt (löst deren
+  CORS-Sperre), plus ausgelagerte, testbare Module: `hostcheck.mjs`
   (Ziel-Host-Validierung), `validate.mjs` (Prüfung von Request-Body und
   Anbieter-Antworten), `text.mjs` (Menütexte zu reinem Text) und
   `cachekey.mjs` (Cache-Schlüssel-Bildung).
 
 **Warum zwei verschiedene Wege für strukturell ähnliche Anbieter:**
-WebUntis, Mensamax und sams-on senden keine `Access-Control-Allow-Origin`-Header —
+WebUntis und Mensamax senden keine `Access-Control-Allow-Origin`-Header —
 ein Browser darf ihre Antworten also nicht direkt lesen, daher der Proxy.
+sams-on sendet zwar `Access-Control-Allow-Origin: *`, die Sitzung hängt
+dort aber am Cookie, und mit `*` lassen Browser keine Anfragen mit Cookies
+zu (ein Skript könnte `Set-Cookie` auch nicht lesen) — also ebenfalls über
+den Proxy.
 ccCampus ist strukturell umgekehrt: Es blockiert Anfragen von
 Server-Infrastruktur (u. a. Cloudflare Workers) mit HTTP 403, lässt aber
 echte Browser-Anfragen mit offenen CORS-Headern durch. ccCampus läuft daher
@@ -262,7 +266,7 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 | Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst. Mensamax-URLs entstehen nur aus `origin` der geprüften Basis-URL plus festem Pfad (kein eigener Port). Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` zentral in `fetchWithTimeout`) — die Host-Prüfung gilt nur für die erste URL |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
 | Laufzeitvalidierung an der Vertrauensgrenze | `proxy/validate.mjs` | Ungeprüfte Daten im Proxy: Der Request-Body aus dem Browser darf nur bekannte Felder als Text enthalten (sonst 400, unbekannte Felder fallen weg); jede WebUntis-Antwort wird vor der Verwendung auf genau die genutzten Felder geprüft und bei Strukturfehlern als Ganzes abgelehnt („WebUntis: unerwartete Antwort auf …“, ohne Inhalte des Anbieters). Die Meldung nennt Methode und Feld, nie den Wert. Die `sessionId` geht in den `Cookie`-Header und darf deshalb nur Zeichen enthalten, die RFC 6265 in einem Cookie-Wert erlaubt — kein `;` oder `,`, mit dem sich ein zweites Cookie anhängen ließe (Zeilenumbrüche lehnen die Laufzeiten ohnehin ab; das ist dort Härtung, keine geschlossene Lücke). Den ccCampus-Block (PIN, Kundennummer) verwirft der Proxy, weil er ihn nie braucht. Als „Passwort prüfen“ meldet der Worker nur eine echte Ablehnung durch WebUntis, nicht jede fehlgeschlagene Anmeldung |
-| sams-on-Instanz nur als Name | `proxy/hostcheck.mjs` (`samsonOrigin`), `web/index.html` | Die App schickt für sams-on nur den Namen der Schul-Instanz (z. B. `lessing`), nie eine Adresse. Der Proxy prüft ihn als einzelnes DNS-Label und baut `https://<name>.sams-on.de` selbst — dieses Feld kann damit grundsätzlich keinen anderen Server erreichen. Die vom Konto gelieferte `userId` geht in den Pfad der nächsten Anfrage und darf deshalb nur aus Ziffern bestehen. Das Guthaben liest der Proxy nur, wenn es für dieses Kind eingeschaltet ist, und gibt es dann als Betrag weiter (Format geprüft, sonst „nicht abrufbar“); der Schalter gehört zum Cache-Schlüssel. Die App bereinigt eine eingefügte Adresse beim Einrichten und speichert erst ein brauchbares Format |
+| sams-on-Instanz nur als Name | `proxy/hostcheck.mjs` (`samsonOrigin`), `web/index.html` | Die App schickt für sams-on nur den Namen der Schul-Instanz (z. B. `lessing`), nie eine Adresse. Der Proxy prüft ihn als einzelnes DNS-Label und baut `https://<name>.sams-on.de` selbst — dieses Feld kann damit grundsätzlich keinen anderen Server erreichen. Die vom Konto gelieferte `userId` geht in den Pfad der nächsten Anfrage und darf deshalb nur aus Ziffern bestehen. Das Guthaben kommt bei jeder Anmeldung mit der Kontoinfo an; der Proxy gibt es nur weiter, wenn es für dieses Kind eingeschaltet ist und die Schule es führt (`hideCredit` in der Instanz-Info), und dann nur als Betrag (Format geprüft, sonst „nicht abrufbar“). Name, E-Mail-Adresse und Ausweisnummer aus derselben Antwort übernimmt er nie; der Schalter gehört zum Cache-Schlüssel. Der ganze Ablauf hat ein gemeinsames Zeitlimit (15 s), der Logout läuft erst nach der Antwort. Die App bereinigt eine eingefügte Adresse beim Einrichten und speichert erst ein brauchbares Format |
 | Nur die Felder des gewählten Anbieters | `web/index.html` (`lunchRequestFields`), `proxy/validate.mjs` | Die App schickt dem Proxy nur die Zugangsdaten des gerade gewählten Essensanbieters, nie die eines früher genutzten; ccCampus gar keine. Der Proxy übernimmt zusätzlich nur bekannte Felder |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
@@ -359,7 +363,8 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | `validateRequestBody()`, `validateRpcEnvelope()`, `validateAuth()`, `validateLessons()` u. a. (Property-Tests) | `proxy/validate.mjs` | Gültige Antworten mit beliebigen Zusatzfeldern gehen unverändert durch; je eine benannte Schadensklasse (falscher Typ oder Bereich der `id`, fehlende `id`, Uhrzeit außerhalb 0–2359 oder Minute ≥ 60, `code` kein Text, Fach-/Raum-Verweise ohne gültige `id`, Eintrag kein Objekt) wird immer abgelehnt; `sessionId` mit Zeichen, die einen Header brechen, ebenso; Request-Body mit Nicht-Text-Feld oder überlangem Feld → abgelehnt. Dazu Worker-Tests: Für jede Prüfung, die der Worker aufruft, läuft eine kaputte Antwort durch den Worker selbst (sonst ließe sich ein Aufruf dort unbemerkt entfernen); eine Wartungsseite, ein leerer Body oder eine Weiterleitung beim Login werden nicht als „Passwort falsch“ gemeldet |
 | `tools/check-proxy-deploy.sh` | Deploy-Prüfung | Welcher Commit läuft auf dem Proxy? Gegen einen `wrangler`-Stellvertreter mit festen Antworten: Commit in der aktiven Version → bestätigt; anderer Commit, Commit nur in einer inaktiven Version, nicht abrufbar → nicht bestätigt |
 | Verdrahtung | `deploy.sh`, `.github/workflows/ci.yml` | Die Gates müssen auch aufgerufen werden: Reihenfolge, `npm ci`, `npm audit --include=dev`, kein `npx` ohne `--no-install`, Commit als Versionsnachricht, CI mit Lese-Token und ohne Install-Skripte |
-| `samsonOrigin()` (Property-Tests), `samsonMealName()`, `validateSamsonAccount()`, `validateSamsonOrders()` und der komplette sams-on-Ablauf im Worker | `proxy/hostcheck.mjs`, `proxy/text.mjs`, `proxy/validate.mjs`, `proxy/worker.js` | Instanz-Name: gültige Namen ergeben genau `https://<name>.sams-on.de`, jede benannte Angriffsklasse (Punkt, Pfad/Query/Fragment, Userinfo/Port, Prozent-Kodierung, Leerraum, Nicht-ASCII, Bindestrich am Rand, ganze URL) wird abgelehnt. `userId` mit Zeichen, die den Pfad ändern könnten, wird abgelehnt, bevor die Bestellungen abgefragt werden. Menünamen aus echten sams-on-Texten. Der Worker läuft gegen einen nachgebauten sams-on-Server: Reihenfolge wie die Web-App, nur der eigene Schul-Host, keine Weiterleitungen, Session-Cookie aus dem Login, falsches Passwort, Login ohne Session, unbekannte Schule, kaputte Antworten, Wartungsseite, Cookies mit Trennzeichen. Guthaben: ausgeschaltet nirgends in der Antwort, eingeschaltet als Betrag, hervorgehoben unter 5,00 €, unerwartetes Format „nicht abrufbar“ ohne Folgen für den Essensstatus |
+| `samsonOrigin()` (Property-Tests), `samsonMealName()`, `validateSamsonAccount()`, `validateSamsonOrders()` und der komplette sams-on-Ablauf im Worker | `proxy/hostcheck.mjs`, `proxy/text.mjs`, `proxy/validate.mjs`, `proxy/worker.js` | Instanz-Name: gültige Namen ergeben genau `https://<name>.sams-on.de`, jede benannte Angriffsklasse (Punkt, Pfad/Query/Fragment, Userinfo/Port, Prozent-Kodierung, Leerraum, Nicht-ASCII, Bindestrich am Rand, ganze URL) wird abgelehnt. `userId` mit Zeichen, die den Pfad ändern könnten, wird abgelehnt, bevor die Bestellungen abgefragt werden. Menünamen aus echten sams-on-Texten; eine letzte Zeile aus Allergen-Codes fällt weg, ein kurzes Wort wie „Ei“ bleibt (beides als Property-Test); ungültige Zeichenreferenzen bleiben stehen, statt zu werfen. Datum der Bestellung auch mit Uhrzeit, mit Zeitzone abgelehnt. Der Worker läuft gegen einen nachgebauten sams-on-Server: Reihenfolge wie die Web-App, nur der eigene Schul-Host, keine Weiterleitungen, Session-Cookie aus dem Login, falsches Passwort, Login mit 403, Login ohne Session, Logout mit der angemeldeten Session (auch nach kaputter Antwort), die Antwort wartet nicht auf den Logout, Zeitüberschreitung je Anfrage und gemeinsames Zeitlimit (mit eigenen Zeitgebern statt echter Wartezeit), unbekannte Schule, kaputte Antworten, Wartungsseite, Cookies mit Trennzeichen. Guthaben: ausgeschaltet nirgends in der Antwort, eingeschaltet als Betrag, hervorgehoben unter 5,00 €, unerwartetes Format „nicht abrufbar“ ohne Folgen für den Essensstatus, bei einer Schule mit `hideCredit` „nicht geführt“ ohne Betrag |
+| `extractSamsonInstance()`, `lunchRequestFields()`, `loadConfig()`/`saveConfig()` (Property-Tests) | `web/index.html` (Inline-Script) | Der Test schneidet genau diese Definitionen aus der Seite und führt sie in einem eigenen Kontext aus. Adresse: jede benannte Einfüge-Form wird zum Schulnamen (Name, Großschreibung mit Leerraum, Adresse aus der Browserzeile, ohne `https://`, gemeinsame Login-Seite mit `?instance=`), jede benannte Täuschung wird abgelehnt (Look-alike-Host, fremder Host mit `?instance=`, Userinfo, tiefere Subdomain, sams-on-Host ohne Schule, Name mit Punkt oder Pfad). Anfrage: Ein Kind, das schon alle Anbieter hatte, schickt je Anbieter nur dessen Felder, ccCampus und Unbekanntes nur den Anbieter. Gespeicherte Einstellungen: gesperrter Speicher und unlesbarer Inhalt zeigen je ihren eigenen Hinweis und fragen vor dem Überschreiben |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -418,9 +423,9 @@ Kommandozeilen-Skript, das nur `deploy.sh` nach dem Deploy aufruft (seine
 Vergleichslogik `compareHeaders()` ist getestet, das Skript selbst einmalig
 gegen einen Server ohne Header und eine nicht erreichbare Adresse
 gegengeprüft). `hostcheck.mjs`/`cachekey.mjs`/`stundenplan.js` bei 100 %, `worker.js` bei
-~99 % (ungetestet bleiben nur der Timeout-Abbruch-Pfad und eine
-kaputte-JSON-Antwort von WebUntis — beides schwer ohne echte Verzögerung
-bzw. künstlich verstümmelte Antwort zu simulieren, geringer Grenznutzen).
+~99 % (ungetestet bleibt nur das Weiterwerfen anderer Netzwerkfehler als
+einer Zeitüberschreitung in `fetchWithTimeout`; die Zeitüberschreitung selbst
+ist seit 0.4.1 mit eigenen Zeitgebern getestet).
 Kein Mindestwert erzwungen (`check-coverage: false`) — eine erzwungene
 Zahl hätte hier wenig Aussage, da die App-Logik in `web/index.html`
 ohnehin außerhalb der Messung liegt.
@@ -475,7 +480,7 @@ relativer Link würde dort ins Leere laufen:
   Weiterleitungen wurden gefolgt, Mensamax-URLs aus dem rohen
   `base`-String, zwei per Mutationstest unentdeckte Regressionen — alle in
   Version 0.3.2 behoben
-- [`PEER-REVIEW-2026-10-09b.md`](PEER-REVIEW-2026-10-09b.md) — siebte Runde,
+- [`PEER-REVIEW-2026-10-09b.md`](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-09b.md) — siebte Runde,
   frische Sitzung, Prüfobjekt die neun Commits des Wartungs-Vorhabens
   (Version 0.3.3). Kein 🔴; vier 🟡 an den Rändern der neuen Gates: Das
   Audit-Gate wurde mit `NODE_ENV=production` blind und prüfte das Lockfile
@@ -483,6 +488,14 @@ relativer Link würde dort ins Leere laufen:
   „Passwort prüfen“; drei Prüfaufrufe im Worker ließen sich unbemerkt
   entfernen; ob der Proxy den richtigen Stand ausliefert, prüfte nichts —
   alle in Version 0.3.4 behoben
+- [Prüfbericht der achten Runde (IDHDKM8)](PEER-REVIEW-2026-10-29.md) —
+  frische Sitzung, Prüfobjekt die sams-on-Anbindung und die Folge-Fixes
+  (Version 0.4.0). Kein 🔴; bestätigte alle 13 genannten Mutanten. Fand,
+  dass Datenschutzerklärung und Formular mehr versprachen als die Technik
+  (das Guthaben kommt bei jeder Anmeldung mit), eine falsch begründete
+  5-€-Schwelle, ungetestete Pfade (Logout, 403, Zeitüberschreitung, die
+  Browser-Funktionen für die Anfrage) und einen als erledigt dokumentierten,
+  aber nicht deployten Fix — alle in Version 0.4.1 behoben
 
 Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
 Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
@@ -490,7 +503,7 @@ c't-Stil-/Peer-Review-Berichte verlinkt — die Website zeigt den aktuellen
 Stand, nicht die Historie. Die früheren Runden
 bleiben hier im Repository nachvollziehbar.
 
-**Methodik — wichtig für die Einordnung:** Keine der sieben Audit-Runden
+**Methodik — wichtig für die Einordnung:** Keine der acht Audit-Runden
 wurde **von menschlichen Prüfer:innen durchgeführt**, sondern von Claude
 (Anthropics KI-Assistent) anhand strukturierter, von Björn selbst
 formulierter Prompts — mit echtem Zugriff auf die Live-Website und den
@@ -729,11 +742,27 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   zeigt „Essen bestellt: …“ oder „Kein Essen bestellt“. Das Guthaben lässt
   sich pro Kind zuschalten („Guthaben auf der Karte anzeigen“), weil es
   keine automatische Aufladung gibt und Eltern es selbst im Blick behalten
-  müssen; hervorgehoben unter 5,00 €, der Schwelle der eigenen
-  sams-on-Warnung. Ohne Häkchen liest der Proxy es gar nicht erst.
+  müssen; hervorgehoben unter 5,00 € (eigene Festlegung). Ohne Häkchen
+  gibt der Proxy es nicht weiter.
   Instanz-Name statt Adresse, Bereinigung und Formatprüfung beim
   Einrichten. Gleichzeitig schickt die App dem Proxy nur noch die Felder des
   gewählten Anbieters. Mensamax bleibt für den Übergang erhalten.
+- **Folge-Fix aus der achten Prüfrunde** (29.10.2026, Version 0.4.1) —
+  Datenschutzerklärung und Formular sagen jetzt, was technisch passiert:
+  sams-on schickt den Kontostand bei jeder Anmeldung mit, der Proxy gibt ihn
+  nur bei gesetztem Häkchen weiter. Schulen, die das Guthaben bei sams-on
+  ausblenden, zeigen „Guthaben wird bei dieser Schule nicht geführt“ statt
+  eines falschen „0,00 € — bald aufladen“. Ein gemeinsames Zeitlimit von
+  15 s für den sams-on-Ablauf, der Logout läuft nach der Antwort. Das Datum
+  einer Bestellung darf eine Uhrzeit tragen. Kurze Wörter wie „Ei“ bleiben im
+  Menünamen, ungültige Zeichenreferenzen brechen den Abruf nicht mehr ab.
+  Verständlichere Meldungen („Schule … nicht gefunden“ statt „Instanz“), die
+  Speichersperre nennt das Kind und springt zum Feld, eigener Hinweis bei
+  gesperrtem Browser-Speicher, Fehlertext und Hinweise per
+  `aria-describedby` am Feld. Neue Tests für Logout, 403, Zeitlimits und die
+  Browser-Funktionen, die bestimmen, welche Zugangsdaten das Gerät
+  verlassen. GitHub Actions auf Commit-SHAs gepinnt, Dependabot beobachtet
+  sie mit.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

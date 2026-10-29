@@ -56,12 +56,20 @@ interface StatusRequest {
   lunch: LunchConfig;
 }
 
+// The sams-on balance as the card shows it: the amount as sams-on writes
+// it, or null if not available; `gefuehrt` false when the school keeps no
+// balance for its users (then no amount).
+interface SamsonBalance {
+  betrag: string | null;
+  knapp: boolean;
+  gefuehrt: boolean;
+}
+
 // School-lunch part of the proxy's answer. `guthaben` only when the parent
-// asked for it (sams-on): the amount as sams-on writes it, or null if not
-// available.
+// asked for it (sams-on).
 interface LunchResult {
   lunch: string;
-  guthaben?: { betrag: string | null, knapp: boolean };
+  guthaben?: SamsonBalance;
 }
 
 // One lesson in the proxy's answer — field names shared with web/index.html.

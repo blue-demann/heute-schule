@@ -44,11 +44,19 @@ den Namen (`lunch.samson.instanz`, z. B. `lessing`); `samsonOrigin()` in
 selbst. Ablauf wie die sams-on-Web-App: `GET /api/instance/<schule>` (startet
 das Session-Cookie), `POST /api/login`, `GET /api/login` (`user.userId`),
 `GET /api/users/<id>/orders/view?dateFrom=<Tag>&dateTill=<Tag>`,
-`POST /api/logout`. Nur lesend. Antworten prüft `validate.mjs`, Menünamen
-bereitet `text.mjs` auf (HTML-Zeilenumbrüche raus, Allergen-Kürzel-Zeile
-weg). Das Guthaben (`creditAmount` aus `GET /api/login`) liest der Proxy nur,
-wenn `lunch.samson.guthabenAnzeigen` gesetzt ist, und liefert es dann als
-`guthaben` (Betrag oder `null`) und `guthabenKnapp` (unter 5,00 €).
+`POST /api/logout` (nach der Antwort, per `ctx.waitUntil`). Nur lesend. Für
+den ganzen Ablauf gilt ein gemeinsames Zeitlimit von 15 s zusätzlich zu den
+10 s je Anfrage. Antworten prüft `validate.mjs`, Menünamen bereitet `text.mjs`
+auf (HTML-Zeilenumbrüche raus, Allergen-Kürzel-Zeile weg). Das Guthaben
+(`creditAmount`) schickt sams-on in `GET /api/login` immer mit; der Proxy gibt
+es nur weiter, wenn `lunch.samson.guthabenAnzeigen` gesetzt ist, als
+`guthaben` (Betrag oder `null`), `guthabenKnapp` (unter 5,00 €, eigene
+Festlegung) und `guthabenGefuehrt` (`false`, wenn die Schule das Guthaben
+ausblendet, `hideCredit` in der Instanz-Info; dann ohne Betrag).
+
+sams-on sendet `Access-Control-Allow-Origin: *`, die Sitzung hängt aber am
+Cookie, und mit `*` lassen Browser keine Anfragen mit Cookies zu — deshalb
+auch hier der Proxy.
 
 ## ccCampus läuft NICHT über diesen Proxy
 

@@ -166,6 +166,7 @@
   .feld-hinweis{font-size:.78rem; color:var(--muted); margin:.35rem 0 0;}
   .feld-hinweis code{background:var(--border); padding:.05rem .25rem; border-radius:4px;}
   .feld-fehler{font-size:.78rem; color:var(--danger); margin:.35rem 0 0;}
+  .feld-fehler:empty{margin:0;}
   .check-row{display:flex; align-items:center; gap:.5rem; margin-top:.6rem; font-size:.9rem;}
   .check-row input{width:auto; margin:0;}
   .danger-zone h2{font-size:.95rem; margin:0 0 .4rem;}
@@ -251,6 +252,12 @@
       ⚠ Auf diesem Gerät sind bereits Einstellungen gespeichert, sie ließen
       sich aber nicht lesen. Sie sind noch vorhanden und werden erst
       überschrieben, wenn Du neu speicherst und das ausdrücklich bestätigst.
+    </p>
+    <p class="demo-hinweis hidden" id="storageBlocked" role="alert">
+      ⚠ Dieser Browser lässt die Seite gerade nicht auf ihren Speicher
+      zugreifen, etwa im privaten Modus oder wenn Website-Daten blockiert
+      sind. Ob hier schon Einstellungen gespeichert sind, lässt sich so nicht
+      prüfen, und neue Einstellungen werden womöglich nicht gesichert.
     </p>
 
     <p class="setup-intro">
@@ -388,16 +395,15 @@
       <div data-provider-fields="samson">
         <label>Adresse Deiner Schule bei sams-on</label>
         <input type="text" data-field="lunch.samson.instanz" data-samson-instance placeholder="https://lessing.sams-on.de/…">
-        <p class="feld-hinweis">
+        <p class="feld-hinweis" data-describes="lunch.samson.instanz">
           Nach dem Login bei sams-on die Adresse aus der Browserzeile kopieren
           und hier einfügen, z. B. <code>https://lessing.sams-on.de/user/dashboard</code>
           — oder nur den Namen davor, z. B. <code>lessing</code>.
         </p>
-        <p class="feld-fehler hidden" data-samson-instance-error role="alert">
-          Das ist keine sams-on-Adresse. Bitte die Adresse aus der Browserzeile
-          nach dem sams-on-Login einfügen (sie endet auf <code>.sams-on.de</code>)
-          oder nur den Namen davor.
-        </p>
+        <!-- Stays in the page, empty while the address is fine: a screen
+             reader announces text that appears in an alert already there,
+             but not reliably one that is only unhidden. -->
+        <p class="feld-fehler" data-samson-instance-error data-describes="lunch.samson.instanz" role="alert"></p>
         <div class="row2">
           <div>
             <label>Benutzername</label>
@@ -412,9 +418,9 @@
           <input type="checkbox" data-field="lunch.samson.guthabenAnzeigen">
           Guthaben auf der Karte anzeigen
         </label>
-        <p class="feld-hinweis">
+        <p class="feld-hinweis" data-describes="lunch.samson.guthabenAnzeigen">
           Zeigt den Kontostand bei sams-on, hervorgehoben unter 5,00 €. Nur wenn
-          angehakt, fragt der Proxy das Guthaben überhaupt ab.
+          angehakt, gibt der Proxy das Guthaben an diese Seite weiter.
         </p>
       </div>
     </fieldset>
@@ -467,6 +473,9 @@
   // a notice, and saveConfig() asks before writing over it — otherwise the
   // next "save" would silently replace a family's data with the empty form.
   var storedConfigUnreadable = false;
+  // True when the storage could not even be opened (private mode, blocked
+  // site data): then it is unknown whether anything is stored at all.
+  var storageBlocked = false;
 
   function emptyConfig(){
     return { proxyUrl: PROXY_URL, children: [] };
@@ -479,6 +488,7 @@
     } catch {
       // No access to storage at all; whatever is in there cannot be judged.
       storedConfigUnreadable = true;
+      storageBlocked = true;
       return emptyConfig();
     }
     if (raw === null || raw === '') return emptyConfig(); // nothing stored yet
@@ -515,10 +525,11 @@
   // user declined to overwrite unreadable stored settings.
   function saveConfig(cfg){
     if (storedConfigUnreadable){
-      var overwrite = window.confirm(
-        'Auf diesem Gerät sind bereits Einstellungen gespeichert, die sich nicht lesen ließen. '
-        + 'Speichern überschreibt sie endgültig. Trotzdem speichern?'
-      );
+      var overwrite = window.confirm(storageBlocked
+        ? 'Ob auf diesem Gerät schon Einstellungen gespeichert sind, ließ sich nicht prüfen. '
+          + 'Speichern könnte sie überschreiben. Trotzdem speichern?'
+        : 'Auf diesem Gerät sind bereits Einstellungen gespeichert, die sich nicht lesen ließen. '
+          + 'Speichern überschreibt sie endgültig. Trotzdem speichern?');
       if (!overwrite) return null;
     }
     // Must never block an in-progress action — some preview/sandbox
@@ -526,6 +537,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
       storedConfigUnreadable = false;
+      storageBlocked = false;
       updateUnreadableNotice();
       return true;
     } catch (e) {
@@ -535,8 +547,10 @@
   }
 
   function updateUnreadableNotice(){
-    var notice = document.getElementById('configUnreadable');
-    if (notice) notice.classList.toggle('hidden', !storedConfigUnreadable);
+    var unreadable = document.getElementById('configUnreadable');
+    var blocked = document.getElementById('storageBlocked');
+    if (unreadable) unreadable.classList.toggle('hidden', !storedConfigUnreadable || storageBlocked);
+    if (blocked) blocked.classList.toggle('hidden', !storageBlocked);
   }
 
   function uid(){
@@ -623,6 +637,8 @@
   // the school in its query instead; "account" itself is no school.
   var SAMSON_INSTANCE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
   var SAMSON_NOT_A_SCHOOL = ['account', 'www', 'cockpit'];
+  var SAMSON_INSTANCE_ERROR = 'Das ist keine sams-on-Adresse. Bitte die Adresse aus der Browserzeile '
+    + 'nach dem sams-on-Login einfügen (sie endet auf „.sams-on.de“) oder nur den Namen davor.';
   function extractSamsonInstance(input){
     var value = String(input || '').trim().toLowerCase();
     var host = value;
@@ -766,6 +782,16 @@
     setChildName(child.name);
 
     node.querySelectorAll('[data-field]').forEach(function(input){
+      // Hints and error messages for a field are read out with it.
+      var fieldKey = input.dataset.field.replace(/\./g, '-');
+      var descriptions = [];
+      node.querySelectorAll('[data-describes]').forEach(function(el, i){
+        if (el.dataset.describes !== input.dataset.field) return;
+        el.id = 'feld-' + child.id + '-' + fieldKey + '-info' + i;
+        descriptions.push(el.id);
+      });
+      if (descriptions.length) input.setAttribute('aria-describedby', descriptions.join(' '));
+
       if (input.type === 'checkbox'){
         input.checked = getDeep(child, input.dataset.field) === true;
         input.addEventListener('change', function(){ setDeep(child, input.dataset.field, input.checked); });
@@ -781,7 +807,7 @@
       // can't associate the label with the field (especially with
       // several children whose field names would otherwise be
       // identical).
-      var fieldId = 'feld-' + child.id + '-' + input.dataset.field.replace(/\./g, '-');
+      var fieldId = 'feld-' + child.id + '-' + fieldKey;
       input.id = fieldId;
       var matchingLabel = input.previousElementSibling;
       if (matchingLabel && matchingLabel.tagName === 'LABEL'){
@@ -794,12 +820,12 @@
           var raw = input.value.trim();
           var instance = extractSamsonInstance(raw);
           var invalid = raw !== '' && instance === null;
-          instanceError.classList.toggle('hidden', !invalid);
+          instanceError.textContent = invalid ? SAMSON_INSTANCE_ERROR : '';
           input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
           if (instance && instance !== input.value){
             input.value = instance;
             setDeep(child, 'lunch.samson.instanz', instance);
-            toast('sams-on-Adresse bereinigt: „' + instance + '"');
+            toast('sams-on-Adresse bereinigt: „' + instance + '“');
           }
         });
       }
@@ -810,7 +836,7 @@
           if (cleaned && cleaned !== input.value){
             input.value = cleaned;
             setDeep(child, 'webuntis.server', cleaned);
-            toast('Server-Adresse bereinigt: „' + cleaned + '"');
+            toast('Server-Adresse bereinigt: „' + cleaned + '“');
           }
         });
       }
@@ -894,7 +920,18 @@
         && extractSamsonInstance(c.lunch.samson && c.lunch.samson.instanz) === null;
     });
     if (unusable.length){
-      toast('⚠ Bitte bei sams-on die Adresse Deiner Schule eintragen (z. B. https://lessing.sams-on.de/… oder lessing).');
+      var first = unusable[0];
+      var who = first.name ? '„' + first.name + '“' : 'einem Kind';
+      var missing = String((first.lunch.samson && first.lunch.samson.instanz) || '').trim() === '';
+      toast(missing
+        ? '⚠ Bei ' + who + ' fehlt die sams-on-Adresse der Schule (z. B. https://lessing.sams-on.de/… oder lessing).'
+        : '⚠ Die sams-on-Adresse bei ' + who + ' ist keine gültige Adresse, bitte prüfen.');
+      // Takes the parent to the field, which may be far down a long form.
+      var field = childrenSetup.querySelector('[data-id="' + first.id + '"] [data-samson-instance]');
+      if (field){
+        field.dispatchEvent(new Event('blur'));
+        field.focus();
+      }
       return;
     }
     var saved = saveConfig(cfg);
@@ -927,7 +964,10 @@
       removed = false;
     }
     cfg = emptyConfig();
-    if (removed) storedConfigUnreadable = false;
+    if (removed){
+      storedConfigUnreadable = false;
+      storageBlocked = false;
+    }
     updateUnreadableNotice();
     cardsById = {};
     lastDataById = {};
@@ -1081,10 +1121,11 @@
 
     // Only in the answer when switched on for this child (sams-on).
     if (Object.prototype.hasOwnProperty.call(data, 'guthaben')){
-      balanceEl.className = 'lunch' + (data.guthaben === null ? ' err' : data.guthabenKnapp ? ' warn' : '');
-      balanceEl.textContent = data.guthaben === null
-        ? '💶 Guthaben nicht abrufbar'
-        : '💶 Guthaben: ' + data.guthaben + ' €' + (data.guthabenKnapp ? ' — bald aufladen' : '');
+      var notKept = data.guthabenGefuehrt === false; // e.g. a school that bills by invoice
+      balanceEl.className = 'lunch' + (notKept ? '' : data.guthaben === null ? ' err' : data.guthabenKnapp ? ' warn' : '');
+      balanceEl.textContent = notKept ? '💶 Guthaben wird bei dieser Schule nicht geführt'
+        : data.guthaben === null ? '💶 Guthaben nicht abrufbar'
+          : '💶 Guthaben: ' + data.guthaben + ' €' + (data.guthabenKnapp ? ' — bald aufladen' : '');
     }
 
     var lessons = data.stunden || [];
