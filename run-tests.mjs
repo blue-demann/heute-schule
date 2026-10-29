@@ -15,10 +15,12 @@ import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import stundenplan from './stundenplan.js';
 import { parseHeadersFile, checkSecurityHeaders, compareHeaders } from './tools/headers.mjs';
-import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './proxy/hostcheck.mjs';
+import { isPrivateOrLocalTarget, checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost, samsonOrigin } from './proxy/hostcheck.mjs';
+import { samsonMealName } from './proxy/text.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
 import {
   validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
+  validateSamsonAccount, validateSamsonOrders,
 } from './proxy/validate.mjs';
 import proxyWorker from './proxy/worker.js';
 
@@ -978,6 +980,112 @@ test('request body: missing sections become empty configs', () => {
   assertEqual(JSON.stringify(validateRequestBody({})), '{"webuntis":{},"lunch":{}}');
 });
 
+// ── sams-on: instance name, meal names, answer validation ────────────────
+
+console.log('\nProperty: samsonOrigin() — the instance name can only ever reach *.sams-on.de');
+
+// The client sends only the instance name; the proxy builds the host. Any
+// input that is not one plain DNS label must be refused, because a dot,
+// slash, @ or similar could otherwise point the request elsewhere.
+forAll(
+  'a valid instance name becomes exactly https://<name>.sams-on.de',
+  randomRfcLabel,
+  (name) => assertEqual(samsonOrigin(name), `https://${name}.sams-on.de`)
+);
+forAll(
+  'surrounding whitespace and upper case are normalized, not rejected',
+  (random) => `${pick(random, ['', ' ', '\t'])}${randomRfcLabel(random).toUpperCase()}${pick(random, ['', ' ', '\n'])}`,
+  (name) => assertEqual(samsonOrigin(name), `https://${name.trim().toLowerCase()}.sams-on.de`)
+);
+const SAMSON_INSTANCE_ATTACKS = [
+  ['a dot (deeper or foreign domain)', (random) => `${randomRfcLabel(random)}.${pick(random, ['evil.example', 'sams-on.de', 'com', '127.0.0.1'])}`],
+  ['a path, query or fragment', (random) => `${randomLabel(random)}${pick(random, ['/', '?', '#', '\\'])}${randomLabel(random)}`],
+  ['userinfo or a port', (random) => `${randomLabel(random)}${pick(random, ['@', ':'])}${randomLabel(random)}`],
+  ['percent-encoding', (random) => `${randomLabel(random)}%${pick(random, ['2e', '2f', '40', '23'])}${randomLabel(random)}`],
+  ['whitespace inside', (random) => insertAt(random, `${randomLabel(random, 2, 8)}${randomLabel(random, 2, 8)}`, pick(random, [' ', '\t', '\n']))],
+  ['a non-ASCII character', (random) => insertAt(random, `${randomLabel(random, 2, 8)}${randomLabel(random, 2, 8)}`, pick(random, ['ä', 'é', 'ı', '​']))],
+  ['a hyphen at the edge', (random) => pick(random, [`-${randomLabel(random)}`, `${randomLabel(random)}-`])],
+  ['a full URL', (random) => `https://${randomLabel(random)}.sams-on.de/user/dashboard`],
+];
+for (const [className, generator] of SAMSON_INSTANCE_ATTACKS) {
+  forAll(
+    `an instance name with ${className} is always rejected`,
+    generator,
+    (name) => assertWirft(() => samsonOrigin(name), 'Ungültige sams-on-Instanz')
+  );
+}
+test('empty, missing and overlong instance names are rejected; 63 characters still pass', () => {
+  for (const name of ['', '   ', null, undefined, 'a'.repeat(64)]) assertWirft(() => samsonOrigin(name), 'Ungültige sams-on-Instanz');
+  assertEqual(samsonOrigin('a'.repeat(63)), `https://${'a'.repeat(63)}.sams-on.de`);
+});
+
+console.log('\nsamsonMealName()');
+
+test('real sams-on titles become one plain line without the allergen codes', () => {
+  assertEqual(samsonMealName('Pasta Bolognese<br/> (Rind &amp; Schwein) <br/>&amp; Reibek&auml;se <br/>a, g<br/>'), 'Pasta Bolognese (Rind & Schwein) & Reibekäse');
+  assertEqual(samsonMealName('Veggieday:<br/>Pasta mit Pestosauce<br/>4, a, g, h<br/>'), 'Veggieday: Pasta mit Pestosauce');
+  assertEqual(samsonMealName('Pasta mit Wurstgulasch (Schwein)  &amp; Reibekäse<br/>2, 3, 4, 7, a, g, i, j<br/>'), 'Pasta mit Wurstgulasch (Schwein) & Reibekäse');
+  assertEqual(samsonMealName('Hähnchengeschnetzeltes Pomodori (Tomate) \nmit Parboiled Reis\na, g\n'), 'Hähnchengeschnetzeltes Pomodori (Tomate) mit Parboiled Reis');
+});
+test('a title without a code line keeps every line; a lone code-like line is not removed', () => {
+  assertEqual(samsonMealName('Kürbisschaumsuppe<br/>mit Baguette'), 'Kürbisschaumsuppe mit Baguette');
+  assertEqual(samsonMealName('Fleisch'), 'Fleisch');
+  assertEqual(samsonMealName('a, g'), 'a, g');
+});
+test('other tags are removed, encoded markup stays text', () => {
+  assertEqual(samsonMealName('<b>Pizza</b> <span class="x">Margherita</span>'), 'Pizza Margherita');
+  assertEqual(samsonMealName('&lt;script&gt;'), '<script>');
+});
+forAll(
+  'the result is always a single trimmed line without double spaces',
+  (random) => Array.from({ length: randomInt(random, 1, 5) }, () => `${pick(random, ['', ' ', '  '])}${randomLabel(random)}${pick(random, ['', ' &amp; ', ' '])}${randomLabel(random)}`).join(pick(random, ['<br/>', '<br>', '\n', '<BR />'])),
+  (title) => {
+    const name = samsonMealName(title);
+    assert(!/[\n\r]/.test(name) && !/ {2}/.test(name) && name === name.trim(), JSON.stringify(name));
+  }
+);
+
+console.log('\nProperty: sams-on answer validation');
+
+// The user id goes into the URL path of the next request, so only plain
+// digits may pass.
+forAll(
+  'a numeric user id (as text or number) is accepted as digits',
+  (random) => pick(random, [String(randomInt(random, 0, 99999)), randomInt(random, 0, 99999)]),
+  (userId) => assertEqual(validateSamsonAccount({ user: { userId, email: 'x', credit: '0,00' } }), String(userId))
+);
+forAll(
+  'a user id that could change the request path is always rejected',
+  (random) => pick(random, [
+    `${randomInt(random, 1, 999)}${pick(random, ['/', '?', '#', '/../', '%2f', ' ', '.', '\\'])}${randomLabel(random)}`,
+    `x${randomLabel(random)}`, '', '-1', '1.5', '١٢', `${randomInt(random, 1, 9)}\n`,
+  ]),
+  (userId) => assertWirft(() => validateSamsonAccount({ user: { userId } }), 'unerwartete Antwort auf login (user.userId)')
+);
+test('sams-on account answer without a user object is rejected', () => {
+  for (const data of [null, [], {}, { user: null }, { user: 'x' }, { admin: {} }]) {
+    assertWirft(() => validateSamsonAccount(data), 'sams-on: unerwartete Antwort auf login');
+  }
+});
+test('sams-on orders: day and title are kept, everything else is dropped', () => {
+  const orders = validateSamsonOrders({ dateFrom: '2026-11-03', orders: [{ dayId: '2026-11-03', title: 'Pasta', orderNmb: '1', price: '5,00' }] });
+  assertEqual(JSON.stringify(orders), '[{"dayId":"2026-11-03","title":"Pasta"}]');
+  assertEqual(validateSamsonOrders({ orders: [] }).length, 0);
+});
+test('sams-on orders: every broken shape is rejected, naming the field', () => {
+  const cases = [
+    [null, 'Antwort'], [{}, 'orders'], [{ orders: {} }, 'orders'], [{ orders: [null] }, 'Eintrag'],
+    [{ orders: [{ title: 'x' }] }, 'dayId'], [{ orders: [{ dayId: '03.11.2026', title: 'x' }] }, 'dayId'],
+    [{ orders: [{ dayId: '2026-11-03', title: 5 }] }, 'title'], [{ orders: [{ dayId: '2026-11-03', title: 'x'.repeat(2001) }] }, 'title'],
+  ];
+  for (const [data, field] of cases) assertWirft(() => validateSamsonOrders(data), `sams-on: unerwartete Antwort auf orders/view (${field})`);
+});
+test('request body: the sams-on block keeps exactly its three fields', () => {
+  const out = validateRequestBody({ lunch: { provider: 'samson', samson: { instanz: 'lessing', benutzername: 'u', passwort: 'p', extra: 1 }, cccampus: { pin: 'PIN_X' } } });
+  assertEqual(JSON.stringify(out.lunch), '{"provider":"samson","samson":{"instanz":"lessing","benutzername":"u","passwort":"p"}}');
+  assertWirft(() => validateRequestBody({ lunch: { samson: { passwort: 42 } } }), 'Ungültiger Request-Body');
+});
+
 // ── Proxy: Cache-Schlüssel ─────────────────────────────────────────────────
 //
 // Prüft, dass unterschiedliche Zugangsdaten immer zu unterschiedlichen
@@ -999,6 +1107,13 @@ test('REGRESSION: different Mensamax password ⇒ different key', () => {
   const a = buildCacheKeyMaterial('20260827', webuntisBase, lunchBase);
   const b = buildCacheKeyMaterial('20260827', webuntisBase, { ...lunchBase, password: 'falsch' });
   assert(a !== b, 'key is identical despite a different Mensamax password');
+});
+
+test('different sams-on password or instance ⇒ different key', () => {
+  const sams = (over) => ({ provider: 'samson', samson: { instanz: 'lessing', benutzername: 'u', passwort: 'p', ...over } });
+  const base = buildCacheKeyMaterial('20261103', webuntisBase, sams({}));
+  assert(base !== buildCacheKeyMaterial('20261103', webuntisBase, sams({ passwort: 'falsch' })), 'sams-on password does not affect the key');
+  assert(base !== buildCacheKeyMaterial('20261103', webuntisBase, sams({ instanz: 'andere' })), 'sams-on instance does not affect the key');
 });
 
 test('REGRESSION: different ccCampus PIN ⇒ different key', () => {
@@ -1586,6 +1701,130 @@ await testAsync('a redirect on the Mensamax plan page is reported as unavailable
   assertEqual(body.lunch, 'Schulessen: Daten nicht verfügbar');
 });
 
+// A stand-in for one sams-on instance, built from what the real one does:
+// the instance info starts a session cookie, the login swaps it for a new
+// one, account and orders answer only with the logged-in session. Records
+// every request so tests can check where and how the worker went.
+function samsonServer({ password = 'richtig', orders = [], userId = '8', overrides = {} } = {}) {
+  const calls = [];
+  let loggedInSession = null;
+  const json = (body, status = 200, cookies = []) => new Response(JSON.stringify(body), {
+    status, headers: [['Content-Type', 'application/vnd.akquinet.samson.v2+json'], ...cookies.map((c) => ['Set-Cookie', c])],
+  });
+  const handler = {
+    test: () => true,
+    respond: async (url, options = {}) => {
+      const u = new URL(url);
+      const method = (options.method || 'GET').toUpperCase();
+      const key = `${method} ${u.pathname}`;
+      calls.push({ url, method, cookie: (options.headers || {}).Cookie, redirect: options.redirect, body: options.body });
+      if (overrides[key]) return overrides[key](u, options);
+      if (u.hostname !== 'lessing.sams-on.de') return new Response('', { status: u.hostname.endsWith('.sams-on.de') ? 404 : 599 });
+      if (key === 'GET /api/instance/lessing') return json({ short: 'lessing', companyName: 'x' }, 200, ['PHPSESSID=anonym; path=/; secure; HttpOnly']);
+      if (key === 'POST /api/login') {
+        const sent = JSON.parse(options.body);
+        if (sent.password !== password) return json({ error: 'LOGIN.ERROR' }, 401);
+        loggedInSession = 'angemeldet';
+        return json({ type: 'user' }, 200, [`PHPSESSID=${loggedInSession}; path=/; secure; HttpOnly`]);
+      }
+      const authed = loggedInSession && String((options.headers || {}).Cookie || '').includes(`PHPSESSID=${loggedInSession}`);
+      if (key === 'GET /api/login') {
+        return authed ? json({ uid: userId, creditAmount: '0,00', user: { userId, firstName: 'Kind', email: 'x@example.invalid' }, csrfToken: 'c' }) : json({}, 401);
+      }
+      if (key === `GET /api/users/${userId}/orders/view`) {
+        return authed ? json({ dateFrom: u.searchParams.get('dateFrom'), dateTill: u.searchParams.get('dateTill'), orders }) : json({}, 401);
+      }
+      if (key === 'POST /api/logout') return json({});
+      return new Response('', { status: 404 });
+    },
+  };
+  return { handler, calls };
+}
+const samsonLunch = (over = {}) => ({ provider: 'samson', samson: { instanz: 'lessing', benutzername: 'kind', passwort: 'richtig', ...over } });
+async function lunchVia(server, lunch, datum = '20261103') {
+  globalThis.caches = makeCachesStub();
+  mockFetch([server.handler]);
+  const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch, datum }), TEST_ENV, makeCtx());
+  restoreFetch();
+  return resp.json();
+}
+
+await testAsync('sams-on: an order for the day is shown as plain meal name', async () => {
+  const server = samsonServer({ orders: [{ dayId: '2026-11-03', title: 'Pasta Bolognese<br/> (Rind &amp; Schwein) <br/>a, g<br/>', orderNmb: '1' }] });
+  const body = await lunchVia(server, samsonLunch());
+  assertEqual(body.lunchFehler, null);
+  assertEqual(body.lunch, 'Essen bestellt: Pasta Bolognese (Rind & Schwein)');
+});
+await testAsync('sams-on: the worker follows the sequence of the web app, only on the school host, without following redirects', async () => {
+  const server = samsonServer({ orders: [] });
+  await lunchVia(server, samsonLunch());
+  assertEqual(server.calls.map((c) => `${c.method} ${new URL(c.url).pathname}`).join(' | '),
+    'GET /api/instance/lessing | POST /api/login | GET /api/login | GET /api/users/8/orders/view | POST /api/logout');
+  for (const c of server.calls) {
+    assertEqual(new URL(c.url).origin, 'https://lessing.sams-on.de');
+    assertEqual(c.redirect, 'manual');
+  }
+  const ordersCall = server.calls[3];
+  assertEqual(new URL(ordersCall.url).search, '?dateFrom=2026-11-03&dateTill=2026-11-03');
+  assertEqual(JSON.parse(server.calls[1].body).username, 'kind');
+  // The session cookie from the login, not the anonymous one, is used afterwards.
+  assert(server.calls[2].cookie.includes('PHPSESSID=angemeldet') && !server.calls[2].cookie.includes('anonym'), server.calls[2].cookie);
+});
+await testAsync('sams-on: no order for the requested day → "Kein Essen bestellt"', async () => {
+  const server = samsonServer({ orders: [{ dayId: '2026-11-04', title: 'Pasta', orderNmb: '1' }] });
+  assertEqual((await lunchVia(server, samsonLunch())).lunch, 'Kein Essen bestellt');
+});
+await testAsync('sams-on: a wrong password is reported as failed login, no order is requested', async () => {
+  const server = samsonServer();
+  const body = await lunchVia(server, samsonLunch({ passwort: 'falsch' }));
+  assertEqual(body.lunch, 'Schulessen: Login fehlgeschlagen');
+  assert(!server.calls.some((c) => c.url.includes('/orders/')), 'orders were requested without a login');
+});
+await testAsync('sams-on: a login that answers 200 but leaves the session logged out is a failed login', async () => {
+  const server = samsonServer({ overrides: { 'POST /api/login': () => new Response('{}', { status: 200 }) } });
+  const body = await lunchVia(server, samsonLunch());
+  assertEqual(body.lunch, 'Schulessen: Login fehlgeschlagen');
+  assert(!server.calls.some((c) => c.url.includes('/orders/')), 'orders were requested without a login');
+});
+await testAsync('sams-on: an unknown instance is reported by name', async () => {
+  const server = samsonServer();
+  const body = await lunchVia(server, samsonLunch({ instanz: 'gibtsnicht' }));
+  assert(body.lunchFehler.includes('„gibtsnicht“ nicht gefunden'), body.lunchFehler);
+});
+await testAsync('sams-on: an instance that is no plain name never reaches the network', async () => {
+  for (const instanz of ['evil.example', 'lessing.sams-on.de.evil.example', 'x/../y', 'a@b', 'lessing#']) {
+    const server = samsonServer();
+    const body = await lunchVia(server, samsonLunch({ instanz }));
+    assertEqual(server.calls.length, 0);
+    assert(body.lunchFehler.includes('Ungültige sams-on-Instanz'), `${instanz}: ${body.lunchFehler}`);
+  }
+});
+await testAsync('sams-on: a broken orders answer fails generically, naming the field', async () => {
+  const server = samsonServer({ orders: [{ dayId: '2026-11-03' }] });
+  assertEqual((await lunchVia(server, samsonLunch())).lunchFehler, 'sams-on: unerwartete Antwort auf orders/view (title)');
+});
+await testAsync('sams-on: a user id that would change the request path stops before the orders request', async () => {
+  const server = samsonServer({ userId: '8/../admin' });
+  const body = await lunchVia(server, samsonLunch());
+  assertEqual(body.lunchFehler, 'sams-on: unerwartete Antwort auf login (user.userId)');
+  assert(!server.calls.some((c) => c.url.includes('/users/')), 'a request with the manipulated id went out');
+});
+await testAsync('sams-on: a non-JSON answer (maintenance page) is reported as such', async () => {
+  const server = samsonServer({ overrides: { 'GET /api/login': () => new Response('<html>Wartung</html>', { status: 200 }) } });
+  assert((await lunchVia(server, samsonLunch())).lunchFehler.includes('keine gültige JSON-Antwort auf login'), 'expected the JSON error');
+});
+await testAsync('sams-on: incomplete configuration is reported before any request', async () => {
+  const server = samsonServer();
+  const body = await lunchVia(server, samsonLunch({ passwort: '' }));
+  assertEqual(server.calls.length, 0);
+  assert(body.lunchFehler.includes('sams-on-Konfiguration unvollständig'), body.lunchFehler);
+});
+await testAsync('sams-on: a session cookie with separators from the server is not passed on', async () => {
+  const server = samsonServer({ overrides: { 'GET /api/instance/lessing': () => new Response('{}', { status: 200, headers: [['Set-Cookie', 'PHPSESSID=a b; path=/'], ['Set-Cookie', 'ok=1; path=/']] }) } });
+  await lunchVia(server, samsonLunch());
+  assertEqual(server.calls[1].cookie, 'ok=1');
+});
+
 await testAsync('a ccCampus child sent to the proxy anyway gets the "runs in the browser" note, no network call', async () => {
   globalThis.caches = makeCachesStub();
   mockFetch([]);
@@ -2121,7 +2360,7 @@ test('no date/history signal words in code comments', () => {
   // found it.
   const files = [
     'run-tests.mjs', 'stundenplan.js', 'deploy.sh', '.gitignore', 'eslint.config.mjs',
-    'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs', 'proxy/validate.mjs', 'types/heute-schule.d.ts', 'tsconfig.json',
+    'proxy/worker.js', 'proxy/hostcheck.mjs', 'proxy/cachekey.mjs', 'proxy/validate.mjs', 'proxy/text.mjs', 'types/heute-schule.d.ts', 'tsconfig.json',
     'tools/headers.mjs', 'tools/check-live-headers.mjs', 'tools/require-clean-tree.sh', 'tools/check-proxy-deploy.sh',
     'web/index.html', 'web/sw.js', 'web/_headers',
   ];

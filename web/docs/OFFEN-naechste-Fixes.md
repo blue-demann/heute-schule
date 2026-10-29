@@ -1,6 +1,6 @@
 # Offene Punkte
 
-HS-OFF · v1 · 2026-10-11 · f9856b48 · lebend · gültig
+HS-OFF · v2 · 2026-10-29 · 6fc349e1 · gültig
 
 **Stand: 11.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
@@ -101,6 +101,21 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Text), zeigt die Karte nur „HTTP 400“. Tritt mit der App selbst nicht
    auf, weil sie nur Text schickt; eine verständliche Meldung wäre trotzdem
    besser. Betrifft das Inline-Script, passt zu Punkt 3.
+5. **🟡 sams-on fertig prüfen** (neuer Anbieter seit 29.10.2026, Version
+   0.4.0). Gebaut nach den Antworten, die das Testkonto gezeigt hat; offen ist,
+   was erst eine echte Bestellung zeigen kann:
+   - Enthält `title` in `orders/view` den Menünamen oder nur die Kategorie
+     („Fleisch“, „vegetarisch“)? Bei der Kategorie den Namen aus anderer
+     Quelle holen.
+   - Erreicht der Proxy sams-on aus dem Cloudflare-Netz überhaupt (ccCampus
+     blockiert das)? Zeigt sich beim ersten Abruf nach dem Deploy.
+   - Wie antwortet sams-on auf eine unbekannte Schule (angenommen: 404)?
+   - Danach: unabhängige Prüfrunde, wie bei neuem Code mit Zugangsdaten
+     üblich. Mensamax-Anbindung entfernen, sobald sie niemand mehr braucht.
+   - Hinweis für die Familien: sams-on läuft mit PHP auf Apache, der
+     Konstellation, die von den PHP-Lücken CVE-2026-109618/-109619 (Oktober
+     2026) besonders betroffen ist. Ob sams-on das Update eingespielt hat,
+     ist von außen nicht prüfbar — bei der Schule nachfragen.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

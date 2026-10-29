@@ -165,6 +165,7 @@
   }
   .feld-hinweis{font-size:.78rem; color:var(--muted); margin:.35rem 0 0;}
   .feld-hinweis code{background:var(--border); padding:.05rem .25rem; border-radius:4px;}
+  .feld-fehler{font-size:.78rem; color:var(--danger); margin:.35rem 0 0;}
   .danger-zone h2{font-size:.95rem; margin:0 0 .4rem;}
   .danger-zone p{font-size:.85rem; color:var(--muted); margin:0 0 .8rem;}
 
@@ -329,6 +330,7 @@
       <select data-field="lunch.provider" data-provider-select>
         <option value="mensamax">Mensamax</option>
         <option value="cccampus">ccCampus</option>
+        <option value="samson">sams-on</option>
       </select>
 
       <div data-provider-fields="mensamax">
@@ -377,6 +379,31 @@
           <div>
             <label>PIN</label>
             <input type="password" data-field="lunch.cccampus.pin">
+          </div>
+        </div>
+      </div>
+
+      <div data-provider-fields="samson">
+        <label>Adresse Deiner Schule bei sams-on</label>
+        <input type="text" data-field="lunch.samson.instanz" data-samson-instance placeholder="https://lessing.sams-on.de/…">
+        <p class="feld-hinweis">
+          Nach dem Login bei sams-on die Adresse aus der Browserzeile kopieren
+          und hier einfügen, z. B. <code>https://lessing.sams-on.de/user/dashboard</code>
+          — oder nur den Namen davor, z. B. <code>lessing</code>.
+        </p>
+        <p class="feld-fehler hidden" data-samson-instance-error role="alert">
+          Das ist keine sams-on-Adresse. Bitte die Adresse aus der Browserzeile
+          nach dem sams-on-Login einfügen (sie endet auf <code>.sams-on.de</code>)
+          oder nur den Namen davor.
+        </p>
+        <div class="row2">
+          <div>
+            <label>Benutzername</label>
+            <input type="text" data-field="lunch.samson.benutzername">
+          </div>
+          <div>
+            <label>Passwort</label>
+            <input type="password" data-field="lunch.samson.passwort">
           </div>
         </div>
       </div>
@@ -461,6 +488,7 @@
         if (!c.lunch.cccampus) {
           c.lunch.cccampus = { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' };
         }
+        if (!c.lunch.samson) c.lunch.samson = { instanz: '', benutzername: '', passwort: '' };
       });
       return parsed;
     } catch {
@@ -521,6 +549,7 @@
           provider: template.lunch.provider || 'mensamax',
           base: template.lunch.base, projekt: template.lunch.projekt, einrichtung: template.lunch.einrichtung, username: '', password: '',
           cccampus: { base: (template.lunch.cccampus && template.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
+          samson: { instanz: (template.lunch.samson && template.lunch.samson.instanz) || '', benutzername: '', passwort: '' },
         },
         hiddenFaecher: [],
       };
@@ -532,6 +561,7 @@
         provider: 'mensamax',
         base: 'https://parentsmensa.de', projekt: 'SE2922', einrichtung: 'Lessing', username: '', password: '',
         cccampus: { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
+        samson: { instanz: '', benutzername: '', passwort: '' },
       },
       hiddenFaecher: [],
     };
@@ -571,6 +601,40 @@
     // Cut at every character that ends the host part of a URL, including
     // the backslash, which browsers treat like "/".
     return value.split(/[/\\#?]/)[0];
+  }
+
+  // sams-on runs one instance per school, e.g. lessing.sams-on.de. Parents
+  // may paste the whole address from the browser bar after logging in, or
+  // just the name in front. Returns that name, or null if the input is no
+  // sams-on address. The proxy checks the name again on its own and builds
+  // the address itself — this is for a clear message while setting up.
+  // The shared login page (account.sams-on.de/…?instance=lessing) names
+  // the school in its query instead; "account" itself is no school.
+  var SAMSON_INSTANCE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+  var SAMSON_NOT_A_SCHOOL = ['account', 'www', 'cockpit'];
+  function extractSamsonInstance(input){
+    var value = String(input || '').trim().toLowerCase();
+    var host = value;
+    var fromQuery = null;
+    if (!/^https?:\/\//.test(value) && /^[^/\\#?]*\.sams-on\.de([/\\#?]|$)/.test(value)){
+      value = 'https://' + value;
+    }
+    if (/^https?:\/\//.test(value)){
+      try {
+        var url = new URL(value);
+        host = url.hostname;
+        fromQuery = url.searchParams.get('instance');
+      } catch { return null; }
+    } else if (/[/\\#?.]/.test(value)){
+      return null;
+    }
+    if (host.slice(-'.sams-on.de'.length) === '.sams-on.de'){
+      host = host.slice(0, -'.sams-on.de'.length);
+    } else if (host !== value){
+      return null;
+    }
+    if (SAMSON_NOT_A_SCHOOL.indexOf(host) !== -1) host = fromQuery ? fromQuery.trim().toLowerCase() : '';
+    return SAMSON_INSTANCE.test(host) && SAMSON_NOT_A_SCHOOL.indexOf(host) === -1 ? host : null;
   }
 
   var cfg = loadConfig();
@@ -708,6 +772,22 @@
         matchingLabel.setAttribute('for', fieldId);
       }
 
+      if (input.dataset.field === 'lunch.samson.instanz'){
+        var instanceError = node.querySelector('[data-samson-instance-error]');
+        input.addEventListener('blur', function(){
+          var raw = input.value.trim();
+          var instance = extractSamsonInstance(raw);
+          var invalid = raw !== '' && instance === null;
+          instanceError.classList.toggle('hidden', !invalid);
+          input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+          if (instance && instance !== input.value){
+            input.value = instance;
+            setDeep(child, 'lunch.samson.instanz', instance);
+            toast('sams-on-Adresse bereinigt: „' + instance + '"');
+          }
+        });
+      }
+
       if (input.dataset.field === 'webuntis.server'){
         input.addEventListener('blur', function(){
           var cleaned = extractWebUntisHostname(input.value);
@@ -791,6 +871,16 @@
   });
 
   btnSave.addEventListener('click', function(){
+    // A sams-on child needs a usable school address before anything is
+    // saved — a typo shows up here, not as an error card every morning.
+    var unusable = cfg.children.filter(function(c){
+      return c.lunch && c.lunch.provider === 'samson'
+        && extractSamsonInstance(c.lunch.samson && c.lunch.samson.instanz) === null;
+    });
+    if (unusable.length){
+      toast('⚠ Bitte bei sams-on die Adresse Deiner Schule eintragen (z. B. https://lessing.sams-on.de/… oder lessing).');
+      return;
+    }
     var saved = saveConfig(cfg);
     if (saved === null) return; // overwrite declined — stay in the form
     showDashboard();
@@ -863,6 +953,10 @@
         var ccBase = (child.lunch.cccampus && child.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering';
         lunchLink.href = ccBase.replace(/\/$/, '');
         lunchLink.textContent = 'ccCampus-Login ↗';
+      } else if (lunchProvider === 'samson'){
+        var samsonInstance = extractSamsonInstance(child.lunch.samson && child.lunch.samson.instanz);
+        lunchLink.href = samsonInstance ? 'https://' + samsonInstance + '.sams-on.de/' : 'https://account.sams-on.de/';
+        lunchLink.textContent = 'sams-on-Login ↗';
       } else {
         var mensaBase = (child.lunch && child.lunch.base) || 'https://parentsmensa.de';
         lunchLink.href = mensaBase.replace(/\/$/, '') + '/login.aspx';
@@ -959,10 +1053,12 @@
 
     var lunchText = data.lunch || '–';
     var lunchProvider = (child.lunch && child.lunch.provider) || 'mensamax';
-    var institution = lunchProvider === 'cccampus' ? 'ccCampus' : ((child.lunch && child.lunch.einrichtung) || '');
+    var institution = lunchProvider === 'cccampus' ? 'ccCampus'
+      : lunchProvider === 'samson' ? 'sams-on'
+        : ((child.lunch && child.lunch.einrichtung) || '');
     lunchEl.className = 'lunch' +
       (/fehlgeschlagen|nicht verfügbar|nicht gefunden|fehler beim abrufen/i.test(lunchText) ? ' err' :
-        /kein menü|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
+        /kein menü|kein essen|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
     lunchEl.textContent = '🍽 ' + (institution ? institution + ': ' : '') + lunchText;
 
     var lessons = data.stunden || [];
@@ -1078,6 +1174,24 @@
     }
   }
 
+  // Only what the proxy needs for the selected provider. Fields of another
+  // provider the child used before stay on this device. ccCampus gets
+  // nothing at all: it runs here in the browser, not through the proxy.
+  function lunchRequestFields(lunchCfg){
+    var provider = lunchCfg.provider || 'mensamax';
+    if (provider === 'samson'){
+      var s = lunchCfg.samson || {};
+      return { provider: 'samson', samson: { instanz: extractSamsonInstance(s.instanz) || '', benutzername: s.benutzername, passwort: s.passwort } };
+    }
+    if (provider === 'mensamax'){
+      return {
+        provider: 'mensamax', base: lunchCfg.base, projekt: lunchCfg.projekt,
+        einrichtung: lunchCfg.einrichtung, username: lunchCfg.username, password: lunchCfg.password,
+      };
+    }
+    return { provider: provider };
+  }
+
   function fetchCcCampusLunch(providerCfg, datumStr){
     var base = (providerCfg.base || 'https://cccampus.mbs5online.de/ordering').replace(/\/$/, '');
     if (!providerCfg.kundennummer || !providerCfg.pin){
@@ -1153,15 +1267,14 @@
     setCardLoading(card);
     var date = dateStrFor(activeOffset);
     var lunchIsCcCampus = child.lunch && child.lunch.provider === 'cccampus';
+    var lunchCfg = child.lunch || {};
 
     var proxyPromise = fetch(cfg.proxyUrl + '/api/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         webuntis: child.webuntis,
-        // Don't send real credentials to the proxy for ccCampus — it gets
-        // blocked there anyway, this runs separately in the browser.
-        lunch: lunchIsCcCampus ? { provider: 'cccampus', cccampus: {} } : child.lunch,
+        lunch: lunchRequestFields(lunchCfg),
         datum: date,
       }),
     })

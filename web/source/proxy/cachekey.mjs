@@ -29,6 +29,7 @@
  */
 export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
   const cc = lunchCfg.cccampus || {};
+  const sams = lunchCfg.samson || {};
   const keyFields = {
     datum,
     webuntis: {
@@ -49,6 +50,8 @@ export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
       // before it gets here. Kept in the key anyway: should a later change
       // let it through, it must also be able to affect the key.
       cccampus: { base: cc.base, kundennummer: cc.kundennummer, pin: cc.pin },
+      // Must stay in, password included — same reason as for WebUntis.
+      samson: { instanz: sams.instanz, benutzername: sams.benutzername, passwort: sams.passwort },
     },
   };
   return JSON.stringify(keyFields);

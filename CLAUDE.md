@@ -1,7 +1,7 @@
 # Heute Schule — Projekt-Kontext
 
 PWA + Cloudflare-Worker-Proxy: zeigt Stundenplan (WebUntis) + Schulessen-Status
-(Mensamax/ccCampus) für mehrere Familien, an einer Stelle statt einzeln
+(Mensamax/ccCampus/sams-on) für mehrere Familien, an einer Stelle statt einzeln
 einloggen. Ersetzt einen alten Mail-Automation-Agent (`stundenplan_agent.gs`,
 Logik lebt testbar weiter in `stundenplan.js`).
 

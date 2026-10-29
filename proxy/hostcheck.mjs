@@ -139,6 +139,26 @@ export function httpsUrlForHost(hostname, path) {
   return url.href;
 }
 
+// sams-on runs one instance per school as a subdomain of sams-on.de
+// (e.g. lessing.sams-on.de). The client sends only that instance name,
+// never a URL or host: the proxy builds the host itself, so this field
+// cannot point anywhere but *.sams-on.de by construction. The name must be
+// a single RFC 1123 label — no dots, so no deeper or foreign domain.
+const SAMSON_DOMAIN = 'sams-on.de';
+
+/**
+ * @param {unknown} instance  e.g. "lessing"
+ * @returns {string} the origin to talk to, e.g. "https://lessing.sams-on.de"
+ */
+export function samsonOrigin(instance) {
+  const name = String(instance ?? '').trim().toLowerCase();
+  if (!HOSTNAME_LABEL.test(name)) {
+    throw new Error('Ungültige sams-on-Instanz');
+  }
+  const host = checkSafeHostname(`${name}.${SAMSON_DOMAIN}`, { requiredSuffix: `.${SAMSON_DOMAIN}` });
+  return new URL(httpsUrlForHost(host, '/')).origin;
+}
+
 /**
  * @param {string} rawUrl
  * @param {{ requiredSuffixes?: string[] }} [options]

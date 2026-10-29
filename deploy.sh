@@ -143,6 +143,7 @@ for PAIR in \
   "proxy/hostcheck.mjs:web/source/proxy/hostcheck.mjs" \
   "proxy/cachekey.mjs:web/source/proxy/cachekey.mjs" \
   "proxy/validate.mjs:web/source/proxy/validate.mjs" \
+  "proxy/text.mjs:web/source/proxy/text.mjs" \
   "PROJEKT.md:web/docs/PROJEKT.md" \
   "OFFEN-naechste-Fixes.md:web/docs/OFFEN-naechste-Fixes.md" \
   "QA-Bericht-2026-08-31.md:web/docs/QA-Bericht-2026-08-31.md" \

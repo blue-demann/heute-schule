@@ -1,6 +1,6 @@
 # Stundenplan-Proxy — Deploy
 
-Kleiner Cloudflare Worker, der WebUntis- und Mensamax-Anfragen serverseitig
+Kleiner Cloudflare Worker, der WebUntis-, Mensamax- und sams-on-Anfragen serverseitig
 stellt (löst CORS) und pures JSON zurückgibt. Speichert nichts — jede
 Anfrage bringt ihre Login-Daten selbst mit.
 
@@ -35,6 +35,18 @@ npx --no-install wrangler dev
 
 Dann z. B. mit curl gegen `http://localhost:8787/api/status` testen
 (Body-Format siehe `worker.js`, Feld `webuntis` + `lunch`).
+
+## sams-on
+
+Eine Instanz pro Schule unter `<schule>.sams-on.de`. Der Client schickt nur
+den Namen (`lunch.samson.instanz`, z. B. `lessing`); `samsonOrigin()` in
+`hostcheck.mjs` prüft ihn als einzelnes DNS-Label und baut die Adresse
+selbst. Ablauf wie die sams-on-Web-App: `GET /api/instance/<schule>` (startet
+das Session-Cookie), `POST /api/login`, `GET /api/login` (`user.userId`),
+`GET /api/users/<id>/orders/view?dateFrom=<Tag>&dateTill=<Tag>`,
+`POST /api/logout`. Nur lesend. Antworten prüft `validate.mjs`, Menünamen
+bereitet `text.mjs` auf (HTML-Zeilenumbrüche raus, Allergen-Kürzel-Zeile
+weg).
 
 ## ccCampus läuft NICHT über diesen Proxy
 

@@ -1,8 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v3 · 2026-10-29 · d276b838 · gültig
+HS-PRJ · v4 · 2026-10-29 · 8fef6652 · gültig
 
-**Stand: 11.10.2026 · Version 0.3.4**
+**Stand: 29.10.2026 · Version 0.4.0**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -57,8 +57,8 @@ weitere befreundete Familien weiterzugeben.
   für beliebig viele Kinder auf einer Seite.
 - **Heute + nahe Zukunft.** Tagesumschalter für die kommenden Schultage
   (nicht Wochenenden, siehe Entscheidungs-Log).
-- **Mehrere Essensanbieter.** Aktuell Mensamax und ccCampus, pro Kind
-  wählbar, nicht global für die ganze Seite.
+- **Mehrere Essensanbieter.** Aktuell Mensamax, ccCampus und sams-on, pro
+  Kind wählbar, nicht global für die ganze Seite.
 - **Niedrige Einstiegshürde für nicht-technische Eltern.** Einmalige
   Eingabe der Zugangsdaten, danach ein Klick. Funktioniert als installierte
   PWA auf dem Handy.
@@ -102,7 +102,7 @@ Vergessenes missverstanden werden:
 ┌─────────────┐         ┌──────────────────────┐         ┌─────────────┐
 │   Browser    │────────▶│  Cloudflare Worker    │────────▶│  WebUntis    │
 │ (web/*.html) │  HTTPS  │  (proxy/worker.js)    │  HTTPS  │  Mensamax    │
-│              │◀────────│  löst CORS-Sperre     │◀────────│              │
+│              │◀────────│  löst CORS-Sperre     │◀────────│  sams-on     │
 └──────┬───────┘         └──────────────────────┘         └─────────────┘
        │
        │ HTTPS, direkt — kein Proxy
@@ -119,13 +119,15 @@ Vergessenes missverstanden werden:
   App, drei Rechtstext-Seiten (`impressum.html`, `datenschutz.html`,
   `ueber.html`), `theme.css` als gemeinsames Stylesheet, `sw.js` als Service
   Worker (Network-first mit Cache-Fallback), `_headers` für Security-Header.
-- **`proxy/`** — ein Cloudflare Worker (`worker.js`), der WebUntis- und
-  Mensamax-Anfragen serverseitig stellt (löst deren fehlende
-  CORS-Freigabe), plus `hostcheck.mjs` (Ziel-Host-Validierung) und
-  `cachekey.mjs` (Cache-Schlüssel-Bildung) als ausgelagerte, testbare Module.
+- **`proxy/`** — ein Cloudflare Worker (`worker.js`), der WebUntis-,
+  Mensamax- und sams-on-Anfragen serverseitig stellt (löst deren fehlende
+  CORS-Freigabe), plus ausgelagerte, testbare Module: `hostcheck.mjs`
+  (Ziel-Host-Validierung), `validate.mjs` (Prüfung von Request-Body und
+  Anbieter-Antworten), `text.mjs` (Menütexte zu reinem Text) und
+  `cachekey.mjs` (Cache-Schlüssel-Bildung).
 
 **Warum zwei verschiedene Wege für strukturell ähnliche Anbieter:**
-WebUntis und Mensamax senden keine `Access-Control-Allow-Origin`-Header —
+WebUntis, Mensamax und sams-on senden keine `Access-Control-Allow-Origin`-Header —
 ein Browser darf ihre Antworten also nicht direkt lesen, daher der Proxy.
 ccCampus ist strukturell umgekehrt: Es blockiert Anfragen von
 Server-Infrastruktur (u. a. Cloudflare Workers) mit HTTP 403, lässt aber
@@ -260,6 +262,8 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 | Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst. Mensamax-URLs entstehen nur aus `origin` der geprüften Basis-URL plus festem Pfad (kein eigener Port). Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` zentral in `fetchWithTimeout`) — die Host-Prüfung gilt nur für die erste URL |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
 | Laufzeitvalidierung an der Vertrauensgrenze | `proxy/validate.mjs` | Ungeprüfte Daten im Proxy: Der Request-Body aus dem Browser darf nur bekannte Felder als Text enthalten (sonst 400, unbekannte Felder fallen weg); jede WebUntis-Antwort wird vor der Verwendung auf genau die genutzten Felder geprüft und bei Strukturfehlern als Ganzes abgelehnt („WebUntis: unerwartete Antwort auf …“, ohne Inhalte des Anbieters). Die Meldung nennt Methode und Feld, nie den Wert. Die `sessionId` geht in den `Cookie`-Header und darf deshalb nur Zeichen enthalten, die RFC 6265 in einem Cookie-Wert erlaubt — kein `;` oder `,`, mit dem sich ein zweites Cookie anhängen ließe (Zeilenumbrüche lehnen die Laufzeiten ohnehin ab; das ist dort Härtung, keine geschlossene Lücke). Den ccCampus-Block (PIN, Kundennummer) verwirft der Proxy, weil er ihn nie braucht. Als „Passwort prüfen“ meldet der Worker nur eine echte Ablehnung durch WebUntis, nicht jede fehlgeschlagene Anmeldung |
+| sams-on-Instanz nur als Name | `proxy/hostcheck.mjs` (`samsonOrigin`), `web/index.html` | Die App schickt für sams-on nur den Namen der Schul-Instanz (z. B. `lessing`), nie eine Adresse. Der Proxy prüft ihn als einzelnes DNS-Label und baut `https://<name>.sams-on.de` selbst — dieses Feld kann damit grundsätzlich keinen anderen Server erreichen. Die vom Konto gelieferte `userId` geht in den Pfad der nächsten Anfrage und darf deshalb nur aus Ziffern bestehen. Die App bereinigt eine eingefügte Adresse beim Einrichten und speichert erst ein brauchbares Format |
+| Nur die Felder des gewählten Anbieters | `web/index.html` (`lunchRequestFields`), `proxy/validate.mjs` | Die App schickt dem Proxy nur die Zugangsdaten des gerade gewählten Essensanbieters, nie die eines früher genutzten; ccCampus gar keine. Der Proxy übernimmt zusätzlich nur bekannte Felder |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
 | Security-Header (CSP, HSTS, X-Frame-Options, Permissions-Policy) | `web/_headers` | Clickjacking, Nachladen fremden Codes; CSP mit `unsafe-inline`, weil bewusst kein Build-Schritt existiert (siehe Nicht-Ziele) |
@@ -309,6 +313,7 @@ offen benannt statt verschwiegen.
 |---|---|---|
 | WebUntis JSON-RPC (`/WebUntis/jsonrpc.do`) | Stundenplan-Abfrage | Server-seitig über den Proxy (`authenticate`, `getKlassen`, `getTimetable`, `getSubjects`, `getRooms`, `logout`) |
 | Mensamax / parentsmensa.de | Schulessen-Status | Server-seitig über den Proxy — ASP.NET-WebForms-Scraping (`__VIEWSTATE` u. a.), da keine öffentliche API existiert |
+| sams-on (`<schule>.sams-on.de`, SAMS-ON GmbH) | Schulessen-Status | Server-seitig über den Proxy — JSON-API hinter der sams-on-Web-App (Angular vorn, PHP hinten), Session per Cookie: `GET /api/instance/<schule>`, `POST /api/login`, `GET /api/login` (`user.userId`), `GET /api/users/<id>/orders/view?dateFrom=…&dateTill=…`, `POST /api/logout`. Nur lesend. Den Speiseplan gibt es für Eltern nur über eine ältere PHP-Schnittstelle; darauf wird bewusst verzichtet, deshalb unterscheidet die Karte nicht zwischen „kein Schulessen“ und „nichts bestellt“ |
 | ccCampus / mbs5online.de | Schulessen-Status (Alternativanbieter) | Client-seitig direkt aus dem Browser (siehe Architektur) — `POST /Login/Login`, `GET /Mealplan/Weekplan`, HTML-Statusknoten-Parsing |
 
 **Infrastruktur:**
@@ -354,6 +359,7 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | `validateRequestBody()`, `validateRpcEnvelope()`, `validateAuth()`, `validateLessons()` u. a. (Property-Tests) | `proxy/validate.mjs` | Gültige Antworten mit beliebigen Zusatzfeldern gehen unverändert durch; je eine benannte Schadensklasse (falscher Typ oder Bereich der `id`, fehlende `id`, Uhrzeit außerhalb 0–2359 oder Minute ≥ 60, `code` kein Text, Fach-/Raum-Verweise ohne gültige `id`, Eintrag kein Objekt) wird immer abgelehnt; `sessionId` mit Zeichen, die einen Header brechen, ebenso; Request-Body mit Nicht-Text-Feld oder überlangem Feld → abgelehnt. Dazu Worker-Tests: Für jede Prüfung, die der Worker aufruft, läuft eine kaputte Antwort durch den Worker selbst (sonst ließe sich ein Aufruf dort unbemerkt entfernen); eine Wartungsseite, ein leerer Body oder eine Weiterleitung beim Login werden nicht als „Passwort falsch“ gemeldet |
 | `tools/check-proxy-deploy.sh` | Deploy-Prüfung | Welcher Commit läuft auf dem Proxy? Gegen einen `wrangler`-Stellvertreter mit festen Antworten: Commit in der aktiven Version → bestätigt; anderer Commit, Commit nur in einer inaktiven Version, nicht abrufbar → nicht bestätigt |
 | Verdrahtung | `deploy.sh`, `.github/workflows/ci.yml` | Die Gates müssen auch aufgerufen werden: Reihenfolge, `npm ci`, `npm audit --include=dev`, kein `npx` ohne `--no-install`, Commit als Versionsnachricht, CI mit Lese-Token und ohne Install-Skripte |
+| `samsonOrigin()` (Property-Tests), `samsonMealName()`, `validateSamsonAccount()`, `validateSamsonOrders()` und der komplette sams-on-Ablauf im Worker | `proxy/hostcheck.mjs`, `proxy/text.mjs`, `proxy/validate.mjs`, `proxy/worker.js` | Instanz-Name: gültige Namen ergeben genau `https://<name>.sams-on.de`, jede benannte Angriffsklasse (Punkt, Pfad/Query/Fragment, Userinfo/Port, Prozent-Kodierung, Leerraum, Nicht-ASCII, Bindestrich am Rand, ganze URL) wird abgelehnt. `userId` mit Zeichen, die den Pfad ändern könnten, wird abgelehnt, bevor die Bestellungen abgefragt werden. Menünamen aus echten sams-on-Texten. Der Worker läuft gegen einen nachgebauten sams-on-Server: Reihenfolge wie die Web-App, nur der eigene Schul-Host, keine Weiterleitungen, Session-Cookie aus dem Login, falsches Passwort, Login ohne Session, unbekannte Schule, kaputte Antworten, Wartungsseite, Cookies mit Trennzeichen |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -717,6 +723,13 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   Hinweis und ausdrückliche Rückfrage vor dem Überschreiben. Vor dem
   Deploy `wrangler` auf `4.153.0` angehoben, nachdem das Audit-Gate eine
   hohe Lücke in `undici` gemeldet und den Deploy gestoppt hatte.
+- **Neuer Essensanbieter sams-on** (29.10.2026, Version 0.4.0) — die
+  Lessing-Schule wechselt zum 01.11.2026 von Mensamax zu sams-on. Anbindung
+  über den Proxy mit dem Ablauf der sams-on-Web-App, nur lesend; die Karte
+  zeigt „Essen bestellt: …“ oder „Kein Essen bestellt“, kein Guthaben.
+  Instanz-Name statt Adresse, Bereinigung und Formatprüfung beim
+  Einrichten. Gleichzeitig schickt die App dem Proxy nur noch die Felder des
+  gewählten Anbieters. Mensamax bleibt für den Übergang erhalten.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

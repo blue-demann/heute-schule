@@ -32,6 +32,12 @@ interface CcCampusConfig {
   pin?: string;
 }
 
+interface SamsonConfig {
+  instanz?: string;
+  benutzername?: string;
+  passwort?: string;
+}
+
 interface LunchConfig {
   provider?: string;
   base?: string;
@@ -40,6 +46,7 @@ interface LunchConfig {
   username?: string;
   password?: string;
   cccampus?: CcCampusConfig;
+  samson?: SamsonConfig;
 }
 
 interface StatusRequest {

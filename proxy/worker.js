@@ -39,10 +39,12 @@
  * together with the matching web/index.html pass, not on their own.
  */
 
-import { checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost } from './hostcheck.mjs';
+import { checkSafeHostname, checkSafeHttpsUrl, httpsUrlForHost, samsonOrigin } from './hostcheck.mjs';
+import { decodeHtmlEntities, samsonMealName } from './text.mjs';
 import { buildCacheKeyMaterial } from './cachekey.mjs';
 import {
   validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
+  validateSamsonAccount, validateSamsonOrders,
 } from './validate.mjs';
 
 const FETCH_TIMEOUT_MS = 10000;
@@ -291,23 +293,6 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
 // school shows up with a different Mensamax domain, add it here.
 const MENSAMAX_ALLOWED_DOMAINS = ['.parentsmensa.de'];
 
-// Mensamax serves menu text with HTML-encoded special characters (e.g.
-// "&amp;" instead of "&", and sometimes umlauts as entities too). Without
-// Cloudflare Workers' own DOM we have to decode this by hand instead of
-// passing the raw characters on to parents.
-const HTML_ENTITIES = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
-  auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü', szlig: 'ß',
-  eacute: 'é', egrave: 'è', ecirc: 'ê', agrave: 'à', ccedil: 'ç', euro: '€',
-};
-/** @param {string} str */
-function decodeHtmlEntities(str) {
-  return str
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&([a-zA-Z]+);/g, (m, name) => (Object.hasOwn(HTML_ENTITIES, name) ? HTML_ENTITIES[/** @type {keyof typeof HTML_ENTITIES} */ (name)] : m));
-}
-
 /**
  * @param {string} html
  * @param {string} name
@@ -400,6 +385,9 @@ async function getLunchStatus(lunchCfg, datumStr) {
     // not something to fail silently on.
     return 'Schulessen: ccCampus wird direkt im Browser abgefragt, nicht über den Proxy';
   }
+  if (provider === 'samson') {
+    return getLunchStatusSamson(lunchCfg.samson, datumStr);
+  }
   if (provider !== 'mensamax') {
     return `Schulessen: unbekannter Anbieter "${provider}"`;
   }
@@ -448,6 +436,105 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
     return html.includes(`td${datumStr}_`) ? 'Kein Menü bestellt' : 'Kein Schulessen heute';
   }
   return `Essen bestellt: ${orders.join(' / ')}`;
+}
+
+// ── sams-on (<instanz>.sams-on.de) ───────────────────────────────────────
+//
+// The JSON API behind the sams-on web app, used the way that app uses it:
+// fetch the instance info (starts the session cookie), log in, read the
+// account's user id, ask for the orders of exactly the requested day, log
+// out. The API answers browser requests from other sites without CORS
+// headers, hence the proxy. Read-only: no request here can order, cancel or
+// change anything.
+
+// What the sams-on web app sends as Content-Type (sic, leading slash).
+const SAMSON_CONTENT_TYPE = '/application/vnd.akquinet.samson.v2';
+
+// Cookie name/value as they may go into our own Cookie header: no
+// separators, no whitespace (RFC 6265 cookie-octet for the value).
+const COOKIE_PAIR = /^([A-Za-z0-9!#$%&'*+.^_`|~-]+)=([\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*)$/;
+
+/**
+ * Merges the Set-Cookie headers of a response into the session's cookies.
+ * @param {Map<string, string>} jar
+ * @param {Response} resp
+ */
+function collectCookies(jar, resp) {
+  for (const header of getSetCookies(resp)) {
+    const m = header.split(';', 1)[0].trim().match(COOKIE_PAIR);
+    if (m) jar.set(m[1], m[2]);
+  }
+}
+
+/** @param {Map<string, string>} jar */
+function cookieHeader(jar) {
+  return [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+/**
+ * @param {Response} resp
+ * @param {string} method
+ * @returns {Promise<unknown>}
+ */
+async function samsonJson(resp, method) {
+  if (!resp.ok) throw new Error(`sams-on: ${method} nicht abrufbar (HTTP ${resp.status})`);
+  try {
+    return JSON.parse(await resp.text());
+  } catch (e) {
+    throw new Error(`sams-on: keine gültige JSON-Antwort auf ${method} (HTTP ${resp.status})`, { cause: e });
+  }
+}
+
+/**
+ * @param {SamsonConfig | undefined} samsonCfg
+ * @param {string} datumStr  YYYYMMDD
+ * @returns {Promise<string>}
+ */
+async function getLunchStatusSamson(samsonCfg, datumStr) {
+  const { instanz, benutzername, passwort } = samsonCfg || {};
+  if (!instanz || !benutzername || !passwort) {
+    throw new Error('sams-on-Konfiguration unvollständig (Instanz/Benutzername/Passwort)');
+  }
+  const origin = samsonOrigin(instanz);
+  const instanceName = new URL(origin).hostname.split('.')[0];
+  const jar = new Map();
+  const headers = () => ({ 'Content-Type': SAMSON_CONTENT_TYPE, Accept: 'application/json', ...(jar.size ? { Cookie: cookieHeader(jar) } : {}) });
+
+  const instanceResp = await fetchWithTimeout(`${origin}/api/instance/${instanceName}`, { headers: headers() });
+  if (instanceResp.status === 404) throw new Error(`sams-on: Instanz „${instanceName}“ nicht gefunden`);
+  if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
+  collectCookies(jar, instanceResp);
+
+  const loginResp = await fetchWithTimeout(`${origin}/api/login`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ username: benutzername, password: passwort }),
+  });
+  if (loginResp.status === 401 || loginResp.status === 403) return 'Schulessen: Login fehlgeschlagen';
+  if (!loginResp.ok) throw new Error(`sams-on: Anmeldung nicht möglich (HTTP ${loginResp.status})`);
+  collectCookies(jar, loginResp);
+
+  try {
+    const accountResp = await fetchWithTimeout(`${origin}/api/login?forceUserarea=false`, { headers: headers() });
+    // Not logged in after all: sams-on answers a failed login like this.
+    if (accountResp.status === 401) return 'Schulessen: Login fehlgeschlagen';
+    const userId = validateSamsonAccount(await samsonJson(accountResp, 'login'));
+
+    const day = `${datumStr.slice(0, 4)}-${datumStr.slice(4, 6)}-${datumStr.slice(6, 8)}`;
+    const ordersResp = await fetchWithTimeout(
+      `${origin}/api/users/${userId}/orders/view?dateFrom=${day}&dateTill=${day}`,
+      { headers: headers() }
+    );
+    const meals = validateSamsonOrders(await samsonJson(ordersResp, 'orders/view'))
+      .filter((o) => o.dayId === day)
+      .map((o) => samsonMealName(o.title))
+      .filter((name) => name !== '');
+    return meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt';
+  } finally {
+    try {
+      await fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' });
+    } catch { /* not worth failing over — the session expires on its own */ }
+  }
 }
 
 // ── ccCampus (mbs5online) ────────────────────────────────────────────────

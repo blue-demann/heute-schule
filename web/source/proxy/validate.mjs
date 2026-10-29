@@ -1,5 +1,5 @@
 // Runtime validation of untrusted input: the request body the browser
-// sends, and what WebUntis sends back.
+// sends, and what WebUntis and sams-on send back.
 //
 // The JSON-RPC answers arrive from a third-party server and are untrusted:
 // the worker reads ids, times and names from them and puts the session id
@@ -31,9 +31,10 @@
 /**
  * @param {string} method
  * @param {string} field
+ * @param {string} [provider]
  */
-function unexpected(method, field) {
-  return new Error(`WebUntis: unerwartete Antwort auf ${method} (${field})`);
+function unexpected(method, field, provider = 'WebUntis') {
+  return new Error(`${provider}: unerwartete Antwort auf ${method} (${field})`);
 }
 
 /**
@@ -174,6 +175,45 @@ export function validateRooms(result) {
     .map((r) => ({ id: /** @type {number} */ (r.id), name: /** @type {string | undefined} */ (r.name ?? undefined) }));
 }
 
+// ── sams-on ──────────────────────────────────────────────────────────────
+//
+// Only what the worker uses: the account's user id (to ask for its orders)
+// and per order the day and the meal title. Everything else sams-on sends
+// along — name, e-mail, ID card number, credit — is not even copied.
+
+/**
+ * @typedef {{ dayId: string, title: string }} SamsonOrder
+ */
+
+/**
+ * GET /api/login while logged in.
+ * @param {unknown} data
+ * @returns {string} the user id, as decimal digits
+ */
+export function validateSamsonAccount(data) {
+  if (!isObject(data) || !isObject(data.user)) throw unexpected('login', 'user', 'sams-on');
+  const id = data.user.userId;
+  const text = typeof id === 'number' && Number.isSafeInteger(id) && id >= 0 ? String(id) : id;
+  if (typeof text !== 'string' || !/^\d{1,12}$/.test(text)) throw unexpected('login', 'user.userId', 'sams-on');
+  return text;
+}
+
+/**
+ * GET /api/users/{id}/orders/view
+ * @param {unknown} data
+ * @returns {SamsonOrder[]}
+ */
+export function validateSamsonOrders(data) {
+  if (!isObject(data)) throw unexpected('orders/view', 'Antwort', 'sams-on');
+  if (!Array.isArray(data.orders)) throw unexpected('orders/view', 'orders', 'sams-on');
+  return data.orders.map((o) => {
+    if (!isObject(o)) throw unexpected('orders/view', 'Eintrag', 'sams-on');
+    if (typeof o.dayId !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(o.dayId)) throw unexpected('orders/view', 'dayId', 'sams-on');
+    if (typeof o.title !== 'string' || o.title.length > 2000) throw unexpected('orders/view', 'title', 'sams-on');
+    return { dayId: o.dayId, title: o.title };
+  });
+}
+
 // ── Request body from the browser ────────────────────────────────────────
 
 const MAX_FIELD_LENGTH = 1000;
@@ -183,6 +223,7 @@ const WEBUNTIS_FIELDS = /** @type {const} */ (['server', 'user', 'password', 'kl
 // a stored cccampus block along with a Mensamax child's config — it is
 // dropped right here, like every other unknown field.
 const LUNCH_FIELDS = /** @type {const} */ (['provider', 'base', 'projekt', 'einrichtung', 'username', 'password']);
+const SAMSON_FIELDS = /** @type {const} */ (['instanz', 'benutzername', 'passwort']);
 
 /**
  * Copies only the known fields; each must be a string (of sane length) or
@@ -213,9 +254,10 @@ function pickStrings(value, fields) {
 export function validateRequestBody(body) {
   if (!isObject(body)) throw new Error('Ungültiger Request-Body');
   const { datum } = pickStrings(body, /** @type {const} */ (['datum']));
-  return {
-    datum,
-    webuntis: pickStrings(body.webuntis, WEBUNTIS_FIELDS),
-    lunch: pickStrings(body.lunch, LUNCH_FIELDS),
-  };
+  /** @type {LunchConfig} */
+  const lunch = pickStrings(body.lunch, LUNCH_FIELDS);
+  if (isObject(body.lunch) && body.lunch.samson !== undefined && body.lunch.samson !== null) {
+    lunch.samson = pickStrings(body.lunch.samson, SAMSON_FIELDS);
+  }
+  return { datum, webuntis: pickStrings(body.webuntis, WEBUNTIS_FIELDS), lunch };
 }
