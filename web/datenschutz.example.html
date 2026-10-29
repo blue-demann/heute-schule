@@ -27,7 +27,7 @@
     <a class="uebersicht-btn" href="index.html">Übersicht</a>
   </div>
   <h1>Datenschutzerklärung</h1>
-  <p style="font-size:.8rem; color:var(--muted); margin-top:-.4rem;">Stand: 28.08.2026</p>
+  <p style="font-size:.8rem; color:var(--muted); margin-top:-.4rem;">Stand: 29.10.2026</p>
 
   <h2>1. Verantwortlicher</h2>
   <p>
@@ -40,30 +40,43 @@
   <p>
     Der Dienst zeigt den tagesaktuellen Stundenplan und Schulessen-Status für ein oder
     mehrere Kinder an. Dafür gibst du die WebUntis-Zugangsdaten sowie die
-    Zugangsdaten deines gewählten Essensanbieters (Mensamax oder ccCampus)
-    einmalig ein.
+    Zugangsdaten deines gewählten Essensanbieters (Mensamax, ccCampus oder
+    sams-on) einmalig ein.
   </p>
   <ul>
     <li>
       <strong>Im Browser (localStorage):</strong> Name des Kindes, WebUntis-
-      Zugangsdaten, Zugangsdaten des gewählten Essensanbieters. Diese Daten
+      Zugangsdaten, Zugangsdaten des gewählten Essensanbieters und, bei
+      sams-on, ob das Guthaben angezeigt werden soll. Diese Daten
       verlassen dein Gerät ausschließlich für den jeweiligen Abruf (siehe unten)
       und werden <strong>nirgends zentral von uns gespeichert</strong> — nicht in
       einer Datenbank, nicht in Logs. Du kannst sie jederzeit selbst löschen: in
       den Einstellungen (⚙️) ganz unten über den Knopf
       <em>„Alle meine Daten auf diesem Gerät löschen"</em>. Alternativ,
       wie bei jeder Website, über die Website-Daten deines Browsers.
+      Bei jedem Abruf wird nur übertragen, was für den jeweiligen Anbieter
+      nötig ist: die WebUntis-Zugangsdaten und die Zugangsdaten des aktuell
+      gewählten Essensanbieters.
     </li>
     <li>
-      <strong>Beim Abruf — WebUntis und Mensamax (über unseren Proxy-Server,
-      Cloudflare Workers):</strong> Wenn du auf "Aktualisieren" tippst, schickt
+      <strong>Beim Abruf — WebUntis, Mensamax und sams-on (über unseren
+      Proxy-Server, Cloudflare Workers):</strong> Wenn du auf "Aktualisieren" tippst, schickt
       dein Browser die Zugangsdaten an unseren Proxy-Server bei Cloudflare. Der
-      reicht sie unmittelbar an WebUntis bzw. Mensamax weiter, holt die Antwort ab
+      reicht sie unmittelbar an WebUntis bzw. den Essensanbieter (Mensamax oder
+      sams-on; ccCampus läuft nicht über den Proxy, siehe unten) weiter, holt die Antwort ab
       und leitet sie an deinen Browser zurück. Auch hier: keine Speicherung der
-      Zugangsdaten — sie laufen nur "durch". Aus technischen Gründen
+      Zugangsdaten — sie laufen nur "durch". Bei sams-on fragt der Proxy ab,
+      ob und welches Essen für den Tag bestellt ist. Hast du für ein Kind
+      „Guthaben auf der Karte anzeigen“ eingeschaltet, liest er zusätzlich den
+      Kontostand bei sams-on und gibt ihn an deinen Browser weiter; ohne diese
+      Einstellung fragt er ihn gar nicht ab. Weitere Kontodaten, die sams-on
+      bei der Anmeldung mitschickt (etwa Name, E-Mail-Adresse oder
+      Ausweisnummer), verwirft er sofort, ohne sie weiterzugeben oder zu
+      speichern. Aus technischen Gründen
       (Serverschutz, um WebUntis/Mensamax nicht bei jedem Klick neu anzufragen)
-      wird nur das Abfrage-Ergebnis (Stundenplan, Schulessen-Status) für ca. 4
-      Minuten zwischengespeichert.
+      wird nur das Abfrage-Ergebnis (Stundenplan, Schulessen-Status und, falls
+      eingeschaltet, das sams-on-Guthaben) für ca. 4 Minuten
+      zwischengespeichert.
       <p style="margin-top:.6rem;">
         <strong>Was das technisch bedeutet — offen gesagt:</strong> Damit der
         Proxy die Zugangsdaten weiterreichen kann, muss er sie unterwegs
@@ -75,8 +88,8 @@
         gespeichert — aber du sollst dich nicht darauf verlassen müssen:
         Genau deshalb liegt der komplette Quellcode offen (MIT-Lizenz), sodass
         das jederzeit von außen überprüfbar ist. Wer diesen Umweg gar nicht
-        gehen möchte, kann den Dienst nicht sinnvoll nutzen — WebUntis und
-        Mensamax lassen direkte Anfragen aus dem Browser nicht zu.
+        gehen möchte, kann den Dienst nicht sinnvoll nutzen — WebUntis,
+        Mensamax und sams-on lassen direkte Anfragen aus dem Browser nicht zu.
       </p>
     </li>
     <li>
@@ -90,8 +103,10 @@
     </li>
     <li>
       <strong>Empfänger:</strong> WebUntis (die von dir jeweils eingetragene
-      Schule) sowie der von dir gewählte Essensanbieter (Mensamax oder
-      ccCampus) erhalten die Zugangsdaten direkt, um die angeforderten
+      Schule) sowie der von dir gewählte Essensanbieter (Mensamax, ccCampus
+      oder sams-on, letzteres betrieben von der SAMS-ON GmbH, Hamburg, unter
+      der von dir eingetragenen Schul-Adresse, z. B. lessing.sams-on.de)
+      erhalten die Zugangsdaten direkt, um die angeforderten
       Informationen abzurufen. Diese Dienste verarbeiten die Daten nach ihren
       eigenen Datenschutzbestimmungen — dafür sind sie jeweils selbst
       verantwortlich.
