@@ -1735,7 +1735,12 @@ function samsonServer({ password = 'richtig', orders = [], userId = '8', credit 
       const key = `${method} ${u.pathname}`;
       calls.push({ url, method, cookie: (options.headers || {}).Cookie, redirect: options.redirect, body: options.body });
       if (overrides[key]) return overrides[key](u, options);
-      if (u.hostname !== 'lessing.sams-on.de') return new Response('', { status: u.hostname.endsWith('.sams-on.de') ? 404 : 599 });
+      // Unknown school: the real sams-on redirects to its homepage.
+      if (u.hostname !== 'lessing.sams-on.de') {
+        return u.hostname.endsWith('.sams-on.de')
+          ? new Response(null, { status: 302, headers: { Location: 'https://www.sams-on.de' } })
+          : new Response('', { status: 599 });
+      }
       if (key === 'GET /api/instance/lessing') return json({ short: 'lessing', companyName: 'x' }, 200, ['PHPSESSID=anonym; path=/; secure; HttpOnly']);
       if (key === 'POST /api/login') {
         const sent = JSON.parse(options.body);

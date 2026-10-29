@@ -1,6 +1,6 @@
 # Offene Punkte
 
-HS-OFF · v3 · 2026-10-29 · 6a9e2ccb · gültig
+HS-OFF · v4 · 2026-10-29 · 183ca839 · gültig
 
 **Stand: 11.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
@@ -109,7 +109,11 @@ Zeitpunkt-Momentaufnahmen unverändert.
      Quelle holen.
    - Erreicht der Proxy sams-on aus dem Cloudflare-Netz überhaupt (ccCampus
      blockiert das)? Zeigt sich beim ersten Abruf nach dem Deploy.
-   - Wie antwortet sams-on auf eine unbekannte Schule (angenommen: 404)?
+   - Erledigt am 29.10.: Eine unbekannte Schule beantwortet sams-on mit einer
+     Weiterleitung (302) auf `www.sams-on.de`; der Proxy meldet dann „Instanz
+     … nicht gefunden“. Dieselbe Abfrage aus dem Cloudflare-Netz bekam eine
+     echte Antwort von sams-on, eine Sperre wie bei ccCampus gibt es dort
+     also nicht; ob der Login durchgeht, zeigt der erste echte Abruf.
    - Guthaben: Format `creditAmount` („0,00“) am Testkonto gesehen; mit
      echtem Guthaben gegenprüfen, ob es dasselbe Format bleibt.
    - Danach: unabhängige Prüfrunde, wie bei neuem Code mit Zugangsdaten

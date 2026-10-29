@@ -513,7 +513,10 @@ async function getLunchStatusSamson(samsonCfg, datumStr) {
   const headers = () => ({ 'Content-Type': SAMSON_CONTENT_TYPE, Accept: 'application/json', ...(jar.size ? { Cookie: cookieHeader(jar) } : {}) });
 
   const instanceResp = await fetchWithTimeout(`${origin}/api/instance/${instanceName}`, { headers: headers() });
-  if (instanceResp.status === 404) throw new Error(`sams-on: Instanz „${instanceName}“ nicht gefunden`);
+  // An unknown school name: sams-on redirects to its homepage (seen live,
+  // 302 to www.sams-on.de); a 404 would mean the same.
+  const unknownSchool = instanceResp.status === 404 || (instanceResp.status >= 300 && instanceResp.status < 400);
+  if (unknownSchool) throw new Error(`sams-on: Instanz „${instanceName}“ nicht gefunden`);
   if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
   collectCookies(jar, instanceResp);
 
