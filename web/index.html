@@ -166,6 +166,8 @@
   .feld-hinweis{font-size:.78rem; color:var(--muted); margin:.35rem 0 0;}
   .feld-hinweis code{background:var(--border); padding:.05rem .25rem; border-radius:4px;}
   .feld-fehler{font-size:.78rem; color:var(--danger); margin:.35rem 0 0;}
+  .check-row{display:flex; align-items:center; gap:.5rem; margin-top:.6rem; font-size:.9rem;}
+  .check-row input{width:auto; margin:0;}
   .danger-zone h2{font-size:.95rem; margin:0 0 .4rem;}
   .danger-zone p{font-size:.85rem; color:var(--muted); margin:0 0 .8rem;}
 
@@ -406,6 +408,14 @@
             <input type="password" data-field="lunch.samson.passwort">
           </div>
         </div>
+        <label class="check-row">
+          <input type="checkbox" data-field="lunch.samson.guthabenAnzeigen">
+          Guthaben auf der Karte anzeigen
+        </label>
+        <p class="feld-hinweis">
+          Zeigt den Kontostand bei sams-on, hervorgehoben unter 5,00 €. Nur wenn
+          angehakt, fragt der Proxy das Guthaben überhaupt ab.
+        </p>
       </div>
     </fieldset>
 
@@ -427,6 +437,7 @@
       <a data-mensa-link target="_blank" rel="noopener">Mensamax-Login ↗</a>
     </div>
     <div class="lunch" data-lunch>–</div>
+    <div class="lunch hidden" data-guthaben></div>
     <table class="stunden" data-stunden></table>
     <p class="empty-hint hidden" data-empty>Heute keine Stunden / schulfrei.</p>
     <p class="fehler-hint hidden" data-fehler></p>
@@ -488,7 +499,7 @@
         if (!c.lunch.cccampus) {
           c.lunch.cccampus = { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' };
         }
-        if (!c.lunch.samson) c.lunch.samson = { instanz: '', benutzername: '', passwort: '' };
+        if (!c.lunch.samson) c.lunch.samson = { instanz: '', benutzername: '', passwort: '', guthabenAnzeigen: false };
       });
       return parsed;
     } catch {
@@ -549,7 +560,7 @@
           provider: template.lunch.provider || 'mensamax',
           base: template.lunch.base, projekt: template.lunch.projekt, einrichtung: template.lunch.einrichtung, username: '', password: '',
           cccampus: { base: (template.lunch.cccampus && template.lunch.cccampus.base) || 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
-          samson: { instanz: (template.lunch.samson && template.lunch.samson.instanz) || '', benutzername: '', passwort: '' },
+          samson: { instanz: (template.lunch.samson && template.lunch.samson.instanz) || '', benutzername: '', passwort: '', guthabenAnzeigen: false },
         },
         hiddenFaecher: [],
       };
@@ -561,7 +572,7 @@
         provider: 'mensamax',
         base: 'https://parentsmensa.de', projekt: 'SE2922', einrichtung: 'Lessing', username: '', password: '',
         cccampus: { base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '', pin: '' },
-        samson: { instanz: '', benutzername: '', passwort: '' },
+        samson: { instanz: '', benutzername: '', passwort: '', guthabenAnzeigen: false },
       },
       hiddenFaecher: [],
     };
@@ -755,6 +766,11 @@
     setChildName(child.name);
 
     node.querySelectorAll('[data-field]').forEach(function(input){
+      if (input.type === 'checkbox'){
+        input.checked = getDeep(child, input.dataset.field) === true;
+        input.addEventListener('change', function(){ setDeep(child, input.dataset.field, input.checked); });
+        return;
+      }
       input.value = getDeep(child, input.dataset.field) || '';
       input.addEventListener('input', function(){
         setDeep(child, input.dataset.field, input.value);
@@ -1033,6 +1049,7 @@
   function renderChildResult(card, child, data, requestError){
     card.classList.remove('fetching');
     var lunchEl = card.querySelector('[data-lunch]');
+    var balanceEl = card.querySelector('[data-guthaben]');
     var tableEl = card.querySelector('[data-stunden]');
     var emptyEl = card.querySelector('[data-empty]');
     var errorEl = card.querySelector('[data-fehler]');
@@ -1041,6 +1058,7 @@
     tableEl.textContent = '';
     emptyEl.classList.add('hidden');
     errorEl.classList.add('hidden');
+    balanceEl.className = 'lunch hidden';
     renderHiddenHint(hiddenHintEl, child, card);
 
     if (requestError){
@@ -1060,6 +1078,14 @@
       (/fehlgeschlagen|nicht verfügbar|nicht gefunden|fehler beim abrufen/i.test(lunchText) ? ' err' :
         /kein menü|kein essen|kein schulessen|abwesend|bestellfrist abgelaufen/i.test(lunchText) ? ' warn' : '');
     lunchEl.textContent = '🍽 ' + (institution ? institution + ': ' : '') + lunchText;
+
+    // Only in the answer when switched on for this child (sams-on).
+    if (Object.prototype.hasOwnProperty.call(data, 'guthaben')){
+      balanceEl.className = 'lunch' + (data.guthaben === null ? ' err' : data.guthabenKnapp ? ' warn' : '');
+      balanceEl.textContent = data.guthaben === null
+        ? '💶 Guthaben nicht abrufbar'
+        : '💶 Guthaben: ' + data.guthaben + ' €' + (data.guthabenKnapp ? ' — bald aufladen' : '');
+    }
 
     var lessons = data.stunden || [];
     var hidden = child.hiddenFaecher || [];
@@ -1181,7 +1207,10 @@
     var provider = lunchCfg.provider || 'mensamax';
     if (provider === 'samson'){
       var s = lunchCfg.samson || {};
-      return { provider: 'samson', samson: { instanz: extractSamsonInstance(s.instanz) || '', benutzername: s.benutzername, passwort: s.passwort } };
+      return {
+        provider: 'samson',
+        samson: { instanz: extractSamsonInstance(s.instanz) || '', benutzername: s.benutzername, passwort: s.passwort, guthabenAnzeigen: s.guthabenAnzeigen === true },
+      };
     }
     if (provider === 'mensamax'){
       return {

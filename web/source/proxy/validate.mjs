@@ -177,13 +177,29 @@ export function validateRooms(result) {
 
 // ── sams-on ──────────────────────────────────────────────────────────────
 //
-// Only what the worker uses: the account's user id (to ask for its orders)
-// and per order the day and the meal title. Everything else sams-on sends
-// along — name, e-mail, ID card number, credit — is not even copied.
+// Only what the worker uses: the account's user id (to ask for its orders),
+// the credit only if the parent switched its display on, and per order the
+// day and the meal title. Everything else sams-on sends along — name,
+// e-mail, ID card number — is not even copied.
 
 /**
  * @typedef {{ dayId: string, title: string }} SamsonOrder
  */
+
+// sams-on writes amounts German-style, e.g. "12,40" or "-3,10".
+const SAMSON_AMOUNT = /^-?\d{1,6},\d{2}$/;
+
+/**
+ * The account's credit from GET /api/login, or null if missing or not in
+ * the expected format — the balance is a display extra, so an odd value
+ * shows as "not available" instead of failing the whole lunch status.
+ * @param {unknown} data
+ * @returns {string | null}
+ */
+export function samsonCredit(data) {
+  if (!isObject(data) || typeof data.creditAmount !== 'string') return null;
+  return SAMSON_AMOUNT.test(data.creditAmount) ? data.creditAmount : null;
+}
 
 /**
  * GET /api/login while logged in.
@@ -257,7 +273,14 @@ export function validateRequestBody(body) {
   /** @type {LunchConfig} */
   const lunch = pickStrings(body.lunch, LUNCH_FIELDS);
   if (isObject(body.lunch) && body.lunch.samson !== undefined && body.lunch.samson !== null) {
-    lunch.samson = pickStrings(body.lunch.samson, SAMSON_FIELDS);
+    const raw = body.lunch.samson;
+    /** @type {SamsonConfig} */
+    const samson = pickStrings(raw, SAMSON_FIELDS);
+    if (isObject(raw) && raw.guthabenAnzeigen !== undefined && raw.guthabenAnzeigen !== null) {
+      if (typeof raw.guthabenAnzeigen !== 'boolean') throw new Error('Ungültiger Request-Body');
+      samson.guthabenAnzeigen = raw.guthabenAnzeigen;
+    }
+    lunch.samson = samson;
   }
   return { datum, webuntis: pickStrings(body.webuntis, WEBUNTIS_FIELDS), lunch };
 }

@@ -1,6 +1,6 @@
 # Offene Punkte
 
-HS-OFF · v2 · 2026-10-29 · 6fc349e1 · gültig
+HS-OFF · v3 · 2026-10-29 · 6a9e2ccb · gültig
 
 **Stand: 11.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
@@ -110,6 +110,8 @@ Zeitpunkt-Momentaufnahmen unverändert.
    - Erreicht der Proxy sams-on aus dem Cloudflare-Netz überhaupt (ccCampus
      blockiert das)? Zeigt sich beim ersten Abruf nach dem Deploy.
    - Wie antwortet sams-on auf eine unbekannte Schule (angenommen: 404)?
+   - Guthaben: Format `creditAmount` („0,00“) am Testkonto gesehen; mit
+     echtem Guthaben gegenprüfen, ob es dasselbe Format bleibt.
    - Danach: unabhängige Prüfrunde, wie bei neuem Code mit Zugangsdaten
      üblich. Mensamax-Anbindung entfernen, sobald sie niemand mehr braucht.
    - Hinweis für die Familien: sams-on läuft mit PHP auf Apache, der

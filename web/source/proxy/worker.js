@@ -44,7 +44,7 @@ import { decodeHtmlEntities, samsonMealName } from './text.mjs';
 import { buildCacheKeyMaterial } from './cachekey.mjs';
 import {
   validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
-  validateSamsonAccount, validateSamsonOrders,
+  validateSamsonAccount, validateSamsonOrders, samsonCredit,
 } from './validate.mjs';
 
 const FETCH_TIMEOUT_MS = 10000;
@@ -374,7 +374,7 @@ async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', user
 /**
  * @param {LunchConfig} lunchCfg
  * @param {string} datumStr
- * @returns {Promise<string>}
+ * @returns {Promise<LunchResult>}
  */
 async function getLunchStatus(lunchCfg, datumStr) {
   const provider = lunchCfg.provider || 'mensamax';
@@ -383,15 +383,15 @@ async function getLunchStatus(lunchCfg, datumStr) {
     // down). The frontend therefore never sends credentials along for
     // ccCampus children — if one lands here anyway, that's a config error,
     // not something to fail silently on.
-    return 'Schulessen: ccCampus wird direkt im Browser abgefragt, nicht über den Proxy';
+    return { lunch: 'Schulessen: ccCampus wird direkt im Browser abgefragt, nicht über den Proxy' };
   }
   if (provider === 'samson') {
     return getLunchStatusSamson(lunchCfg.samson, datumStr);
   }
   if (provider !== 'mensamax') {
-    return `Schulessen: unbekannter Anbieter "${provider}"`;
+    return { lunch: `Schulessen: unbekannter Anbieter "${provider}"` };
   }
-  return getLunchStatusMensamax(lunchCfg, datumStr);
+  return { lunch: await getLunchStatusMensamax(lunchCfg, datumStr) };
 }
 
 /**
@@ -485,13 +485,25 @@ async function samsonJson(resp, method) {
   }
 }
 
+// Below this credit (in euros) the card highlights the balance — the same
+// threshold sams-on uses for its own "credit is running low" notice.
+const SAMSON_LOW_CREDIT = 5;
+
+/**
+ * @param {string | null} amount  e.g. "12,40"
+ * @returns {{ betrag: string | null, knapp: boolean }}
+ */
+function samsonBalance(amount) {
+  return { betrag: amount, knapp: amount !== null && Number(amount.replace(',', '.')) < SAMSON_LOW_CREDIT };
+}
+
 /**
  * @param {SamsonConfig | undefined} samsonCfg
  * @param {string} datumStr  YYYYMMDD
- * @returns {Promise<string>}
+ * @returns {Promise<LunchResult>}
  */
 async function getLunchStatusSamson(samsonCfg, datumStr) {
-  const { instanz, benutzername, passwort } = samsonCfg || {};
+  const { instanz, benutzername, passwort, guthabenAnzeigen = false } = samsonCfg || {};
   if (!instanz || !benutzername || !passwort) {
     throw new Error('sams-on-Konfiguration unvollständig (Instanz/Benutzername/Passwort)');
   }
@@ -510,15 +522,18 @@ async function getLunchStatusSamson(samsonCfg, datumStr) {
     headers: headers(),
     body: JSON.stringify({ username: benutzername, password: passwort }),
   });
-  if (loginResp.status === 401 || loginResp.status === 403) return 'Schulessen: Login fehlgeschlagen';
+  if (loginResp.status === 401 || loginResp.status === 403) return { lunch: 'Schulessen: Login fehlgeschlagen' };
   if (!loginResp.ok) throw new Error(`sams-on: Anmeldung nicht möglich (HTTP ${loginResp.status})`);
   collectCookies(jar, loginResp);
 
   try {
     const accountResp = await fetchWithTimeout(`${origin}/api/login?forceUserarea=false`, { headers: headers() });
     // Not logged in after all: sams-on answers a failed login like this.
-    if (accountResp.status === 401) return 'Schulessen: Login fehlgeschlagen';
-    const userId = validateSamsonAccount(await samsonJson(accountResp, 'login'));
+    if (accountResp.status === 401) return { lunch: 'Schulessen: Login fehlgeschlagen' };
+    const account = await samsonJson(accountResp, 'login');
+    const userId = validateSamsonAccount(account);
+    // The credit is read only when the parent asked for it on this child.
+    const balance = guthabenAnzeigen ? { guthaben: samsonBalance(samsonCredit(account)) } : {};
 
     const day = `${datumStr.slice(0, 4)}-${datumStr.slice(4, 6)}-${datumStr.slice(6, 8)}`;
     const ordersResp = await fetchWithTimeout(
@@ -529,7 +544,7 @@ async function getLunchStatusSamson(samsonCfg, datumStr) {
       .filter((o) => o.dayId === day)
       .map((o) => samsonMealName(o.title))
       .filter((name) => name !== '');
-    return meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt';
+    return { lunch: meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt', ...balance };
   } finally {
     try {
       await fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' });
@@ -626,8 +641,12 @@ export default {
       datum,
       stunden: lessonsResult.status === 'fulfilled' ? lessonsResult.value : [],
       stundenFehler: lessonsResult.status === 'rejected' ? String(lessonsResult.reason.message || lessonsResult.reason) : null,
-      lunch: lunchResult.status === 'fulfilled' ? lunchResult.value : 'Fehler beim Abrufen',
+      lunch: lunchResult.status === 'fulfilled' ? lunchResult.value.lunch : 'Fehler beim Abrufen',
       lunchFehler: lunchResult.status === 'rejected' ? String(lunchResult.reason.message || lunchResult.reason) : null,
+      // Only present when the parent switched the balance on (sams-on).
+      ...(lunchResult.status === 'fulfilled' && lunchResult.value.guthaben
+        ? { guthaben: lunchResult.value.guthaben.betrag, guthabenKnapp: lunchResult.value.guthaben.knapp }
+        : {}),
     };
 
     // Cache (partially) failed results too, briefly — protects WebUntis/

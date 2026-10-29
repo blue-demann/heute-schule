@@ -36,6 +36,7 @@ interface SamsonConfig {
   instanz?: string;
   benutzername?: string;
   passwort?: string;
+  guthabenAnzeigen?: boolean;
 }
 
 interface LunchConfig {
@@ -53,6 +54,14 @@ interface StatusRequest {
   datum?: string;
   webuntis: WebUntisConfig;
   lunch: LunchConfig;
+}
+
+// School-lunch part of the proxy's answer. `guthaben` only when the parent
+// asked for it (sams-on): the amount as sams-on writes it, or null if not
+// available.
+interface LunchResult {
+  lunch: string;
+  guthaben?: { betrag: string | null, knapp: boolean };
 }
 
 // One lesson in the proxy's answer — field names shared with web/index.html.

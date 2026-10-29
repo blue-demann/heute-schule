@@ -46,7 +46,9 @@ das Session-Cookie), `POST /api/login`, `GET /api/login` (`user.userId`),
 `GET /api/users/<id>/orders/view?dateFrom=<Tag>&dateTill=<Tag>`,
 `POST /api/logout`. Nur lesend. Antworten prüft `validate.mjs`, Menünamen
 bereitet `text.mjs` auf (HTML-Zeilenumbrüche raus, Allergen-Kürzel-Zeile
-weg).
+weg). Das Guthaben (`creditAmount` aus `GET /api/login`) liest der Proxy nur,
+wenn `lunch.samson.guthabenAnzeigen` gesetzt ist, und liefert es dann als
+`guthaben` (Betrag oder `null`) und `guthabenKnapp` (unter 5,00 €).
 
 ## ccCampus läuft NICHT über diesen Proxy
 

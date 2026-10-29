@@ -20,7 +20,7 @@ import { samsonMealName } from './proxy/text.mjs';
 import { buildCacheKeyMaterial } from './proxy/cachekey.mjs';
 import {
   validateRequestBody, validateRpcEnvelope, validateAuth, validateClasses, validateLessons, validateSubjects, validateRooms,
-  validateSamsonAccount, validateSamsonOrders,
+  validateSamsonAccount, validateSamsonOrders, samsonCredit,
 } from './proxy/validate.mjs';
 import proxyWorker from './proxy/worker.js';
 
@@ -1080,6 +1080,21 @@ test('sams-on orders: every broken shape is rejected, naming the field', () => {
   ];
   for (const [data, field] of cases) assertWirft(() => validateSamsonOrders(data), `sams-on: unerwartete Antwort auf orders/view (${field})`);
 });
+forAll(
+  'a sams-on balance in German notation is accepted as is',
+  (random) => `${pick(random, ['', '-'])}${randomInt(random, 0, 99999)},${String(randomInt(random, 0, 99)).padStart(2, '0')}`,
+  (amount) => assertEqual(samsonCredit({ creditAmount: amount }), amount)
+);
+test('a sams-on balance in any other form is treated as not available', () => {
+  for (const data of [null, {}, { creditAmount: 12.4 }, { creditAmount: '12.40' }, { creditAmount: '12,4' }, { creditAmount: '12,40 €' }, { creditAmount: '' }, { creditAmount: '<b>1,00</b>' }]) {
+    assertEqual(samsonCredit(data), null);
+  }
+});
+test('request body: the balance switch must be a boolean', () => {
+  assertEqual(validateRequestBody({ lunch: { samson: { guthabenAnzeigen: true } } }).lunch.samson.guthabenAnzeigen, true);
+  assert(!('guthabenAnzeigen' in validateRequestBody({ lunch: { samson: { instanz: 'x' } } }).lunch.samson), 'absent switch must stay absent');
+  for (const value of ['true', 1, {}, []]) assertWirft(() => validateRequestBody({ lunch: { samson: { guthabenAnzeigen: value } } }), 'Ungültiger Request-Body');
+});
 test('request body: the sams-on block keeps exactly its three fields', () => {
   const out = validateRequestBody({ lunch: { provider: 'samson', samson: { instanz: 'lessing', benutzername: 'u', passwort: 'p', extra: 1 }, cccampus: { pin: 'PIN_X' } } });
   assertEqual(JSON.stringify(out.lunch), '{"provider":"samson","samson":{"instanz":"lessing","benutzername":"u","passwort":"p"}}');
@@ -1114,6 +1129,7 @@ test('different sams-on password or instance ⇒ different key', () => {
   const base = buildCacheKeyMaterial('20261103', webuntisBase, sams({}));
   assert(base !== buildCacheKeyMaterial('20261103', webuntisBase, sams({ passwort: 'falsch' })), 'sams-on password does not affect the key');
   assert(base !== buildCacheKeyMaterial('20261103', webuntisBase, sams({ instanz: 'andere' })), 'sams-on instance does not affect the key');
+  assert(base !== buildCacheKeyMaterial('20261103', webuntisBase, sams({ guthabenAnzeigen: true })), 'the balance switch does not affect the key — a cached answer without balance would be served');
 });
 
 test('REGRESSION: different ccCampus PIN ⇒ different key', () => {
@@ -1705,7 +1721,7 @@ await testAsync('a redirect on the Mensamax plan page is reported as unavailable
 // the instance info starts a session cookie, the login swaps it for a new
 // one, account and orders answer only with the logged-in session. Records
 // every request so tests can check where and how the worker went.
-function samsonServer({ password = 'richtig', orders = [], userId = '8', overrides = {} } = {}) {
+function samsonServer({ password = 'richtig', orders = [], userId = '8', credit = '12,40', overrides = {} } = {}) {
   const calls = [];
   let loggedInSession = null;
   const json = (body, status = 200, cookies = []) => new Response(JSON.stringify(body), {
@@ -1729,7 +1745,7 @@ function samsonServer({ password = 'richtig', orders = [], userId = '8', overrid
       }
       const authed = loggedInSession && String((options.headers || {}).Cookie || '').includes(`PHPSESSID=${loggedInSession}`);
       if (key === 'GET /api/login') {
-        return authed ? json({ uid: userId, creditAmount: '0,00', user: { userId, firstName: 'Kind', email: 'x@example.invalid' }, csrfToken: 'c' }) : json({}, 401);
+        return authed ? json({ uid: userId, creditAmount: credit, user: { userId, firstName: 'Kind', email: 'x@example.invalid', credit }, csrfToken: 'c' }) : json({}, 401);
       }
       if (key === `GET /api/users/${userId}/orders/view`) {
         return authed ? json({ dateFrom: u.searchParams.get('dateFrom'), dateTill: u.searchParams.get('dateTill'), orders }) : json({}, 401);
@@ -1823,6 +1839,35 @@ await testAsync('sams-on: a session cookie with separators from the server is no
   const server = samsonServer({ overrides: { 'GET /api/instance/lessing': () => new Response('{}', { status: 200, headers: [['Set-Cookie', 'PHPSESSID=a b; path=/'], ['Set-Cookie', 'ok=1; path=/']] }) } });
   await lunchVia(server, samsonLunch());
   assertEqual(server.calls[1].cookie, 'ok=1');
+});
+
+// The balance: only read and passed on when switched on for this child.
+await testAsync('sams-on balance switched off: no balance anywhere in the answer', async () => {
+  const server = samsonServer({ credit: '987,65' });
+  const resp = await lunchVia(server, samsonLunch());
+  assert(!('guthaben' in resp) && !('guthabenKnapp' in resp), JSON.stringify(resp));
+  assert(!JSON.stringify(resp).includes('987'), 'the balance leaked into the answer');
+});
+await testAsync('sams-on balance switched on: amount passed on, not highlighted at 5,00 € or more', async () => {
+  for (const credit of ['12,40', '5,00', '1234,00']) {
+    const resp = await lunchVia(samsonServer({ credit }), samsonLunch({ guthabenAnzeigen: true }));
+    assertEqual(`${resp.guthaben} ${resp.guthabenKnapp}`, `${credit} false`);
+  }
+});
+await testAsync('sams-on balance below 5,00 € (or negative) is highlighted', async () => {
+  for (const credit of ['4,99', '0,00', '-3,10']) {
+    const resp = await lunchVia(samsonServer({ credit }), samsonLunch({ guthabenAnzeigen: true }));
+    assertEqual(`${resp.guthaben} ${resp.guthabenKnapp}`, `${credit} true`);
+  }
+});
+await testAsync('sams-on balance in an unexpected format shows as not available, the meal status still works', async () => {
+  const resp = await lunchVia(samsonServer({ credit: '12.40 EUR' }), samsonLunch({ guthabenAnzeigen: true }));
+  assertEqual(resp.guthaben, null);
+  assertEqual(resp.lunch, 'Kein Essen bestellt');
+});
+await testAsync('sams-on balance is not shown when the login failed', async () => {
+  const resp = await lunchVia(samsonServer(), samsonLunch({ guthabenAnzeigen: true, passwort: 'falsch' }));
+  assert(!('guthaben' in resp), JSON.stringify(resp));
 });
 
 await testAsync('a ccCampus child sent to the proxy anyway gets the "runs in the browser" note, no network call', async () => {

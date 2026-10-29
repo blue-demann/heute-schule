@@ -51,7 +51,7 @@ export function buildCacheKeyMaterial(datum, webuntisCfg = {}, lunchCfg = {}) {
       // let it through, it must also be able to affect the key.
       cccampus: { base: cc.base, kundennummer: cc.kundennummer, pin: cc.pin },
       // Must stay in, password included — same reason as for WebUntis.
-      samson: { instanz: sams.instanz, benutzername: sams.benutzername, passwort: sams.passwort },
+      samson: { instanz: sams.instanz, benutzername: sams.benutzername, passwort: sams.passwort, guthabenAnzeigen: sams.guthabenAnzeigen },
     },
   };
   return JSON.stringify(keyFields);
