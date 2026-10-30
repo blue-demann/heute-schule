@@ -203,8 +203,8 @@ export function samsonCredit(data) {
 }
 
 /**
- * Whether the school hides the credit from its users (`hideCredit` in the
- * instance info, e.g. when it bills by invoice): true or false, or null if
+ * Whether sams-on hides the credit from the users of this school
+ * (`hideCredit` in the instance info): true or false, or null if
  * the value is missing from a readable answer in no known form.
  * @param {unknown} info
  * @returns {boolean | null}

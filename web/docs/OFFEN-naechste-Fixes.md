@@ -1,8 +1,8 @@
 # Offene Punkte
 
-HS-OFF · v6 · 2026-10-29 · 4b234ae3 · gültig
+HS-OFF · v7 · 2026-10-30 · 2155dc2e · gültig
 
-**Stand: 29.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 30.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -29,7 +29,10 @@ neuen Gates, siehe unten und
 [PEER-REVIEW-2026-10-09b.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-09b.md).
 Eine achte Runde am 29.10.2026 prüfte die sams-on-Anbindung (Version 0.4.0):
 kein 🔴, Korrekturen am Datenschutztext und Testlücken, siehe unten und
-[Prüfbericht der achten Runde (IDHDKM8)](PEER-REVIEW-2026-10-29.md).
+[Prüfbericht der achten Runde (IDHDKM8)](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-29.md).
+Eine neunte Runde am 30.10.2026 prüfte deren Folge-Fix (Version 0.4.1): kein
+🔴, eine Testlücke beim Logout und kleinere Funde, siehe unten und
+[Prüfbericht der neunten Runde (ID3UKZT)](PEER-REVIEW-2026-10-30.md).
 (Links zu Berichten, die nicht Teil des `web/docs/`-Dumps sind, zeigen
 bewusst auf GitHub statt auf eine relative Datei — dort würde ein
 relativer Link ins Leere laufen.) Alle Berichte bleiben als
@@ -71,6 +74,8 @@ Zeitpunkt-Momentaufnahmen unverändert.
 
 | 🟡 (achte Runde, Prüfbericht IDHDKM8, Funde K-1/B-1, K-2, A-1, A-3, D-1) Datenschutzerklärung, Formular und Doku versprachen, der Proxy frage das sams-on-Guthaben ohne Häkchen „gar nicht ab“ — sams-on schickt es aber bei jeder Anmeldung mit; die 5-€-Schwelle wurde fälschlich als sams-on-eigene Schwelle begründet; Logout, 403 und Zeitüberschreitung ungetestet; die Browser-Funktionen, die bestimmen, welche Zugangsdaten das Gerät verlassen, ungetestet; das Datumsformat der Bestellungen nur angenommen | Text in Datenschutzerklärung (vom User freigegeben), Formular, `PROJEKT.md` und `proxy/README.md` korrigiert: Der Proxy erhält den Kontostand immer und gibt ihn nur bei Häkchen weiter. 5 € als eigene Festlegung. Neue Worker-Tests: Logout mit der angemeldeten Session (auch nach kaputter Antwort), Antwort wartet nicht auf den Logout, 403, Zeitüberschreitung je Anfrage und gemeinsames Zeitlimit. Property-Tests für `extractSamsonInstance` und `lunchRequestFields` (aus `web/index.html` herausgeschnitten), Tests für die Hinweise bei nicht lesbaren Einstellungen. Datum einer Bestellung darf eine Uhrzeit tragen, mit Zeitzone wird abgelehnt. Gegenproben für diese und die nächste Zeile: 19 Mutanten, jeder von mindestens einem Test erkannt (29.10.2026, Version 0.4.1) |
 | 🟢 (dieselbe Runde, A-4, A-5/K-5, B-3, C-1 bis C-4, D-2, D-3, K-3, K-4, K-6) Bis zu rund 50 s Wartezeit bei hängendem sams-on; Actions an beweglichen Tags; „Guthaben 0,00 € — bald aufladen“ bei Schulen, die das Guthaben ausblenden; „Instanz“ als Entwicklersprache; Speichersperre ohne Kindnamen; falscher Hinweis bei gesperrtem Speicher; Fehlertext nicht ans Feld gebunden (WCAG 2.2, 1.3.1 A, 4.1.3 AA); „Ei“ als Allergen-Code entfernt, ungültige Zeichenreferenz warf; gemischte Anführungszeichen; CORS-Begründung für sams-on ungenau; veralteter Stand und Kopfkommentar | Gemeinsames Zeitlimit von 15 s, Logout per `ctx.waitUntil` nach der Antwort. Actions auf Commit-SHAs, Dependabot für `github-actions`. `hideCredit` aus der Instanz-Info: „Guthaben wird bei dieser Schule nicht geführt“, ohne Betrag. „Schule … nicht gefunden — Adresse in den Einstellungen prüfen“. Speichersperre nennt das Kind und springt zum Feld. Eigener Hinweis bei gesperrtem Speicher. Fehlertext als dauerhaft vorhandene `role="alert"`-Region, Hinweise per `aria-describedby`. Allergen-Codes nur noch einzelne Buchstaben oder Zahlen mit optionalem Buchstaben, Zeichenreferenzen außerhalb von Unicode bleiben stehen. Doku korrigiert (29.10.2026, Version 0.4.1) |
+| 🟡 (neunte Runde, [Prüfbericht ID3UKZT](PEER-REVIEW-2026-10-30.md), Fund A-1) Der Test „the logout still goes out“ erkannte nicht, wenn der Logout an das gemeinsame Zeitlimit gehängt wird: Das Test-`fetch` nahm auch Anfragen mit bereits abgebrochenem Signal an, das echte nicht | Das Test-`fetch` bricht solche Anfragen ab wie das echte. Gegenprobe: Logout mit dem Signal des Zeitlimits macht genau diesen Test rot, der unveränderte Code bleibt grün (30.10.2026, Version 0.4.2) |
+| 🟢 (dieselbe Runde, A-2, A-4, B-1, C-1 bis C-3, D-2, D-3, K-1 bis K-5) Speichersperre selbst ungetestet; dass `hideCredit` nur bei eingeschaltetem Guthaben gelesen wird, ungetestet; fehlt die Schuladresse, hörte ein Screenreader keine Begründung (Toast ohne Live-Region, WCAG 2.2, 4.1.3 AA; Feld ohne Fehlerhinweis, 3.3.1 A); `role="alert"` an per `hidden` umgeschalteten Start-Hinweisen; „Guthaben wird … nicht geführt“ behauptete mehr, als `hideCredit` sagt; Zeichenreferenzen wurden doppelt dekodiert (`&#38;lt;` → `<`); Unschärfen in Datenschutzerklärung, PHP-Quelle, Testetiketten und Zahlen in `PROJEKT.md`; aus `web/` entfernte Dateien bleiben bis zu einer Woche im Cloudflare-Cache | Prüfung beim Speichern als eigene Funktion `samsonAddressProblem`, Meldung am Feld als `samsonInstanceFieldError`, beide mit Property-Tests über die Einfüge-Klassen. Fehlt die Adresse, sagt das Feld nach dem Speicherversuch „Bitte die Adresse Deiner Schule bei sams-on eintragen …“ und trägt `aria-invalid="true"`. Der Toast ist eine dauerhafte Region mit `role="status"`. Start-Hinweise ohne `role="alert"`, mit Test. Anzeige „Diese Schule zeigt das Guthaben bei sams-on nicht an“. Dekodieren in einem Durchgang, Property-Test „kodieren und dekodieren gibt den Text zurück“. Datenschutzerklärung (vom User freigegeben): Kontonummer nur für die Bestellabfrage, sams-on im Technik-Absatz. PHP-Quellen korrigiert, siehe Punkt 5. Cache-Lehre in `PROJEKT.md` Abschnitt 10, Kontrolle als Punkt 7. Kommentar, dass sams-on ohne seinen Content-Type leer antwortet; Storno als offene Frage in Punkt 5. Mutanten: Logout mit Zeitlimit, `hideCredit` ohne Schalter gelesen, Dekodieren in drei Durchgängen, Speichersperre aus, keine Meldung bei fehlender Adresse, fehlend/ungültig vertauscht, Toast als neues Element, Toast ohne `role`, `role="alert"` am Start-Hinweis, Toast wird nie geleert — je mindestens ein Test rot. Grün bleiben die Verdrahtung im Klick-Handler (Feld markieren) und der Anzeigetext; beide im Browser geprüft (Feld: `aria-invalid="true"`, Meldung, Fokus; Karte zeigt den neuen Text). Bewusst nicht umgesetzt: eine Passwort-Empfehlung an die Familien wegen der PHP-Version bei sams-on (B-2) — das ist Sache des Anbieters, nicht dieser App. Zurückgestellt: A-3 (Punkt 6), A-5 und D-1 (Punkt 5) (30.10.2026, Version 0.4.2) |
 
 ## Noch offen
 
@@ -116,7 +121,8 @@ Zeitpunkt-Momentaufnahmen unverändert.
    - Kommt `dayId` als reines Datum? Seit 0.4.1 ist auch eine Uhrzeit dahinter
      erlaubt; mit Zeitzone oder in anderer Form zeigt die Karte eine
      Fehlermeldung statt eines falschen Status.
-   - Tauchen stornierte Bestellungen in `orders/view` auf?
+   - Tauchen stornierte Bestellungen in `orders/view` auf? Der Code liest kein
+     Statusfeld und würde sie als „Essen bestellt“ zeigen (neunte Runde, D-3).
    - Beendet ein Login über den Proxy eine gleichzeitig offene Sitzung der
      Eltern im sams-on-Browser?
    - Guthaben: Format `creditAmount` („0,00“) am Testkonto gesehen; mit
@@ -125,16 +131,39 @@ Zeitpunkt-Momentaufnahmen unverändert.
      der Familie funktioniert (Login, „Kein Essen bestellt“, Guthaben wie
      erwartet); eine Sperre wie bei ccCampus gibt es nicht. Eine unbekannte
      Schule beantwortet sams-on mit einer Weiterleitung (302) auf
-     `www.sams-on.de`; die Meldung „Schule … nicht gefunden“ dafür steht im
-     Repo seit 29.10. und ist live ab dem Deploy von 0.4.1.
+     `www.sams-on.de`; die Meldung „Schule … nicht gefunden“ dafür ist seit
+     dem Deploy von 0.4.1 am 30.10. live (in der neunten Runde bestätigt).
+   - Fehlt `hideCredit` in der Instanz-Info oder ist es `null`, zeigt die
+     sams-on-Oberfläche den Betrag nicht an (sie prüft auf „gleich false“),
+     der Proxy aber schon. Mit einer echten Schule klären, was dort steht,
+     dann angleichen (neunte Runde, D-1).
+   - Läuft schon der Login ins gemeinsame Zeitlimit, nachdem sams-on ihn
+     verarbeitet hat, geht kein Logout raus; die Sitzung läuft dann von
+     selbst ab. Für die Frage nach der Sitzung der Eltern (oben) gut zu
+     wissen (neunte Runde, A-5).
    - Mensamax-Anbindung entfernen, sobald sie niemand mehr braucht.
    - PHP bei sams-on: Der Server meldet im Header `X-Powered-By: PHP/8.2.33`.
-     Die kritischen PHP-Lücken CVE-2026-109618/-109619 (Fixes seit
-     21.10.2026) sind im 8.2-Zweig erst ab 8.2.35 behoben
-     ([Unit 42](https://unit42.paloaltonetworks.com/cve-2026-109618-cve-2026-109619.md?lg=en&pdf=print)).
-     Die Versionsnummer ist ein Indiz, kein Beweis: AlmaLinux-Pakete können
-     Korrekturen zurückportieren, ohne sie zu ändern. Der User weist den
-     Betreiber darauf hin.
+     Die kritischen PHP-Lücken CVE-2026-109618/-109619 sind im 8.2-Zweig
+     erst ab 8.2.35 behoben (Sicherheitshinweise der PHP-Entwickler
+     [GHSA-w8hw-w9fx-j79w](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w)
+     und [GHSA-6wmf-4rv5-p3rp](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp)
+     vom 21.10.2026; 8.2.35 laut [php.net-Changelog](https://www.php.net/ChangeLog-8.php#8.2.35)
+     am 22.10.). Laut [Unit 42](https://unit42.paloaltonetworks.com/cve-2026-109618-cve-2026-109619/)
+     werden sie seit 29.10. aktiv ausgenutzt (dort gegen
+     PAN-OS-Verwaltungsoberflächen). Die Versionsnummer ist ein Indiz, kein
+     Beweis: AlmaLinux-Pakete können Korrekturen zurückportieren, ohne sie zu
+     ändern. Der User weist den Betreiber darauf hin.
+6. **🟢 Zeitlimit für die ganze Antwort auch bei WebUntis und Mensamax**
+   (neunte Runde, A-3). Der Einzel-Timeout in `fetchWithTimeout` endet, sobald
+   die Header da sind; ein Server, der danach den Inhalt nicht zu Ende
+   schickt, hält den Abruf unbegrenzt fest. sams-on fängt das mit seinem
+   gemeinsamen Zeitlimit ab, WebUntis (bis zu sechs Abrufe nacheinander) und
+   Mensamax nicht. Dasselbe Muster dort übernehmen; ändert das Verhalten bei
+   zwei Anbietern, deshalb ein eigener Schritt.
+7. **Kontrolle ab 06.11.2026:** Der entfernte Bericht der siebten Runde
+   (`/docs/PEER-REVIEW-2026-10-09b.md`) liefert ohne Cache-Buster `404`
+   (Cloudflare hält Dateien bis zu einer Woche, siehe `PROJEKT.md`
+   Abschnitt 10). Danach diesen Punkt streichen.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

@@ -1060,6 +1060,32 @@ test('numeric character references: valid ones are decoded, the rest stays as wr
     assertEqual(decodeHtmlEntities(`a${ref}b`), `a${ref}b`);
   }
 });
+// Encoding a text and decoding it gives back exactly that text — also when
+// the text itself holds something that looks like an entity ("&lt;",
+// "&#38;"). The text is built from such pieces; "&" and "<" are always
+// encoded (as the provider must), in a randomly chosen form, the rest
+// mostly stays as written.
+const ENTITY_LOOKALIKE_PIECES = ['&', 'lt;', 'amp;', '#38;', '#x26;', 'auml;', '#228;', '<', 'ä', ';', 'Reis ', 'a'];
+const encodeChar = (random, ch) => {
+  const code = ch.codePointAt(0);
+  const numeric = [`&#${code};`, `&#x${code.toString(16)};`];
+  if (ch === '&') return pick(random, [...numeric, '&amp;']);
+  if (ch === '<') return pick(random, [...numeric, '&lt;']);
+  if (ch === 'ä') return pick(random, [...numeric, '&auml;', ch]);
+  return random() < 0.8 ? ch : pick(random, numeric);
+};
+forAll(
+  'decoding an encoded text gives back exactly that text, even when it looks like an entity itself',
+  (random) => {
+    const text = Array.from({ length: randomInt(random, 1, 8) }, () => pick(random, ENTITY_LOOKALIKE_PIECES)).join('');
+    return [text, [...text].map((ch) => encodeChar(random, ch)).join('')];
+  },
+  ([text, encoded]) => assertEqual(decodeHtmlEntities(encoded), text)
+);
+test('a reference to "&" is not read a second time', () => {
+  assertEqual(decodeHtmlEntities('&#38;lt;'), '&lt;');
+  assertEqual(decodeHtmlEntities('&amp;#228;'), '&#228;');
+});
 test('other tags are removed, encoded markup stays text', () => {
   assertEqual(samsonMealName('<b>Pizza</b> <span class="x">Margherita</span>'), 'Pizza Margherita');
   assertEqual(samsonMealName('&lt;script&gt;'), '<script>');
@@ -1254,9 +1280,12 @@ function makeCtx() {
 // to canned responses instead of the real network. Throws loudly on an
 // unexpected call instead of silently reaching the real internet — tests
 // that expect zero network calls pass an empty handler list on purpose.
+// Like the real fetch(), a request whose signal is already aborted never
+// reaches the server.
 const realFetch = globalThis.fetch;
 function mockFetch(handlers) {
   globalThis.fetch = async (url, options = {}) => {
+    if (options.signal?.aborted) throw options.signal.reason;
     const urlStr = String(url);
     const handler = handlers.find((h) => h.test(urlStr, options));
     if (!handler) throw new Error(`unexpected fetch() in test: ${urlStr}`);
@@ -2006,10 +2035,19 @@ await testAsync('sams-on balance switched off: no balance anywhere in the answer
   assert(!('guthaben' in resp) && !('guthabenKnapp' in resp) && !('guthabenGefuehrt' in resp), JSON.stringify(resp));
   assert(!JSON.stringify(resp).includes('987'), 'the balance leaked into the answer');
 });
-await testAsync('sams-on balance switched off: an unreadable instance info does not matter', async () => {
-  const server = samsonServer({ overrides: { 'GET /api/instance/lessing': () => new Response('<html>', { status: 200 }) } });
-  const resp = await lunchVia(server, samsonLunch());
-  assertEqual(`${resp.lunch} ${resp.lunchFehler}`, 'Kein Essen bestellt null');
+await testAsync('sams-on balance switched off: the instance info is not even read', async () => {
+  let reads = 0;
+  const instanceInfo = () => {
+    const resp = new Response('<html>', { status: 200 });
+    const text = resp.text.bind(resp);
+    resp.text = () => { reads++; return text(); };
+    return resp;
+  };
+  const off = await lunchVia(samsonServer({ overrides: { 'GET /api/instance/lessing': instanceInfo } }), samsonLunch());
+  assertEqual(`${off.lunch} ${off.lunchFehler} ${reads}`, 'Kein Essen bestellt null 0');
+  // Counter-check: switched on, the same spy sees the read.
+  await lunchVia(samsonServer({ overrides: { 'GET /api/instance/lessing': instanceInfo } }), samsonLunch({ guthabenAnzeigen: true }));
+  assertEqual(reads, 1);
 });
 await testAsync('sams-on balance at a school that hides it: "not kept", no amount anywhere', async () => {
   for (const hideCredit of ['1', 1, true]) {
@@ -2641,6 +2679,86 @@ for (const [className, provider, shape, ownMarker] of LUNCH_PROVIDERS) {
     }
   );
 }
+
+console.log('\nProperty: the sams-on school address — what the field says, and what stops saving');
+
+const form = inlineScriptDefinitions([
+  'SAMSON_INSTANCE', 'SAMSON_NOT_A_SCHOOL', 'SAMSON_INSTANCE_ERROR', 'SAMSON_INSTANCE_MISSING',
+  'extractSamsonInstance', 'samsonInstanceFieldError', 'samsonAddressProblem',
+]);
+const samsonChild = (id, instanz) => ({ id, name: `Kind ${id}`, lunch: { provider: 'samson', samson: { instanz, benutzername: 'u', passwort: 'p' } } });
+for (const [className, paste] of SAMSON_PASTES) {
+  forAll(
+    `${className}: no message at the field, saving goes ahead`,
+    (random) => [paste(randomSchool(random), random), random() < 0.5],
+    ([input, flagged]) => {
+      assertEqual(form.samsonInstanceFieldError(input, flagged), '');
+      assertEqual(form.samsonAddressProblem([samsonChild('a', input)]), null);
+    }
+  );
+}
+for (const [className, paste] of SAMSON_NOT_USABLE) {
+  forAll(
+    `${className}: "no sams-on address" at the field, saving stops`,
+    (random) => [paste(randomSchool(random), random), random() < 0.5],
+    ([input, flagged]) => {
+      assertEqual(form.samsonInstanceFieldError(input, flagged), form.SAMSON_INSTANCE_ERROR);
+      const problem = form.samsonAddressProblem([samsonChild('a', input)]);
+      assertEqual(`${problem && problem.child.id} ${problem && problem.missing}`, 'a false');
+    }
+  );
+}
+test('an empty address: no message while typing, "please enter" once saving asked for it, saving stops', () => {
+  for (const input of ['', '   ', null, undefined]) {
+    assertEqual(form.samsonInstanceFieldError(input, false), '');
+    assertEqual(form.samsonInstanceFieldError(input, true), form.SAMSON_INSTANCE_MISSING);
+    const problem = form.samsonAddressProblem([samsonChild('a', input)]);
+    assertEqual(`${problem && problem.child.id} ${problem && problem.missing}`, 'a true');
+  }
+});
+test('children without sams-on never stop saving, whatever their sams-on block holds', () => {
+  const others = [
+    { id: 'm', lunch: { provider: 'mensamax', samson: { instanz: '' } } },
+    { id: 'n', lunch: { samson: { instanz: 'evil.example/' } } },
+    { id: 'c', lunch: { provider: 'cccampus' } },
+    { id: 'x' },
+  ];
+  assertEqual(form.samsonAddressProblem(others), null);
+  // Counter-check: the same list with one broken sams-on child stops.
+  assertEqual(form.samsonAddressProblem([...others, samsonChild('s', '')]).child.id, 's');
+});
+test('with several children, the first unusable sams-on child is the one named', () => {
+  const children = [{ id: 'm', lunch: { provider: 'mensamax' } }, samsonChild('ok', 'lessing'), samsonChild('kaputt', 'x.example'), samsonChild('leer', '')];
+  const problem = form.samsonAddressProblem(children);
+  assertEqual(`${problem.child.id} ${problem.missing}`, 'kaputt false');
+});
+
+console.log('\nScreen readers hear the toast; start notices are no alerts');
+
+const indexHtml = readFileSync(new URL('./web/index.html', import.meta.url), 'utf-8');
+test('the toast writes into one persistent status region', () => {
+  const tag = indexHtml.match(/<div[^>]*\bid="toast"[^>]*>/);
+  assert(tag && /\brole="status"/.test(tag[0]), `toast region: ${tag && tag[0]}`);
+  const region = { textContent: '' };
+  const pending = [];
+  const page = inlineScriptDefinitions(['toast'], {
+    document: { getElementById: (id) => (id === 'toast' ? region : null), createElement: () => { throw new Error('toast creates a new element'); } },
+    setTimeout: (fn) => { pending.push(fn); return pending.length; },
+    clearTimeout() {},
+    toastTimer: undefined,
+  });
+  page.toast('⚠ Bei „Ben“ fehlt die sams-on-Adresse der Schule');
+  assertEqual(region.textContent, '⚠ Bei „Ben“ fehlt die sams-on-Adresse der Schule');
+  pending.forEach((fn) => fn());
+  assertEqual(region.textContent, '');
+});
+const alertsThatStartHidden = (html) => (html.match(/<[a-z]+\b[^>]*>/g) || [])
+  .filter((tag) => /\brole="alert"/.test(tag) && /\bclass="[^"]*\bhidden\b/.test(tag));
+test('no element that starts hidden carries role="alert"', () => {
+  assertEqual(alertsThatStartHidden(indexHtml).join(' '), '');
+  // Counter-check: the check finds the pattern, in either attribute order.
+  assertEqual(alertsThatStartHidden('<p class="demo-hinweis hidden" id="x" role="alert"><p role="alert" class="hidden">').length, 2);
+});
 
 console.log('\nStored settings that cannot be read are never overwritten silently');
 

@@ -457,6 +457,7 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
 // Read-only: no request here can order, cancel or change anything.
 
 // What the sams-on web app sends as Content-Type (sic, leading slash).
+// Without it, sams-on answers the instance info with an empty body.
 const SAMSON_CONTENT_TYPE = '/application/vnd.akquinet.samson.v2';
 
 // Cookie name/value as they may go into our own Cookie header: no
@@ -507,7 +508,7 @@ const SAMSON_BUDGET_MS = 15000;
 
 /**
  * @param {string | null} amount  e.g. "12,40"
- * @param {boolean | null} hidden  whether the school hides the credit; null if unknown
+ * @param {boolean | null} hidden  whether sams-on hides the credit at this school; null if unknown
  * @returns {SamsonBalance}
  */
 function samsonBalance(amount, hidden) {
@@ -547,9 +548,10 @@ async function getLunchStatusSamson(samsonCfg, datumStr, ctx) {
     if (unknownSchool) throw new Error(`sams-on: Schule „${instanceName}“ nicht gefunden — Adresse in den Einstellungen prüfen`);
     if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
     collectCookies(jar, instanceResp);
-    // Whether the school keeps a balance for its users at all — only looked
-    // at when the balance is to be shown. An unreadable instance info makes
-    // the balance "not available", it does not fail the meal status.
+    // Whether sams-on shows the balance to users of this school at all —
+    // only read when the balance is to be shown. An unreadable instance
+    // info makes the balance "not available", it does not fail the meal
+    // status.
     let creditHidden = /** @type {boolean | null} */ (false);
     if (guthabenAnzeigen) {
       try {

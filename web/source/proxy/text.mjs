@@ -17,10 +17,13 @@ const HTML_ENTITIES = {
  * @returns {string}
  */
 export function decodeHtmlEntities(str) {
-  return str
-    .replace(/&#(\d+);/g, (m, dec) => codePoint(m, parseInt(dec, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (m, hex) => codePoint(m, parseInt(hex, 16)))
-    .replace(/&([a-zA-Z]+);/g, (m, name) => (Object.hasOwn(HTML_ENTITIES, name) ? HTML_ENTITIES[/** @type {keyof typeof HTML_ENTITIES} */ (name)] : m));
+  // One pass over the text: a character a reference stands for is never
+  // read again, so "&#38;lt;" becomes "&lt;", not "<".
+  return str.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g, (m, dec, hex, name) => {
+    if (dec !== undefined) return codePoint(m, parseInt(dec, 10));
+    if (hex !== undefined) return codePoint(m, parseInt(hex, 16));
+    return Object.hasOwn(HTML_ENTITIES, name) ? HTML_ENTITIES[/** @type {keyof typeof HTML_ENTITIES} */ (name)] : m;
+  });
 }
 
 /**

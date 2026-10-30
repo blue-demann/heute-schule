@@ -68,11 +68,11 @@
       Zugangsdaten — sie laufen nur "durch". Bei sams-on fragt der Proxy ab,
       ob und welches Essen für den Tag bestellt ist. sams-on schickt bei der
       Anmeldung immer auch Kontodaten mit (etwa Name, E-Mail-Adresse,
-      Ausweisnummer und den Kontostand). Der Proxy gibt davon nur den
-      Kontostand weiter, und den nur, wenn du für das Kind „Guthaben auf der
+      Ausweisnummer und den Kontostand). Der Proxy verwendet davon nur die Kontonummer, um die
+      Bestellungen abzufragen, und gibt nur den Kontostand weiter, und den nur, wenn du für das Kind „Guthaben auf der
       Karte anzeigen“ eingeschaltet hast; alles andere verwirft er sofort, ohne
       es weiterzugeben oder zu speichern. Aus technischen Gründen
-      (Serverschutz, um WebUntis/Mensamax nicht bei jedem Klick neu anzufragen)
+      (Serverschutz, um WebUntis/Mensamax/sams-on nicht bei jedem Klick neu anzufragen)
       wird nur das Abfrage-Ergebnis (Stundenplan, Schulessen-Status und, falls
       eingeschaltet, das sams-on-Guthaben) für ca. 4 Minuten
       zwischengespeichert.
@@ -81,7 +81,7 @@
         Proxy die Zugangsdaten weiterreichen kann, muss er sie unterwegs
         <em>sehen</em> können. Die Transportverschlüsselung (HTTPS) endet bei
         Cloudflare, wird dort für den Weiterversand kurz aufgelöst und zu
-        WebUntis bzw. Mensamax neu aufgebaut. Der Betreiber dieser Seite
+        WebUntis, Mensamax bzw. sams-on neu aufgebaut. Der Betreiber dieser Seite
         <em>könnte</em> die Zugangsdaten an dieser Stelle also technisch
         mitlesen. Er tut es nicht — es wird nichts protokolliert und nichts
         gespeichert — aber du sollst dich nicht darauf verlassen müssen:

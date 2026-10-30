@@ -57,8 +57,8 @@ interface StatusRequest {
 }
 
 // The sams-on balance as the card shows it: the amount as sams-on writes
-// it, or null if not available; `gefuehrt` false when the school keeps no
-// balance for its users (then no amount).
+// it, or null if not available; `gefuehrt` false when sams-on shows no
+// balance to users of this school (`hideCredit`; then no amount).
 interface SamsonBalance {
   betrag: string | null;
   knapp: boolean;

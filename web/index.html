@@ -191,6 +191,7 @@
     background:var(--text); color:var(--bg); padding:.7rem 1rem; border-radius:10px; font-size:.85rem;
     text-align:center; z-index:20;
   }
+  .toast:empty{padding:0; background:none;}
 </style>
 </head>
 <body>
@@ -248,12 +249,12 @@
       Verfügbarkeit. Es kann jederzeit geändert oder abgeschaltet werden.
     </p>
 
-    <p class="demo-hinweis hidden" id="configUnreadable" role="alert">
+    <p class="demo-hinweis hidden" id="configUnreadable">
       ⚠ Auf diesem Gerät sind bereits Einstellungen gespeichert, sie ließen
       sich aber nicht lesen. Sie sind noch vorhanden und werden erst
       überschrieben, wenn Du neu speicherst und das ausdrücklich bestätigst.
     </p>
-    <p class="demo-hinweis hidden" id="storageBlocked" role="alert">
+    <p class="demo-hinweis hidden" id="storageBlocked">
       ⚠ Dieser Browser lässt die Seite gerade nicht auf ihren Speicher
       zugreifen, etwa im privaten Modus oder wenn Website-Daten blockiert
       sind. Ob hier schon Einstellungen gespeichert sind, lässt sich so nicht
@@ -297,6 +298,10 @@
   </section>
 
 </main>
+
+<!-- One persistent live region: screen readers announce a change of its
+     text, not an element that appears with its text already in it. -->
+<div class="toast" id="toast" role="status"></div>
 
 <footer class="legal">
   <a href="ueber.html">Über Heute Schule</a> · <a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a>
@@ -664,6 +669,29 @@
     return SAMSON_INSTANCE.test(host) && SAMSON_NOT_A_SCHOOL.indexOf(host) === -1 ? host : null;
   }
 
+  var SAMSON_INSTANCE_MISSING = 'Bitte die Adresse Deiner Schule bei sams-on eintragen, '
+    + 'z. B. https://lessing.sams-on.de/… oder nur lessing.';
+  // What the school-address field says about its content, '' if nothing.
+  // An empty field is only an error once saving has asked for an address
+  // (flagged).
+  function samsonInstanceFieldError(raw, flagged){
+    var value = String(raw || '').trim();
+    if (value === '') return flagged ? SAMSON_INSTANCE_MISSING : '';
+    return extractSamsonInstance(value) === null ? SAMSON_INSTANCE_ERROR : '';
+  }
+
+  // The first sams-on child whose school address is unusable, and whether
+  // it is missing or malformed; null if every sams-on child has a usable one.
+  function samsonAddressProblem(children){
+    for (var i = 0; i < children.length; i++){
+      var c = children[i];
+      if (!c.lunch || c.lunch.provider !== 'samson') continue;
+      var raw = c.lunch.samson && c.lunch.samson.instanz;
+      if (extractSamsonInstance(raw) === null) return { child: c, missing: String(raw || '').trim() === '' };
+    }
+    return null;
+  }
+
   var cfg = loadConfig();
   var activeOffset = 0;  // 0 = today, otherwise the day offset from today
   var windowIndex = 1;  // left date tile = the nth upcoming school day
@@ -817,11 +845,10 @@
       if (input.dataset.field === 'lunch.samson.instanz'){
         var instanceError = node.querySelector('[data-samson-instance-error]');
         input.addEventListener('blur', function(){
-          var raw = input.value.trim();
-          var instance = extractSamsonInstance(raw);
-          var invalid = raw !== '' && instance === null;
-          instanceError.textContent = invalid ? SAMSON_INSTANCE_ERROR : '';
-          input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+          var message = samsonInstanceFieldError(input.value, input.getAttribute('aria-invalid') === 'true');
+          instanceError.textContent = message;
+          input.setAttribute('aria-invalid', message ? 'true' : 'false');
+          var instance = extractSamsonInstance(input.value);
           if (instance && instance !== input.value){
             input.value = instance;
             setDeep(child, 'lunch.samson.instanz', instance);
@@ -915,20 +942,18 @@
   btnSave.addEventListener('click', function(){
     // A sams-on child needs a usable school address before anything is
     // saved — a typo shows up here, not as an error card every morning.
-    var unusable = cfg.children.filter(function(c){
-      return c.lunch && c.lunch.provider === 'samson'
-        && extractSamsonInstance(c.lunch.samson && c.lunch.samson.instanz) === null;
-    });
-    if (unusable.length){
-      var first = unusable[0];
-      var who = first.name ? '„' + first.name + '“' : 'einem Kind';
-      var missing = String((first.lunch.samson && first.lunch.samson.instanz) || '').trim() === '';
-      toast(missing
+    var problem = samsonAddressProblem(cfg.children);
+    if (problem){
+      var who = problem.child.name ? '„' + problem.child.name + '“' : 'einem Kind';
+      toast(problem.missing
         ? '⚠ Bei ' + who + ' fehlt die sams-on-Adresse der Schule (z. B. https://lessing.sams-on.de/… oder lessing).'
         : '⚠ Die sams-on-Adresse bei ' + who + ' ist keine gültige Adresse, bitte prüfen.');
-      // Takes the parent to the field, which may be far down a long form.
-      var field = childrenSetup.querySelector('[data-id="' + first.id + '"] [data-samson-instance]');
+      // Takes the parent to the field, which may be far down a long form,
+      // and has it say what is wrong there too (flagged, so an empty field
+      // counts).
+      var field = childrenSetup.querySelector('[data-id="' + problem.child.id + '"] [data-samson-instance]');
       if (field){
+        field.setAttribute('aria-invalid', 'true');
         field.dispatchEvent(new Event('blur'));
         field.focus();
       }
@@ -1121,9 +1146,9 @@
 
     // Only in the answer when switched on for this child (sams-on).
     if (Object.prototype.hasOwnProperty.call(data, 'guthaben')){
-      var notKept = data.guthabenGefuehrt === false; // e.g. a school that bills by invoice
-      balanceEl.className = 'lunch' + (notKept ? '' : data.guthaben === null ? ' err' : data.guthabenKnapp ? ' warn' : '');
-      balanceEl.textContent = notKept ? '💶 Guthaben wird bei dieser Schule nicht geführt'
+      var notShown = data.guthabenGefuehrt === false; // sams-on shows no balance at this school
+      balanceEl.className = 'lunch' + (notShown ? '' : data.guthaben === null ? ' err' : data.guthabenKnapp ? ' warn' : '');
+      balanceEl.textContent = notShown ? '💶 Diese Schule zeigt das Guthaben bei sams-on nicht an'
         : data.guthaben === null ? '💶 Guthaben nicht abrufbar'
           : '💶 Guthaben: ' + data.guthaben + ' €' + (data.guthabenKnapp ? ' — bald aufladen' : '');
     }
@@ -1432,14 +1457,10 @@
   // ── Toast ──
   var toastTimer;
   function toast(msg){
-    var el = document.querySelector('.toast');
-    if (el) el.remove();
-    el = document.createElement('div');
-    el.className = 'toast';
+    var el = document.getElementById('toast');
     el.textContent = msg;
-    document.body.appendChild(el);
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function(){ el.remove(); }, 3200);
+    toastTimer = setTimeout(function(){ el.textContent = ''; }, 3200);
   }
 
   // ── Start ──
