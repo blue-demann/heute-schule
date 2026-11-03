@@ -1,8 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v7 · 2026-10-30 · 3b1dbc71 · gültig
+HS-PRJ · v8 · 2026-11-03 · 10fbb68c · gültig
 
-**Stand: 30.10.2026 · Version 0.4.2**
+**Stand: 03.11.2026 · Version 0.4.3**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -795,6 +795,11 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   das Test-`fetch` lehnt abgebrochene Anfragen ab wie das echte.
   Datenschutzerklärung präzisiert (Kontonummer für die Bestellabfrage,
   sams-on im Technik-Absatz). Cache-Lehre im Deploy-Abschnitt.
+- **Kompaktere Karten** (03.11.2026, Version 0.4.3) — Das sams-on-Guthaben
+  steht klein unter dem Login-Link statt als eigene Zeile, knapp in Orange,
+  nicht abrufbar in Rot; „sams-on zeigt kein Guthaben“, wenn die Schule es
+  ausblendet. Stundenzeilen und der Bereich der ausgeblendeten Fächer mit
+  weniger Abstand, damit zwei Stundenpläne eher auf einen Bildschirm passen.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen
