@@ -1,8 +1,8 @@
 # Offene Punkte
 
-HS-OFF · v7 · 2026-10-30 · 2155dc2e · gültig
+HS-OFF · v8 · 2026-11-09 · 51c20f28 · gültig
 
-**Stand: 30.10.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 09.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -76,6 +76,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟢 (dieselbe Runde, A-4, A-5/K-5, B-3, C-1 bis C-4, D-2, D-3, K-3, K-4, K-6) Bis zu rund 50 s Wartezeit bei hängendem sams-on; Actions an beweglichen Tags; „Guthaben 0,00 € — bald aufladen“ bei Schulen, die das Guthaben ausblenden; „Instanz“ als Entwicklersprache; Speichersperre ohne Kindnamen; falscher Hinweis bei gesperrtem Speicher; Fehlertext nicht ans Feld gebunden (WCAG 2.2, 1.3.1 A, 4.1.3 AA); „Ei“ als Allergen-Code entfernt, ungültige Zeichenreferenz warf; gemischte Anführungszeichen; CORS-Begründung für sams-on ungenau; veralteter Stand und Kopfkommentar | Gemeinsames Zeitlimit von 15 s, Logout per `ctx.waitUntil` nach der Antwort. Actions auf Commit-SHAs, Dependabot für `github-actions`. `hideCredit` aus der Instanz-Info: „Guthaben wird bei dieser Schule nicht geführt“, ohne Betrag. „Schule … nicht gefunden — Adresse in den Einstellungen prüfen“. Speichersperre nennt das Kind und springt zum Feld. Eigener Hinweis bei gesperrtem Speicher. Fehlertext als dauerhaft vorhandene `role="alert"`-Region, Hinweise per `aria-describedby`. Allergen-Codes nur noch einzelne Buchstaben oder Zahlen mit optionalem Buchstaben, Zeichenreferenzen außerhalb von Unicode bleiben stehen. Doku korrigiert (29.10.2026, Version 0.4.1) |
 | 🟡 (neunte Runde, [Prüfbericht ID3UKZT](PEER-REVIEW-2026-10-30.md), Fund A-1) Der Test „the logout still goes out“ erkannte nicht, wenn der Logout an das gemeinsame Zeitlimit gehängt wird: Das Test-`fetch` nahm auch Anfragen mit bereits abgebrochenem Signal an, das echte nicht | Das Test-`fetch` bricht solche Anfragen ab wie das echte. Gegenprobe: Logout mit dem Signal des Zeitlimits macht genau diesen Test rot, der unveränderte Code bleibt grün (30.10.2026, Version 0.4.2) |
 | 🟢 (dieselbe Runde, A-2, A-4, B-1, C-1 bis C-3, D-2, D-3, K-1 bis K-5) Speichersperre selbst ungetestet; dass `hideCredit` nur bei eingeschaltetem Guthaben gelesen wird, ungetestet; fehlt die Schuladresse, hörte ein Screenreader keine Begründung (Toast ohne Live-Region, WCAG 2.2, 4.1.3 AA; Feld ohne Fehlerhinweis, 3.3.1 A); `role="alert"` an per `hidden` umgeschalteten Start-Hinweisen; „Guthaben wird … nicht geführt“ behauptete mehr, als `hideCredit` sagt; Zeichenreferenzen wurden doppelt dekodiert (`&#38;lt;` → `<`); Unschärfen in Datenschutzerklärung, PHP-Quelle, Testetiketten und Zahlen in `PROJEKT.md`; aus `web/` entfernte Dateien bleiben bis zu einer Woche im Cloudflare-Cache | Prüfung beim Speichern als eigene Funktion `samsonAddressProblem`, Meldung am Feld als `samsonInstanceFieldError`, beide mit Property-Tests über die Einfüge-Klassen. Fehlt die Adresse, sagt das Feld nach dem Speicherversuch „Bitte die Adresse Deiner Schule bei sams-on eintragen …“ und trägt `aria-invalid="true"`. Der Toast ist eine dauerhafte Region mit `role="status"`. Start-Hinweise ohne `role="alert"`, mit Test. Anzeige „Diese Schule zeigt das Guthaben bei sams-on nicht an“. Dekodieren in einem Durchgang, Property-Test „kodieren und dekodieren gibt den Text zurück“. Datenschutzerklärung (vom User freigegeben): Kontonummer nur für die Bestellabfrage, sams-on im Technik-Absatz. PHP-Quellen korrigiert, siehe Punkt 5. Cache-Lehre in `PROJEKT.md` Abschnitt 10, Kontrolle als Punkt 7. Kommentar, dass sams-on ohne seinen Content-Type leer antwortet; Storno als offene Frage in Punkt 5. Mutanten: Logout mit Zeitlimit, `hideCredit` ohne Schalter gelesen, Dekodieren in drei Durchgängen, Speichersperre aus, keine Meldung bei fehlender Adresse, fehlend/ungültig vertauscht, Toast als neues Element, Toast ohne `role`, `role="alert"` am Start-Hinweis, Toast wird nie geleert — je mindestens ein Test rot. Grün bleiben die Verdrahtung im Klick-Handler (Feld markieren) und der Anzeigetext; beide im Browser geprüft (Feld: `aria-invalid="true"`, Meldung, Fokus; Karte zeigt den neuen Text). Bewusst nicht umgesetzt: eine Passwort-Empfehlung an die Familien wegen der PHP-Version bei sams-on (B-2) — das ist Sache des Anbieters, nicht dieser App. Zurückgestellt: A-3 (Punkt 6), A-5 und D-1 (Punkt 5) (30.10.2026, Version 0.4.2) |
+| Kontrolle Cloudflare-Cache (Folge aus A-4 der neunten Runde): entfernte Berichte könnten weiter ausgeliefert werden | Am 09.11.2026 ohne Cache-Buster geprüft: `/docs/PEER-REVIEW-2026-10-09b.md` und `/docs/PEER-REVIEW-2026-10-29.md` liefern `404`, Gegenprobe `/docs/PEER-REVIEW-2026-10-30.md` liefert `200` (09.11.2026) |
 
 ## Noch offen
 
@@ -160,10 +161,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    gemeinsamen Zeitlimit ab, WebUntis (bis zu sechs Abrufe nacheinander) und
    Mensamax nicht. Dasselbe Muster dort übernehmen; ändert das Verhalten bei
    zwei Anbietern, deshalb ein eigener Schritt.
-7. **Kontrolle ab 06.11.2026:** Der entfernte Bericht der siebten Runde
-   (`/docs/PEER-REVIEW-2026-10-09b.md`) liefert ohne Cache-Buster `404`
-   (Cloudflare hält Dateien bis zu einer Woche, siehe `PROJEKT.md`
-   Abschnitt 10). Danach diesen Punkt streichen.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.
