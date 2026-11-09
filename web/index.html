@@ -44,8 +44,12 @@
   .child-head h2{font-size:1.05rem; margin:0; overflow-wrap:anywhere;}
   .child-head a{font-size:.78rem; color:var(--accent-dark); text-decoration:none; white-space:nowrap; margin-top:.15rem;}
   .child-sub{font-size:.75rem; color:var(--muted); margin-top:.1rem; overflow-wrap:anywhere;}
-  /* Login link with the balance below it, as small as the school/class line. */
-  .child-side{display:flex; flex-direction:column; align-items:flex-end; text-align:right;}
+  /* Login link with the balance below it, as small as the school/class line.
+     At most half the width, with the text wrapping inside, so a longer
+     balance line does not push the whole block below the name. */
+  .child-head > div:first-child{flex:1 1 0; min-width:0;}
+  .child-side{display:flex; flex-direction:column; align-items:flex-end; text-align:right; max-width:50%;}
+  .child-balance-hint{display:block;}
   .child-balance.warn{color:var(--warn);}
   .child-balance.err{color:var(--danger);}
 
@@ -1156,7 +1160,14 @@
       balanceEl.className = 'child-sub child-balance' + (notShown ? '' : data.guthaben === null ? ' err' : data.guthabenKnapp ? ' warn' : '');
       balanceEl.textContent = notShown ? '💶 sams-on zeigt kein Guthaben'
         : data.guthaben === null ? '💶 Guthaben nicht abrufbar'
-          : '💶 ' + data.guthaben + ' €' + (data.guthabenKnapp ? ' · bald aufladen' : '');
+          : '💶 Guthaben ' + data.guthaben + ' €';
+      if (!notShown && data.guthaben !== null && data.guthabenKnapp){
+        var hint = document.createElement('span');
+        hint.className = 'child-balance-hint';
+        hint.textContent = 'bald aufladen';
+        balanceEl.appendChild(document.createTextNode(' '));
+        balanceEl.appendChild(hint);
+      }
     }
 
     var lessons = data.stunden || [];

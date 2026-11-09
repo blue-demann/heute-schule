@@ -29,9 +29,10 @@
  *  - Short result caching (Cloudflare Cache API, ~4 minutes) — several
  *    parents/refreshes from the same family don't hit the outside servers
  *    again on every click.
- *  - An explicit timeout on every outbound fetch, so a hung request doesn't
- *    keep running indefinitely; the sams-on sequence also has one shared
- *    time limit for all its requests.
+ *  - Every outbound request runs under a time limit that also covers
+ *    reading the response, so a hung provider holds nothing indefinitely:
+ *    one shared limit for each provider's sequence, a short own one for
+ *    each logout.
  *
  * Response fields that reach the frontend (`stunden`, `fach`, `raum`,
  * `start`, `ende`, `vertretung`, `lunch`, `datum`, `stundenFehler`,
@@ -52,12 +53,13 @@ import {
   validateSamsonAccount, validateSamsonOrders, samsonCredit, samsonCreditHidden,
 } from './validate.mjs';
 
-const FETCH_TIMEOUT_MS = 10000;
 // One limit for a provider's whole sequence of requests, response bodies
-// included (WebUntis up to five before the answer, Mensamax three, sams-on
-// four). The per-request timeout alone ends once the headers are in; a
-// server that then stalls in the body would hold the answer indefinitely.
+// included (WebUntis five requests, Mensamax three, sams-on four).
 const PROVIDER_BUDGET_MS = 10000;
+// The WebUntis logout runs before the answer (see fetchTimetable), so it
+// gets a short limit of its own; the sams-on logout runs after the answer.
+const WEBUNTIS_LOGOUT_BUDGET_MS = 3000;
+const SAMSON_LOGOUT_BUDGET_MS = 5000;
 const CACHE_TTL_SECONDS = 240; // 4 minutes
 
 // Rate limit per IP per minute. Set generously: a normal refresh costs one
@@ -113,9 +115,9 @@ async function isRateLimited(request, ctx) {
 }
 
 // Wrapper around every request to a provider.
-// - Timeout: stops a hung third-party server from blocking the worker (and
-//   the parent's request) indefinitely. It covers the wait for the headers;
-//   reading the body is covered by the shared budget (see withBudget).
+// - Time limit: the request runs on the signal of a budget (withBudget).
+//   The response body hangs on the same signal, so the limit also ends a
+//   server that sends its headers and then stalls in the body.
 // - Never follows redirects: the host check only covers the first URL. A
 //   followed 3xx would send the request — including session cookies or
 //   login data — to whatever host the Location header names, so one open
@@ -123,33 +125,30 @@ async function isRateLimited(request, ctx) {
 //   A 3xx response is returned as is and treated as an error by the caller.
 /**
  * @param {string} url
- * @param {RequestInit} [options]
- * @param {AbortSignal} [budget]  a time limit shared by several requests in a row
+ * @param {RequestInit | undefined} options
+ * @param {AbortSignal} budget  the time limit this request counts against
  */
-async function fetchWithTimeout(url, options, budget) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  const signal = budget ? AbortSignal.any([controller.signal, budget]) : controller.signal;
+async function budgetedFetch(url, options, budget) {
   try {
-    return await fetch(url, { ...options, redirect: 'manual', signal });
+    return await fetch(url, { ...options, redirect: 'manual', signal: budget });
   } catch (e) {
-    throw asTimeoutError(e, url, budget);
-  } finally {
-    clearTimeout(timer);
+    throw asTimeoutError(e, url);
   }
 }
 
+// A limit running out, as opposed to any other failure: such a result is
+// not cached, so the next refresh tries again (see the fetch handler).
+class ProviderTimeout extends Error {}
+
 /**
- * An aborted request or body read becomes a message naming the host and
- * which limit ran out; any other error stays as it is.
+ * An aborted request or body read becomes a message naming the host; any
+ * other error stays as it is.
  * @param {unknown} e
  * @param {string} url
- * @param {AbortSignal} [budget]
  */
-function asTimeoutError(e, url, budget) {
+function asTimeoutError(e, url) {
   if (!(e instanceof Error && e.name === 'AbortError')) return e;
-  const limit = budget?.aborted ? 'Gesamtzeit überschritten' : `>${FETCH_TIMEOUT_MS / 1000}s`;
-  return new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (${limit})`, { cause: e });
+  return new ProviderTimeout(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (Gesamtzeit überschritten)`, { cause: e });
 }
 
 /**
@@ -157,25 +156,25 @@ function asTimeoutError(e, url, budget) {
  * was made with, so a budget running out while reading ends the read too.
  * @param {Response} resp
  * @param {string} url  the request's URL, for the message
- * @param {AbortSignal} [budget]
  */
-async function readText(resp, url, budget) {
+async function readText(resp, url) {
   try {
     return await resp.text();
   } catch (e) {
-    throw asTimeoutError(e, url, budget);
+    throw asTimeoutError(e, url);
   }
 }
 
 /**
- * Runs a provider's sequence of requests under one shared time limit.
+ * Runs a sequence of requests under one shared time limit.
  * @template T
+ * @param {number} ms
  * @param {(budget: AbortSignal) => Promise<T>} work
  * @returns {Promise<T>}
  */
-async function withBudget(work) {
+async function withBudget(ms, work) {
   const budget = new AbortController();
-  const timer = setTimeout(() => budget.abort(), PROVIDER_BUDGET_MS);
+  const timer = setTimeout(() => budget.abort(), ms);
   try {
     return await work(budget.signal);
   } finally {
@@ -244,13 +243,13 @@ class WebUntisRejection extends Error {}
  * @param {string | null} cookie
  * @param {string} method
  * @param {Record<string, unknown>} params
- * @param {AbortSignal} [budget]
+ * @param {AbortSignal} budget
  * @returns {Promise<unknown>}
  */
 async function webuntisRpc(server, cookie, method, params, budget) {
   const safeServer = checkSafeHostname(server, { requiredSuffix: '.webuntis.com' });
   const url = httpsUrlForHost(safeServer, '/WebUntis/jsonrpc.do');
-  const resp = await fetchWithTimeout(url, {
+  const resp = await budgetedFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -258,7 +257,7 @@ async function webuntisRpc(server, cookie, method, params, budget) {
     },
     body: JSON.stringify({ id: 1, method, params, jsonrpc: '2.0' }),
   }, budget);
-  const text = await readText(resp, url, budget);
+  const text = await readText(resp, url);
   let data;
   try {
     data = JSON.parse(text);
@@ -280,7 +279,7 @@ async function getTimetable(webuntisCfg, datumStr) {
   if (!server || !user || !password || !klasse) {
     throw new Error('WebUntis-Konfiguration unvollständig (server/user/password/klasse)');
   }
-  return withBudget((budget) => fetchTimetable({ server, user, password, klasse }, datumStr, budget));
+  return withBudget(PROVIDER_BUDGET_MS, (budget) => fetchTimetable({ server, user, password, klasse }, datumStr, budget));
 }
 
 /**
@@ -306,7 +305,30 @@ async function fetchTimetable({ server, user, password, klasse }, datumStr, budg
     throw e;
   }
   const cookie = `JSESSIONID=${auth.sessionId}`;
+  try {
+    return await timetableForSession(server, cookie, klasse, datumStr, budget);
+  } finally {
+    // Awaited before the answer, also after an error: the web app fetches
+    // children one after another because a shared class account can break
+    // a session logged in at the same moment, so the next login must not
+    // start while this logout is still under way. Its own short limit keeps
+    // a hanging logout from holding the answer; it runs even when the
+    // shared one has already run out.
+    try {
+      await withBudget(WEBUNTIS_LOGOUT_BUDGET_MS, (logoutBudget) => webuntisRpc(server, cookie, 'logout', {}, logoutBudget));
+    } catch { /* not worth failing over: the session expires on its own */ }
+  }
+}
 
+/**
+ * @param {string} server
+ * @param {string} cookie  the logged-in session
+ * @param {string} klasse
+ * @param {string} datumStr
+ * @param {AbortSignal} budget
+ * @returns {Promise<Lesson[]>}
+ */
+async function timetableForSession(server, cookie, klasse, datumStr, budget) {
   const dateInt = parseInt(datumStr, 10);
 
   const classes = validateClasses(await webuntisRpc(server, cookie, 'getKlassen', {}, budget));
@@ -325,12 +347,6 @@ async function fetchTimetable({ server, user, password, klasse }, datumStr, budg
   /** @type {Record<number, string>} */
   const roomNameById = {};
   rooms.forEach(r => { roomNameById[r.id] = r.name || '?'; });
-
-  // Awaited before the answer and outside the budget: the web app fetches
-  // children one after another because a shared class account can break a
-  // session logged in at the same moment, so the next login must not start
-  // while this logout is still under way.
-  try { await webuntisRpc(server, cookie, 'logout', {}); } catch { /* not worth failing over */ }
 
   const seen = new Set();
   return lessons
@@ -393,8 +409,8 @@ function getSetCookies(resp) {
  */
 async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', username = '', password = '' }, budget) {
   const loginUrl = `${origin}/login.aspx`;
-  const loginPage = await fetchWithTimeout(loginUrl, undefined, budget);
-  const loginHtml = await readText(loginPage, loginUrl, budget);
+  const loginPage = await budgetedFetch(loginUrl, undefined, budget);
+  const loginHtml = await readText(loginPage, loginUrl);
 
   const payload = [
     `__VIEWSTATE=${encodeURIComponent(extractHidden(loginHtml, '__VIEWSTATE'))}`,
@@ -407,7 +423,7 @@ async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', user
     'hdfCheck=&hdfLanguage=german&hdfLogin=&btnLogin=Anmelden',
   ].join('&');
 
-  const loginResp = await fetchWithTimeout(loginUrl, {
+  const loginResp = await budgetedFetch(loginUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: payload,
@@ -429,7 +445,7 @@ async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', user
   //  2. Only a genuine success additionally sets an app auth cookie
   //     (MensaMax / mm_token / mensamax_superglue), not just the generic
   //     ASP.NET session cookie.
-  const loginHtml2 = await readText(loginResp, loginUrl, budget);
+  const loginHtml2 = await readText(loginResp, loginUrl);
   const loginFailed = /anmeldung fehlgeschlagen/i.test(loginHtml2);
   const hasAuthCookie = !!(cookies['MensaMax'] || cookies['mm_token'] || cookies['mensamax_superglue']);
 
@@ -464,7 +480,7 @@ async function getLunchStatus(lunchCfg, datumStr, ctx) {
   if (provider !== 'mensamax') {
     return { lunch: `Schulessen: unbekannter Anbieter "${provider}"` };
   }
-  return { lunch: await withBudget((budget) => getLunchStatusMensamax(lunchCfg, datumStr, budget)) };
+  return { lunch: await withBudget(PROVIDER_BUDGET_MS, (budget) => getLunchStatusMensamax(lunchCfg, datumStr, budget)) };
 }
 
 /**
@@ -487,10 +503,10 @@ async function getLunchStatusMensamax(lunchCfg, datumStr, budget) {
   if (!cookieHeader) return 'Schulessen: Login fehlgeschlagen';
 
   const planUrl = `${origin}/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx`;
-  const planResp = await fetchWithTimeout(planUrl, { headers: { Cookie: cookieHeader } }, budget);
+  const planResp = await budgetedFetch(planUrl, { headers: { Cookie: cookieHeader } }, budget);
   if (planResp.status !== 200) return 'Schulessen: Daten nicht verfügbar';
 
-  const html = await readText(planResp, planUrl, budget);
+  const html = await readText(planResp, planUrl);
 
   const dayPattern = new RegExp(
     `id="td${datumStr}_\\d+"\\s+class="speiseplan-menue([^"]*)"[\\s\\S]{0,800}?<li>([^<]+)<`, 'g'
@@ -548,12 +564,11 @@ function cookieHeader(jar) {
  * @param {Response} resp
  * @param {string} method
  * @param {string} url  the request's URL, for a timeout message
- * @param {AbortSignal} budget
  * @returns {Promise<unknown>}
  */
-async function samsonJson(resp, method, url, budget) {
+async function samsonJson(resp, method, url) {
   if (!resp.ok) throw new Error(`sams-on: ${method} nicht abrufbar (HTTP ${resp.status})`);
-  const text = await readText(resp, url, budget);
+  const text = await readText(resp, url);
   try {
     return JSON.parse(text);
   } catch (e) {
@@ -590,7 +605,7 @@ async function getLunchStatusSamson(samsonCfg, datumStr, ctx) {
     throw new Error('sams-on-Konfiguration unvollständig (Schuladresse/Benutzername/Passwort)');
   }
   const origin = samsonOrigin(instanz);
-  return withBudget((budget) => fetchSamsonLunch({ origin, benutzername, passwort, guthabenAnzeigen }, datumStr, ctx, budget));
+  return withBudget(PROVIDER_BUDGET_MS, (budget) => fetchSamsonLunch({ origin, benutzername, passwort, guthabenAnzeigen }, datumStr, ctx, budget));
 }
 
 /**
@@ -608,13 +623,13 @@ async function fetchSamsonLunch({ origin, benutzername, passwort, guthabenAnzeig
    * @param {string} path
    * @param {RequestInit} [init]
    */
-  const samsonFetch = (path, init) => fetchWithTimeout(`${origin}${path}`, { ...init, headers: headers() }, budget);
+  const samsonFetch = (path, init) => budgetedFetch(`${origin}${path}`, { ...init, headers: headers() }, budget);
   /**
    * @param {Response} resp
    * @param {string} method
    * @param {string} path
    */
-  const samsonRead = (resp, method, path) => samsonJson(resp, method, `${origin}${path}`, budget);
+  const samsonRead = (resp, method, path) => samsonJson(resp, method, `${origin}${path}`);
 
   const instanceResp = await samsonFetch(`/api/instance/${instanceName}`);
   // An unknown school name: sams-on redirects to its homepage (seen live,
@@ -665,12 +680,15 @@ async function fetchSamsonLunch({ origin, benutzername, passwort, guthabenAnzeig
       .filter((name) => name !== '');
     return { lunch: meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt', ...balance };
   } finally {
-    // Sent after the answer, outside the shared time limit, so a slow
-    // sams-on does not hold up the card. Not worth failing over: if it
-    // does not go through, the session expires on its own.
+    // Sent after the answer, with its own limit instead of the shared one,
+    // so a slow sams-on does not hold up the card and the logout still goes
+    // out when the shared limit has run out. Its body is never read. Not
+    // worth failing over: if it does not go through, the session expires on
+    // its own.
     ctx.waitUntil(
-      fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' })
-        .then(() => {}, () => {})
+      withBudget(SAMSON_LOGOUT_BUDGET_MS, (logoutBudget) => budgetedFetch(
+        `${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' }, logoutBudget
+      )).then(() => {}, () => {})
     );
   }
 }
@@ -778,11 +796,16 @@ export default {
 
     // Cache (partially) failed results too, briefly — protects WebUntis/
     // Mensamax from being hit again on every "refresh" click, especially
-    // with wrong credentials.
-    const cacheResp = new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${CACHE_TTL_SECONDS}` },
-    });
-    ctx.waitUntil(cache.put(cacheKey, cacheResp));
+    // with wrong credentials. Not a time limit running out, though: a slow
+    // moment at the provider would otherwise stay on the card for the whole
+    // cache time, and "refresh" could not try again.
+    const timedOut = [lessonsResult, lunchResult].some((r) => r.status === 'rejected' && r.reason instanceof ProviderTimeout);
+    if (!timedOut) {
+      const cacheResp = new Response(JSON.stringify(result), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${CACHE_TTL_SECONDS}` },
+      });
+      ctx.waitUntil(cache.put(cacheKey, cacheResp));
+    }
 
     return jsonResponse(result, 200, corsHeaders);
   },

@@ -104,17 +104,21 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   nicht erlaubt; Pfad, Query und Fragment der Basis-URL werden ignoriert —
   die Anfragen entstehen nur aus deren `origin` plus festem Pfad.
 - Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` in
-  `fetchWithTimeout`). Die Prüfung oben gilt nur für die erste URL; eine
+  `budgetedFetch`). Die Prüfung oben gilt nur für die erste URL; eine
   gefolgte Weiterleitung könnte die Anfrage samt Session-Cookie an einen
   beliebigen Host schicken.
-- Zeitlimits: je Anfrage 10 s bis zu den Headern (`fetchWithTimeout`), dazu
-  ein gemeinsames Limit von 10 s für den ganzen Ablauf eines Anbieters
-  (`withBudget`), das auch das Lesen der Antworten umfasst. Ein Server, der
-  mitten in der Antwort hängen bleibt, hält die Karte damit höchstens 10 s
-  auf. Die WebUntis-Abmeldung läuft vor der Antwort und außerhalb dieses
-  Limits: Die App fragt Kinder nacheinander ab, weil sich bei einem
-  geteilten Klassenkonto gleichzeitige Sitzungen stören können, und der
-  nächste Login soll erst nach der Abmeldung beginnen.
+- Zeitlimits: Jede Anfrage läuft unter einem Limit (`withBudget`), das
+  auch das Lesen der Antwort umfasst — für den Abruf eines Anbieters
+  gemeinsam 10 s, für die WebUntis-Abmeldung eigene 3 s, für die
+  sams-on-Abmeldung nach der Antwort eigene 5 s. Ein Anbieter, der nicht
+  antwortet oder mitten in der Antwort hängen bleibt, hält die Karte damit
+  höchstens rund 13 s auf (WebUntis: 10 s Abruf, dann 3 s Abmeldung). Die
+  WebUntis-Abmeldung läuft vor der Antwort, auch nach einem Fehler: Die App
+  fragt Kinder nacheinander ab, weil sich bei einem geteilten Klassenkonto
+  gleichzeitige Sitzungen stören können, und der nächste Login soll erst
+  nach der Abmeldung beginnen. Ergebnisse, die in ein Limit gelaufen sind,
+  werden nicht gecacht. Nachprüfbar in der echten Workers-Laufzeit mit
+  `node tools/probe-workerd.mjs`.
 
 ## Offene Punkte
 

@@ -1845,13 +1845,20 @@ async function lunchVia(server, lunch, datum = '20261103') {
 }
 
 // Lets a test decide when a time limit runs out instead of waiting for it:
-// timers are only recorded, and fire(ms) runs those set with that delay.
+// timers are only recorded. fire(ms) runs those set with that delay;
+// advance(ms) lets time pass on a clock and runs every timer that falls due
+// on the way, in order, so limits of different lengths can be told apart.
 const realSetTimeout = globalThis.setTimeout;
 const realClearTimeout = globalThis.clearTimeout;
+// Gives pending promise chains (mocked fetches, body reads) time to run.
+async function letWorkRun() {
+  for (let i = 0; i < 5; i++) await new Promise((resolve) => realSetTimeout(resolve, 0));
+}
 function fakeTimers() {
   const pending = new Map();
   let nextId = 1;
-  globalThis.setTimeout = (fn, ms) => { const id = nextId++; pending.set(id, { fn, ms }); return id; };
+  let now = 0;
+  globalThis.setTimeout = (fn, ms = 0) => { const id = nextId++; pending.set(id, { fn, ms, due: now + ms }); return id; };
   globalThis.clearTimeout = (id) => { pending.delete(id); };
   return {
     fire(ms) {
@@ -1859,6 +1866,21 @@ function fakeTimers() {
         if (timer.ms === ms) { pending.delete(id); timer.fn(); }
       }
     },
+    async advance(ms) {
+      const until = now + ms;
+      for (;;) {
+        await letWorkRun();
+        const due = [...pending].filter(([, t]) => t.due <= until).sort((a, b) => a[1].due - b[1].due || a[0] - b[0]);
+        if (!due.length) break;
+        const [id, timer] = due[0];
+        pending.delete(id);
+        now = timer.due;
+        timer.fn();
+      }
+      now = until;
+      await letWorkRun();
+    },
+    now() { return now; },
     pendingCount() { return pending.size; },
     restore() { globalThis.setTimeout = realSetTimeout; globalThis.clearTimeout = realClearTimeout; },
   };
@@ -1942,7 +1964,7 @@ await testAsync('sams-on: the answer does not wait for the logout', async () => 
     const { ctx, response } = startLunch(server, samsonLunch());
     const answer = await settlesWithin(response, 'the answer (waiting for the logout?)');
     assertEqual((await answer.json()).lunch, 'Kein Essen bestellt');
-    timers.fire(10000); // the logout's own timeout ends it
+    timers.fire(5000); // the logout's own limit ends it
     await settlesWithin(ctx.drain(), 'the logout');
   } finally {
     timers.restore();
@@ -2162,13 +2184,23 @@ await testAsync('getSetCookies falls back to a single set-cookie header when get
 //
 // Every request a provider makes before the answer, each in both ways a
 // server can hang: no headers at all, or headers and then a stalled body.
-// The per-request timeout only covers the first; the shared budget has to
-// end both. The counter-check in each case shows the stand-in really
-// hangs: before the budget runs out, the answer is still open.
+// The shared budget has to end both. The counter-check in each case shows
+// the stand-in really hangs: before the budget runs out, the answer is
+// still open. Where a session was opened, its logout still has to go out.
 
 console.log('\nOne time limit per provider (headers and body)');
 
 const BUDGET_MS = 10000;
+const WEBUNTIS_LOGOUT_MS = 3000;
+// Records which WebUntis methods were called, around the canned answers.
+function recordingWebuntis(overrides = {}) {
+  const methods = [];
+  const inner = webuntisHandler(overrides);
+  return {
+    methods,
+    handler: { test: inner.test, respond: (url, options) => { methods.push(JSON.parse(options.body).method); return inner.respond(url, options); } },
+  };
+}
 const HANG_KINDS = [
   ['no headers', hangingRequest],
   ['headers, then a stalled body', hangingBody],
@@ -2189,7 +2221,15 @@ function mensamaxServer(overrides = {}) {
 const BUDGET_CASES = [
   ...['authenticate', 'getKlassen', 'getTimetable', 'getSubjects', 'getRooms'].map((method) => ({
     provider: 'WebUntis', step: method, field: 'stundenFehler', host: 'schule.webuntis.com',
-    start: (hang) => ({ handlers: [webuntisHandler({ [method]: hang })], body: { webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' } }),
+    // Once logged in, the logout goes out even after the limit ran out.
+    loggedIn: method !== 'authenticate',
+    start: (hang) => {
+      const wu = recordingWebuntis({ [method]: hang });
+      return {
+        handlers: [wu.handler], body: { webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' },
+        loggedOut: () => wu.methods[wu.methods.length - 1] === 'logout',
+      };
+    },
   })),
   ...['GET /login.aspx', 'POST /login.aspx', 'GET /mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx'].map((key) => ({
     provider: 'Mensamax', step: key, field: 'lunchFehler', host: 'x.parentsmensa.de',
@@ -2199,8 +2239,18 @@ const BUDGET_CASES = [
     provider: 'sams-on', step: key, field: 'lunchFehler', host: 'lessing.sams-on.de',
     // Only status and cookies of the login answer are used, never its body.
     bodyUnread: key === 'POST /api/login',
+    loggedIn: key === 'GET /api/login' || key === 'GET /api/users/8/orders/view',
     // With the balance switched on, the instance info's body is read too.
-    start: (hang) => ({ handlers: [samsonServer({ overrides: { [key]: hang } }).handler], body: { webuntis: {}, lunch: samsonLunch({ guthabenAnzeigen: true }), datum: '20261103' } }),
+    start: (hang) => {
+      const server = samsonServer({ overrides: { [key]: hang } });
+      return {
+        handlers: [server.handler], body: { webuntis: {}, lunch: samsonLunch({ guthabenAnzeigen: true }), datum: '20261103' },
+        loggedOut: () => {
+          const last = server.calls[server.calls.length - 1];
+          return `${last.method} ${new URL(last.url).pathname}` === 'POST /api/logout' && String(last.cookie).includes('PHPSESSID=angemeldet');
+        },
+      };
+    },
   })),
 ];
 
@@ -2224,7 +2274,7 @@ for (const c of BUDGET_CASES) {
       try {
         let reached;
         const hangStarted = new Promise((resolve) => { reached = resolve; });
-        const { handlers, body } = c.start(makeHang(reached));
+        const { handlers, body, loggedOut } = c.start(makeHang(reached));
         globalThis.caches = makeCachesStub();
         mockFetch(handlers);
         const ctx = makeCtx();
@@ -2235,8 +2285,8 @@ for (const c of BUDGET_CASES) {
         timers.fire(BUDGET_MS);
         const answer = await (await settlesWithin(response, 'the answer')).json();
         assertEqual(answer[c.field], `Zeitüberschreitung beim Zugriff auf ${c.host} (Gesamtzeit überschritten)`);
-        timers.fire(BUDGET_MS); // a logout still under way runs into its own timeout
         await settlesWithin(ctx.drain(), 'the work after the answer');
+        if (loggedOut) assertEqual(loggedOut(), c.loggedIn, c.loggedIn ? 'the logout did not go out' : 'a logout without a session');
       } finally {
         timers.restore();
         restoreFetch();
@@ -2244,6 +2294,151 @@ for (const c of BUDGET_CASES) {
     });
   }
 }
+
+// A stand-in whose every answer takes `ms` on the (fake) clock, and that
+// gives up like a real request when its signal is aborted.
+function slowly(handler, ms) {
+  return {
+    test: handler.test,
+    respond: (url, options = {}) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(handler.respond(url, options)), ms);
+      options.signal.addEventListener('abort', () => { clearTimeout(timer); reject(options.signal.reason); }, { once: true });
+    }),
+  };
+}
+// Lets the clock run in steps until the answer is there; returns it and when it came.
+async function answerOnClock(timers, response, limitMs) {
+  let answeredAt = null;
+  response.then(() => { answeredAt = timers.now(); }, () => { answeredAt = timers.now(); });
+  while (answeredAt === null && timers.now() < limitMs) await timers.advance(250);
+  assert(answeredAt !== null, `no answer within ${limitMs} ms on the clock`);
+  return { answer: await (await response).json(), answeredAt };
+}
+
+const SLOW_CASES = [
+  // 5 requests of 4 s: one shared limit ends at 10 s, the logout then gets its own 3 s.
+  ['WebUntis', () => slowly(webuntisHandler(), 4000), { webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }, 'stundenFehler', 'schule.webuntis.com', BUDGET_MS + WEBUNTIS_LOGOUT_MS],
+  // 3 requests of 4 s.
+  ['Mensamax', () => slowly(mensamaxServer(), 4000), { webuntis: {}, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' }, 'lunchFehler', 'x.parentsmensa.de', BUDGET_MS],
+  // 4 requests of 4 s; the logout runs after the answer.
+  ['sams-on', () => slowly(samsonServer({ orders: [] }).handler, 4000), { webuntis: {}, lunch: samsonLunch(), datum: '20261103' }, 'lunchFehler', 'lessing.sams-on.de', BUDGET_MS],
+];
+for (const [provider, makeHandler, body, field, host, latestMs] of SLOW_CASES) {
+  await testAsync(`${provider}: requests that are each slow but under 10 s share one limit — the answer comes after ${latestMs / 1000} s, not later`, async () => {
+    const timers = fakeTimers();
+    try {
+      globalThis.caches = makeCachesStub();
+      mockFetch([makeHandler()]);
+      const ctx = makeCtx();
+      const { answer, answeredAt } = await answerOnClock(timers, proxyWorker.fetch(apiRequest(body), TEST_ENV, ctx), 60000);
+      assertEqual(answer[field], `Zeitüberschreitung beim Zugriff auf ${host} (Gesamtzeit überschritten)`);
+      assert(answeredAt <= latestMs, `answered after ${answeredAt} ms on the clock`);
+      await timers.advance(10000);
+      await settlesWithin(ctx.drain(), 'the work after the answer');
+    } finally {
+      timers.restore();
+      restoreFetch();
+    }
+  });
+}
+await testAsync('counter-check: the same slow requests with a little time each pass within the limit', async () => {
+  const timers = fakeTimers();
+  try {
+    globalThis.caches = makeCachesStub();
+    mockFetch([slowly(webuntisHandler(), 1500)]);
+    const { answer, answeredAt } = await answerOnClock(timers, proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, makeCtx()), 60000);
+    assertEqual(answer.stundenFehler, null);
+    assertEqual(answer.stunden[0].fach, 'Deutsch');
+    assertEqual(answeredAt, 6 * 1500); // five requests and the logout
+  } finally {
+    timers.restore();
+    restoreFetch();
+  }
+});
+
+for (const [kind, makeHang] of HANG_KINDS) {
+  await testAsync(`WebUntis logout — ${kind}: its own short limit ends it, the timetable still comes`, async () => {
+    const timers = fakeTimers();
+    try {
+      let reached;
+      const logoutStarted = new Promise((resolve) => { reached = resolve; });
+      globalThis.caches = makeCachesStub();
+      mockFetch([webuntisHandler({ logout: makeHang(reached) })]);
+      const response = proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, makeCtx());
+      await settlesWithin(logoutStarted, 'the logout');
+      const early = await Promise.race([response.then(() => 'answered'), new Promise((resolve) => realSetTimeout(resolve, 50, 'open'))]);
+      assertEqual(early, 'open', 'counter-check: the answer waits for the logout');
+      timers.fire(WEBUNTIS_LOGOUT_MS);
+      const answer = await (await settlesWithin(response, 'the answer')).json();
+      assertEqual(answer.stundenFehler, null);
+      assertEqual(answer.stunden[0].fach, 'Deutsch');
+    } finally {
+      timers.restore();
+      restoreFetch();
+    }
+  });
+}
+
+const AFTER_LOGIN_FAILURES = [
+  ['a broken getRooms answer', { getRooms: () => new Response(JSON.stringify({ result: { id: 2 } })) }],
+  ['a class that does not exist', { getKlassen: () => new Response(JSON.stringify({ result: [{ id: 1, name: '5a' }] })) }],
+];
+for (const [what, overrides] of AFTER_LOGIN_FAILURES) {
+  await testAsync(`WebUntis: after ${what}, the session is still logged out`, async () => {
+    const wu = recordingWebuntis(overrides);
+    globalThis.caches = makeCachesStub();
+    mockFetch([wu.handler]);
+    const body = await (await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, makeCtx())).json();
+    restoreFetch();
+    assert(body.stundenFehler, 'counter-check: the run did fail');
+    assertEqual(wu.methods[wu.methods.length - 1], 'logout');
+  });
+}
+await testAsync('WebUntis: a rejected login opens no session, so there is no logout', async () => {
+  const wu = recordingWebuntis({ authenticate: () => new Response(JSON.stringify({ error: { message: 'bad credentials' } })) });
+  globalThis.caches = makeCachesStub();
+  mockFetch([wu.handler]);
+  await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, makeCtx());
+  restoreFetch();
+  assertEqual(wu.methods.join(','), 'authenticate');
+});
+
+await testAsync('a result that ran into the time limit is not cached: the next refresh asks again', async () => {
+  const timers = fakeTimers();
+  const caches = makeCachesStub();
+  try {
+    globalThis.caches = caches;
+    let reached;
+    const started = new Promise((resolve) => { reached = resolve; });
+    mockFetch([webuntisHandler({ getKlassen: hangingRequest(reached) })]);
+    const ctx = makeCtx();
+    const response = proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, ctx);
+    await settlesWithin(started, 'getKlassen');
+    timers.fire(BUDGET_MS);
+    assert(String((await (await settlesWithin(response, 'the answer')).json()).stundenFehler).startsWith('Zeitüberschreitung'));
+    await settlesWithin(ctx.drain(), 'the work after the answer');
+  } finally {
+    timers.restore();
+  }
+  mockFetch([webuntisHandler()]);
+  const again = await (await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, makeCtx())).json();
+  restoreFetch();
+  assertEqual(again.stundenFehler, null);
+});
+await testAsync('counter-check: a failed login is still cached, the next refresh does not ask WebUntis again', async () => {
+  const caches = makeCachesStub();
+  globalThis.caches = caches;
+  mockFetch([webuntisHandler({ authenticate: () => new Response(JSON.stringify({ error: { message: 'bad credentials' } })) })]);
+  const ctx = makeCtx();
+  await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, ctx);
+  await ctx.drain();
+  const outbound = [];
+  mockFetch([{ test: () => true, respond: async (url) => { outbound.push(url); return new Response('', { status: 500 }); } }]);
+  const again = await (await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, makeCtx())).json();
+  restoreFetch();
+  assertEqual(outbound.length, 0);
+  assert(String(again.stundenFehler).includes('Login fehlgeschlagen'), again.stundenFehler);
+});
 
 await testAsync('WebUntis: the logout is done before the answer goes out (the next login must not overlap it)', async () => {
   const events = [];

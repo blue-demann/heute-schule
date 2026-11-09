@@ -1,8 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v9 · 2026-11-09 · 26a96b67 · gültig
+HS-PRJ · v10 · 2026-11-09 · afb3dbbc · gültig
 
-**Stand: 09.11.2026 · Version 0.4.4**
+**Stand: 09.11.2026 · Version 0.4.5**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -266,9 +266,9 @@ offener Relay für beliebige https-Ziele war real möglich, bis behoben.
 | Ziel-Host-Allowlist (SSRF-Schutz) | `proxy/hostcheck.mjs` | Missbrauch des Proxys als offener Relay für beliebige https-Ziele; blockiert zusätzlich private/Loopback/Link-lokale Ziele. Der Hostname wird positiv validiert (RFC 1123: nur `a–z`, `0–9`, Punkt, Bindestrich), erst danach greift die Endungsprüfung — sonst endet `evil.example#.webuntis.com` als String auf `.webuntis.com`, der Abruf ginge aber an `evil.example`. Zusätzlich baut der Worker die Ziel-URL über `httpsUrlForHost()`, das abbricht, falls der URL-Parser einen anderen als den geprüften Host auflöst. Mensamax-URLs entstehen nur aus `origin` der geprüften Basis-URL plus festem Pfad (kein eigener Port). Kein ausgehender Abruf folgt Weiterleitungen (`redirect: 'manual'` zentral in `fetchWithTimeout`) — die Host-Prüfung gilt nur für die erste URL |
 | Zugangsdaten im Cache-Schlüssel | `proxy/cachekey.mjs` | Auslieferung fremder Daten ohne Authentifizierung — ein Cache-Treffer setzt damit erfolgreiche Anmeldung voraus, nicht nur Kenntnis von Benutzername/Klasse |
 | Laufzeitvalidierung an der Vertrauensgrenze | `proxy/validate.mjs` | Ungeprüfte Daten im Proxy: Der Request-Body aus dem Browser darf nur bekannte Felder als Text enthalten (sonst 400, unbekannte Felder fallen weg); jede WebUntis-Antwort wird vor der Verwendung auf genau die genutzten Felder geprüft und bei Strukturfehlern als Ganzes abgelehnt („WebUntis: unerwartete Antwort auf …“, ohne Inhalte des Anbieters). Die Meldung nennt Methode und Feld, nie den Wert. Die `sessionId` geht in den `Cookie`-Header und darf deshalb nur Zeichen enthalten, die RFC 6265 in einem Cookie-Wert erlaubt — kein `;` oder `,`, mit dem sich ein zweites Cookie anhängen ließe (Zeilenumbrüche lehnen die Laufzeiten ohnehin ab; das ist dort Härtung, keine geschlossene Lücke). Den ccCampus-Block (PIN, Kundennummer) verwirft der Proxy, weil er ihn nie braucht. Als „Passwort prüfen“ meldet der Worker nur eine echte Ablehnung durch WebUntis, nicht jede fehlgeschlagene Anmeldung |
-| sams-on-Instanz nur als Name | `proxy/hostcheck.mjs` (`samsonOrigin`), `web/index.html` | Die App schickt für sams-on nur den Namen der Schul-Instanz (z. B. `lessing`), nie eine Adresse. Der Proxy prüft ihn als einzelnes DNS-Label und baut `https://<name>.sams-on.de` selbst — dieses Feld kann damit grundsätzlich keinen anderen Server erreichen. Die vom Konto gelieferte `userId` geht in den Pfad der nächsten Anfrage und darf deshalb nur aus Ziffern bestehen. Das Guthaben kommt bei jeder Anmeldung mit der Kontoinfo an; der Proxy gibt es nur weiter, wenn es für dieses Kind eingeschaltet ist und sams-on es bei dieser Schule anzeigt (`hideCredit` in der Instanz-Info, nur bei eingeschaltetem Guthaben gelesen), und dann nur als Betrag (Format geprüft, sonst „nicht abrufbar“). Name, E-Mail-Adresse und Ausweisnummer aus derselben Antwort übernimmt er nie; der Schalter gehört zum Cache-Schlüssel. Der ganze Ablauf hat ein gemeinsames Zeitlimit (15 s), der Logout läuft erst nach der Antwort. Die App bereinigt eine eingefügte Adresse beim Einrichten und speichert erst ein brauchbares Format |
+| sams-on-Instanz nur als Name | `proxy/hostcheck.mjs` (`samsonOrigin`), `web/index.html` | Die App schickt für sams-on nur den Namen der Schul-Instanz (z. B. `lessing`), nie eine Adresse. Der Proxy prüft ihn als einzelnes DNS-Label und baut `https://<name>.sams-on.de` selbst — dieses Feld kann damit grundsätzlich keinen anderen Server erreichen. Die vom Konto gelieferte `userId` geht in den Pfad der nächsten Anfrage und darf deshalb nur aus Ziffern bestehen. Das Guthaben kommt bei jeder Anmeldung mit der Kontoinfo an; der Proxy gibt es nur weiter, wenn es für dieses Kind eingeschaltet ist und sams-on es bei dieser Schule anzeigt (`hideCredit` in der Instanz-Info, nur bei eingeschaltetem Guthaben gelesen), und dann nur als Betrag (Format geprüft, sonst „nicht abrufbar“). Name, E-Mail-Adresse und Ausweisnummer aus derselben Antwort übernimmt er nie; der Schalter gehört zum Cache-Schlüssel. Der ganze Ablauf hat ein gemeinsames Zeitlimit (siehe nächste Zeile), der Logout läuft erst nach der Antwort. Die App bereinigt eine eingefügte Adresse beim Einrichten und speichert erst ein brauchbares Format |
 | Nur die Felder des gewählten Anbieters | `web/index.html` (`lunchRequestFields`), `proxy/validate.mjs` | Die App schickt dem Proxy nur die Zugangsdaten des gerade gewählten Essensanbieters, nie die eines früher genutzten; ccCampus gar keine. Der Proxy übernimmt zusätzlich nur bekannte Felder |
-| Zeitlimit je Anbieter-Ablauf | `proxy/worker.js` (`withBudget`, `readText`) | Ein Server, der nicht antwortet oder mitten in der Antwort hängen bleibt, hält den Proxy und die Karte fest: 10 s je Anfrage bis zu den Headern, 10 s gemeinsam für den ganzen Ablauf von WebUntis, Mensamax und sams-on einschließlich des Lesens der Antworten |
+| Zeitlimit für jede Anfrage | `proxy/worker.js` (`withBudget`, `budgetedFetch`, `readText`) | Ein Server, der nicht antwortet oder mitten in der Antwort hängen bleibt, hält den Proxy und die Karte fest: Jede Anfrage läuft unter einem Limit, das auch das Lesen umfasst — 10 s gemeinsam für den Abruf von WebUntis, Mensamax und sams-on, eigene 3 s für die WebUntis-Abmeldung (vor der Antwort, auch nach Fehlern), eigene 5 s für die sams-on-Abmeldung (nach der Antwort). Höchstens rund 13 s je Karte. Ergebnisse, die in ein Limit gelaufen sind, werden nicht gecacht |
 | Rate-Limit (30/IP/Minute) | `proxy/worker.js` | Massenhafte Login-Versuche über den Proxy als Relay; Cache-basiert, nicht atomar — bewusste Grenze, siehe Code-Kommentar |
 | CORS auf Produktionsdomain eingeschränkt | `proxy/wrangler.toml` (`ALLOWED_ORIGIN`) | Phishing-Nachbauten, die den echten Proxy im Hintergrund ansprechen |
 | Security-Header (CSP, HSTS, X-Frame-Options, Permissions-Policy) | `web/_headers` | Clickjacking, Nachladen fremden Codes; CSP mit `unsafe-inline`, weil bewusst kein Build-Schritt existiert (siehe Nicht-Ziele) |
@@ -366,7 +366,7 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | Verdrahtung | `deploy.sh`, `.github/workflows/ci.yml` | Die Gates müssen auch aufgerufen werden: Reihenfolge, `npm ci`, `npm audit --include=dev`, kein `npx` ohne `--no-install`, Commit als Versionsnachricht, CI mit Lese-Token und ohne Install-Skripte |
 | `samsonOrigin()` (Property-Tests), `samsonMealName()`, `validateSamsonAccount()`, `validateSamsonOrders()` und der komplette sams-on-Ablauf im Worker | `proxy/hostcheck.mjs`, `proxy/text.mjs`, `proxy/validate.mjs`, `proxy/worker.js` | Instanz-Name: gültige Namen ergeben genau `https://<name>.sams-on.de`, jede benannte Angriffsklasse (Punkt, Pfad/Query/Fragment, Userinfo/Port, Prozent-Kodierung, Leerraum, Nicht-ASCII, Bindestrich am Rand, ganze URL) wird abgelehnt. `userId` mit Zeichen, die den Pfad ändern könnten, wird abgelehnt, bevor die Bestellungen abgefragt werden. Menünamen aus echten sams-on-Texten; eine letzte Zeile aus Allergen-Codes fällt weg, ein kurzes Wort wie „Ei“ bleibt (beides als Property-Test); ungültige Zeichenreferenzen bleiben stehen, statt zu werfen (feste Beispielwerte); Kodieren und Dekodieren gibt jeden Text zurück, auch einen, der selbst wie eine Zeichenreferenz aussieht (Property-Test). Datum der Bestellung auch mit Uhrzeit, mit Zeitzone abgelehnt. Der Worker läuft gegen einen nachgebauten sams-on-Server: Reihenfolge wie die Web-App, nur der eigene Schul-Host, keine Weiterleitungen, Session-Cookie aus dem Login, falsches Passwort, Login mit 403, Login ohne Session, Logout mit der angemeldeten Session (auch nach kaputter Antwort), die Antwort wartet nicht auf den Logout, unbekannte Schule, kaputte Antworten, Wartungsseite, Cookies mit Trennzeichen. Guthaben: ausgeschaltet nirgends in der Antwort, eingeschaltet als Betrag, hervorgehoben unter 5,00 €, unerwartetes Format „nicht abrufbar“ ohne Folgen für den Essensstatus, bei einer Schule mit `hideCredit` ohne Betrag; die Instanz-Info wird ohne Häkchen gar nicht gelesen. Das Test-`fetch` lehnt wie das echte Anfragen mit bereits abgebrochenem Signal ab |
 | `extractSamsonInstance()`, `samsonInstanceFieldError()`, `samsonAddressProblem()`, `lunchRequestFields()` (Property-Tests); `loadConfig()`/`saveConfig()`, `toast()` (benannte Klassen mit festen Werten) | `web/index.html` (Inline-Script) | Der Test schneidet genau diese Definitionen aus der Seite und führt sie in einem eigenen Kontext aus. Adresse: jede benannte Einfüge-Form wird zum Schulnamen (Name, Großschreibung mit Leerraum, Adresse aus der Browserzeile, ohne `https://`, gemeinsame Login-Seite mit `?instance=`), jede benannte Täuschung wird abgelehnt (Look-alike-Host, fremder Host mit `?instance=`, Userinfo, tiefere Subdomain, sams-on-Host ohne Schule, Name mit Punkt oder Pfad). Anfrage: Ein Kind, das schon alle Anbieter hatte, schickt je Anbieter nur dessen Felder, ccCampus und Unbekanntes nur den Anbieter. Speichern: Jede brauchbare Adresse lässt speichern, jede unbrauchbare hält an und meldet „keine sams-on-Adresse“, eine fehlende erst nach dem Speicherversuch „bitte eintragen“; Kinder ohne sams-on halten nie an, bei mehreren Kindern wird das erste betroffene genannt. Gespeicherte Einstellungen: gesperrter Speicher und unlesbarer Inhalt zeigen je ihren eigenen Hinweis und fragen vor dem Überschreiben. Der Toast schreibt in eine dauerhafte `role="status"`-Region; kein anfangs verstecktes Element trägt `role="alert"` |
-| Zeitlimit je Anbieter | `proxy/worker.js` | Jede Anfrage vor der Antwort einzeln (WebUntis 5, Mensamax 3, sams-on 4), je in zwei benannten Klassen: hängt ohne Header, hängt nach den Headern im Inhalt. Das gemeinsame Limit beendet beide mit „Zeitüberschreitung … (Gesamtzeit überschritten)“; Gegenprobe in jedem Fall: vorher ist die Antwort noch offen. Eigene Klasse: Inhalt, den der Proxy nie liest (sams-on-Login), hält nichts auf. Ein langsamer Inhalt innerhalb des Limits wird vollständig gelesen; nach einem normalen Lauf läuft kein Zeitgeber weiter; die WebUntis-Abmeldung ist vor der Antwort fertig. Der nachgebaute hängende Inhalt verhält sich wie Node und workerd mit einem echten, mitten in der Antwort hängenden Server (geprüft) |
+| Zeitlimits | `proxy/worker.js`, `tools/probe-workerd.mjs` | Jede Abruf-Anfrage einzeln (WebUntis 5 ohne die Abmeldung, Mensamax 3, sams-on 4), je in zwei benannten Klassen: hängt ohne Header, hängt nach den Headern im Inhalt. Das gemeinsame Limit beendet beide mit „Zeitüberschreitung … (Gesamtzeit überschritten)“; Gegenprobe in jedem Fall: vorher ist die Antwort noch offen. War eine Sitzung offen, geht die Abmeldung trotzdem raus, ohne Sitzung keine. Eigene Klasse: Inhalt, den der Proxy nie liest (sams-on-Login), hält nichts auf. Dass das Limit *gemeinsam* gilt, zeigt eine Test-Uhr, die wirklich vorrückt: Anbieter, die je 4 s brauchen, enden nach 10 s (WebUntis mit Abmeldung 13 s), Gegenprobe mit 1,5 s je Anfrage läuft durch. Die WebUntis-Abmeldung: vor der Antwort fertig, nach eigenen 3 s beendet, wenn sie hängt, auch nach Fehlern gesendet. Ergebnisse mit Zeitüberschreitung werden nicht gecacht, ein falsches Passwort schon (Gegenprobe). Die nachgebaute hängende Antwort ist durch `node tools/probe-workerd.mjs` belegt: Es startet den echten `worker.js` in workerd (aus `node_modules`, ohne `wrangler`) gegen einen lokalen Nachbau der Anbieter, der stockt (7 Szenarien, gegen 0.4.4 schlagen 3 an); von Hand, nicht in der Testsuite |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -424,10 +424,10 @@ Lücke ist im Wesentlichen `tools/check-live-headers.mjs`, ein
 Kommandozeilen-Skript, das nur `deploy.sh` nach dem Deploy aufruft (seine
 Vergleichslogik `compareHeaders()` ist getestet, das Skript selbst einmalig
 gegen einen Server ohne Header und eine nicht erreichbare Adresse
-gegengeprüft). `hostcheck.mjs`/`cachekey.mjs`/`stundenplan.js` bei 100 %, `worker.js` bei
-~99 % (ungetestet bleibt nur das Weiterwerfen anderer Netzwerkfehler als
-einer Zeitüberschreitung in `fetchWithTimeout`; die Zeitüberschreitung selbst
-ist seit 0.4.1 mit eigenen Zeitgebern getestet).
+gegengeprüft). `hostcheck.mjs`/`cachekey.mjs`/`stundenplan.js`/`worker.js`
+bei 100 % der Anweisungen. Nicht gemessen wird `tools/probe-workerd.mjs`: Es
+startet workerd und braucht rund anderthalb Minuten, läuft deshalb von Hand
+statt in der Testsuite (siehe Testtabelle).
 Kein Mindestwert erzwungen (`check-coverage: false`) — eine erzwungene
 Zahl hätte hier wenig Aussage, da die App-Logik in `web/index.html`
 ohnehin außerhalb der Messung liegt.
@@ -498,7 +498,7 @@ relativer Link würde dort ins Leere laufen:
   5-€-Schwelle, ungetestete Pfade (Logout, 403, Zeitüberschreitung, die
   Browser-Funktionen für die Anfrage) und einen als erledigt dokumentierten,
   aber nicht deployten Fix — alle in Version 0.4.1 behoben
-- [Prüfbericht der neunten Runde (ID3UKZT)](PEER-REVIEW-2026-10-30.md) —
+- [Prüfbericht der neunten Runde (ID3UKZT)](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-10-30.md) —
   frische Sitzung, Prüfobjekt der Folge-Fix 0.4.1. Kein 🔴; alle Befunde der
   achten Runde in der Sache behoben. Fand, dass der Logout-Test ein an das
   Zeitlimit gehängtes Logout nicht erkannte (das Test-`fetch` nahm
@@ -506,6 +506,14 @@ relativer Link würde dort ins Leere laufen:
   fehlende Schuladresse ohne Ansage für Screenreader, doppeltes Dekodieren
   und dass aus `web/` entfernte Dateien bis zu einer Woche im
   Cloudflare-Cache bleiben — in Version 0.4.2 behoben bzw. dokumentiert
+- [Prüfbericht der zehnten Runde (IDBRBGB)](PEER-REVIEW-2026-11-09.md) —
+  frische Sitzung, Prüfobjekt das Zeitlimit je Anbieter (0.4.4). Kein 🔴.
+  Fand, dass die WebUntis-Abmeldung weiter unbegrenzt hängen konnte, dass
+  mit einem gelöschten Test die Absicherung der sams-on-Abmeldung nach
+  Ablauf des Limits fehlte und dass kein Test zeigte, ob das Limit
+  gemeinsam gilt (beide Zeitgeber gleich lang); dazu gecachte
+  Zeitüberschreitungen, das fehlende Wort „Guthaben“ und Doku-Widersprüche —
+  in Version 0.4.5 behoben
 
 Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
 Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
@@ -809,6 +817,15 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   den Headern „Zeitüberschreitung … (Gesamtzeit überschritten)“ statt
   „keine gültige JSON-Antwort“. Die WebUntis-Abmeldung bleibt bewusst vor
   der Antwort.
+- **Folge-Fix aus der zehnten Prüfrunde** (09.11.2026, Version 0.4.5) —
+  Jede Anfrage läuft unter einem Limit: die WebUntis-Abmeldung mit eigenen
+  3 s, auch nach Fehlern, die sams-on-Abmeldung mit eigenen 5 s. Eine
+  hängende Abmeldung hält die Karte nicht mehr unbegrenzt fest.
+  Zeitüberschreitungen werden nicht mehr gecacht. Auf der Karte wieder
+  „Guthaben 12,40 €“, „bald aufladen“ in eigener Zeile; der rechte Block
+  nimmt höchstens die halbe Breite. Neue Test-Uhr, die Limits
+  unterschiedlicher Länge unterscheidet, und `tools/probe-workerd.mjs` für
+  die echte Workers-Laufzeit.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

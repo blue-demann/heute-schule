@@ -8,6 +8,7 @@
   "exclude": [
     "**/node_modules/**",
     "run-tests.mjs",
+    "tools/probe-workerd.mjs",
     "eslint.config.mjs",
     "coverage/**"
   ],
