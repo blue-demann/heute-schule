@@ -41,7 +41,7 @@
     padding:1rem 1.1rem; margin-bottom:1rem;
   }
   .child-head{display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:.4rem .8rem; margin-bottom:.6rem;}
-  .child-head h2{font-size:1.05rem; margin:0; overflow-wrap:anywhere;}
+  .child-head h2{font-size:1.05rem; margin:0; overflow-wrap:anywhere; -webkit-hyphens:auto; hyphens:auto;}
   .child-head a{font-size:.78rem; color:var(--accent-dark); text-decoration:none; white-space:nowrap; margin-top:.15rem;}
   .child-sub{font-size:.75rem; color:var(--muted); margin-top:.1rem; overflow-wrap:anywhere;}
   /* Login link with the balance below it, as small as the school/class line.
@@ -1004,6 +1004,7 @@
       storageBlocked = false;
     }
     updateUnreadableNotice();
+    abandonRefreshes();
     cardsById = {};
     lastDataById = {};
     renderSetup();
@@ -1370,7 +1371,7 @@
       });
   }
 
-  function fetchChild(child){
+  function fetchChild(child, run){
     var card = cardsById[child.id];
     if (!cfg.proxyUrl){
       renderChildResult(card, child, null, 'Keine Proxy-URL eingetragen — unter ⚙️ Einstellungen nachtragen.');
@@ -1401,6 +1402,7 @@
 
     return Promise.all([proxyPromise, lunchPromise])
       .then(function(results){
+        if (run !== refreshRun) return;
         var data = results[0];
         var ccResult = results[1];
         if (ccResult){
@@ -1415,26 +1417,61 @@
         lastDataById[child.id] = data;
         renderChildResult(card, child, data, null);
       })
-      .catch(function(err){ renderChildResult(card, child, null, String(err.message || err)); });
+      .catch(function(err){
+        if (run !== refreshRun) return;
+        renderChildResult(card, child, null, String(err.message || err));
+      });
   }
+
+  // Every refresh gets a number, and an answer is shown only while its
+  // refresh is still the latest one. Otherwise a slow answer for the day
+  // selected before would overwrite the card of the day selected now.
+  var refreshRun = 0;
+  // The proxy request currently on its way (or the last one, settled). A new
+  // refresh starts only once it has settled: it may be logged in with the
+  // same shared class account the new refresh is about to use.
+  var requestInFlight = Promise.resolve();
+  // The proxy answers within about 13 s whatever the provider does, logout
+  // included. A request still open after that hangs in the network and holds
+  // no WebUntis session any more, so a new refresh waits no longer than this.
+  var IN_FLIGHT_WAIT_MS = 15000;
 
   function refreshAll(){
     if (!cfg.children.length) return;
+    var run = ++refreshRun;
     btnRefresh.classList.add('spin');
     childCards.setAttribute('aria-busy', 'true');
     // Sequential rather than parallel: several children often share the
     // same WebUntis login (a class-wide shared account) — two nearly
     // simultaneous logins from the same account can break each other's
     // session on WebUntis. Fetching sequentially avoids that reliably, at
-    // the cost of a bit of time on refresh.
+    // the cost of a bit of time on refresh. A refresh that is no longer the
+    // latest starts no further child.
+    var settled = Promise.race([
+      requestInFlight.then(function(){}, function(){}),
+      new Promise(function(resolve){ setTimeout(resolve, IN_FLIGHT_WAIT_MS); }),
+    ]);
     cfg.children
       .reduce(function(chain, child){
-        return chain.then(function(){ return fetchChild(child); });
-      }, Promise.resolve())
+        return chain.then(function(){
+          if (run !== refreshRun) return;
+          requestInFlight = fetchChild(child, run);
+          return requestInFlight;
+        });
+      }, settled)
       .finally(function(){
+        if (run !== refreshRun) return;
         btnRefresh.classList.remove('spin');
         childCards.setAttribute('aria-busy', 'false');
       });
+  }
+
+  // Drops every running refresh: answers still on their way are not shown
+  // and not kept.
+  function abandonRefreshes(){
+    refreshRun++;
+    btnRefresh.classList.remove('spin');
+    childCards.setAttribute('aria-busy', 'false');
   }
 
   btnRefresh.addEventListener('click', refreshAll);

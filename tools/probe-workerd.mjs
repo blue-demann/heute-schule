@@ -3,7 +3,7 @@
 // Mensamax and sams-on that can answer slowly or stall. Checks what the
 // test suite can only assume through its mocks: that the time limits end a
 // provider that stalls before the headers or mid-body, in the real runtime.
-// Run by hand, e.g. after a workerd update; takes about a minute and a half.
+// Run by hand, e.g. after a workerd update; takes about a minute.
 //   node tools/probe-workerd.mjs
 // Exit code 0: every scenario as expected; 1: at least one is not; 2: the
 // probe itself could not run. Starts no wrangler and reaches no real
@@ -79,6 +79,7 @@ const standIn = http.createServer(async (req, res) => {
 // The Cache API of workerd talks to this: always a miss, every write accepted.
 const cacheStandIn = http.createServer((req, res) => { req.resume(); res.writeHead(req.method === 'GET' ? 504 : 204); res.end(); });
 
+const PROBE_ORIGIN = 'https://heute-schule.pages.dev';
 const WEBUNTIS = { server: 'schule.webuntis.com', password: 'p', klasse: '9c' };
 const MENSAMAX = { provider: 'mensamax', base: 'https://x.parentsmensa.de', projekt: 'P', einrichtung: 'E', password: 'p' };
 const SAMSON = { provider: 'samson', samson: { instanz: 'lessing', passwort: 'p', guthabenAnzeigen: true } };
@@ -111,17 +112,30 @@ async function listen(server) {
   return typeof address === 'object' && address ? address.port : 0;
 }
 
-const work = mkdtempSync(join(tmpdir(), 'probe-workerd-'));
-let workerd;
-let failed = 0;
-try {
-  const standInPort = await listen(standIn);
-  const cachePort = await listen(cacheStandIn);
-  const workerPort = 20000 + Math.floor(Math.random() * 10000);
-  // workerd embeds files relative to its config, so the modules sit next to it.
-  for (const m of MODULES) copyFileSync(join(repo, 'proxy', m), join(work, m));
-  const embeds = MODULES.map((m) => `(name = "${m}", esModule = embed "${m}")`).join(', ');
-  writeFileSync(join(work, 'config.capnp'), `using Workerd = import "/workerd/workerd.capnp";
+/** A port nobody listens on right now (the OS hands out a free one). */
+async function freePort() {
+  const probe = http.createServer();
+  const port = await listen(probe);
+  await new Promise((resolve) => probe.close(() => resolve(undefined)));
+  return port;
+}
+
+/**
+ * Starts workerd and runs every scenario. Returns the exit code; cleans up
+ * on every way out, so no workerd and no temp directory stay behind.
+ * @returns {Promise<number>}
+ */
+async function main() {
+  const work = mkdtempSync(join(tmpdir(), 'probe-workerd-'));
+  let workerd;
+  try {
+    const standInPort = await listen(standIn);
+    const cachePort = await listen(cacheStandIn);
+    const workerPort = await freePort();
+    // workerd embeds files relative to its config, so the modules sit next to it.
+    for (const m of MODULES) copyFileSync(join(repo, 'proxy', m), join(work, m));
+    const embeds = MODULES.map((m) => `(name = "${m}", esModule = embed "${m}")`).join(', ');
+    writeFileSync(join(work, 'config.capnp'), `using Workerd = import "/workerd/workerd.capnp";
 const config :Workerd.Config = (
   services = [
     (name = "main", worker = .proxy),
@@ -133,55 +147,68 @@ const config :Workerd.Config = (
 const proxy :Workerd.Worker = (
   modules = [ ${embeds} ],
   compatibilityDate = "2026-08-25",
-  bindings = [ (name = "ALLOWED_ORIGIN", text = "https://heute-schule.pages.dev") ],
+  bindings = [ (name = "ALLOWED_ORIGIN", text = "${PROBE_ORIGIN}") ],
   globalOutbound = "provider",
   cacheApiOutbound = "cache",
 );
 `);
-  workerd = spawn(join(repo, 'node_modules', '.bin', 'workerd'), ['serve', join(work, 'config.capnp')], { stdio: ['ignore', 'ignore', 'inherit'] });
-  const base = `http://127.0.0.1:${workerPort}`;
-  let up = false;
-  for (let i = 0; i < 50 && !up; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    up = await fetch(`${base}/`, { method: 'GET' }).then(() => true, () => false);
+    workerd = spawn(join(repo, 'node_modules', '.bin', 'workerd'), ['serve', join(work, 'config.capnp')], { stdio: ['ignore', 'ignore', 'inherit'] });
+    const base = `http://127.0.0.1:${workerPort}`;
+    // Only our proxy answers a preflight with this origin; anything else that
+    // took the port in the meantime does not get the placeholder logins.
+    let up = false;
+    for (let i = 0; i < 50 && !up; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      up = await fetch(`${base}/api/status`, { method: 'OPTIONS' })
+        .then((resp) => resp.headers.get('Access-Control-Allow-Origin') === PROBE_ORIGIN, () => false);
+    }
+    if (!up) {
+      console.error('workerd startet nicht, oder auf dem Port antwortet ein anderer Dienst.');
+      return 2;
+    }
+
+    let failed = 0;
+    for (const [i, scenario] of SCENARIOS.entries()) {
+      behaviour = scenario.behaviour;
+      seen = [];
+      const started = Date.now();
+      let answer;
+      let ms;
+      try {
+        const resp = await fetch(`${base}/api/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+          body: JSON.stringify({ ...scenario.request(`probe${i}`), datum: '20260901' }),
+          signal: AbortSignal.timeout(30000),
+        });
+        answer = await resp.json();
+        ms = Date.now() - started;
+      } catch (e) {
+        ms = Date.now() - started;
+        answer = { clientError: e instanceof Error ? e.name : String(e) };
+      }
+      // Work after the answer (the sams-on logout) needs a moment to arrive.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const ok = !('clientError' in answer) && ms >= scenario.from && ms <= scenario.to && scenario.check(answer, seen);
+      if (!ok) failed++;
+      console.log(`${ok ? '✓' : '✗'} ${scenario.name}: ${ms} ms (erwartet ${scenario.from}–${scenario.to})`);
+      if (!ok) console.log(`    Antwort: ${JSON.stringify(answer)}\n    Anfragen: ${seen.join(' | ')}`);
+    }
+    console.log(failed ? `\n${failed} von ${SCENARIOS.length} Szenarien nicht wie erwartet.` : `\nAlle ${SCENARIOS.length} Szenarien wie erwartet.`);
+    return failed ? 1 : 0;
+  } finally {
+    workerd?.kill();
+    standIn.closeAllConnections();
+    standIn.close();
+    cacheStandIn.close();
+    rmSync(work, { recursive: true, force: true });
   }
-  if (!up) {
-    console.error('workerd startet nicht.');
+}
+
+main().then(
+  (code) => process.exit(code),
+  (e) => {
+    console.error(`Die Prüfung ließ sich nicht ausführen: ${e instanceof Error ? e.message : String(e)}`);
     process.exit(2);
   }
-
-  for (const [i, scenario] of SCENARIOS.entries()) {
-    behaviour = scenario.behaviour;
-    seen = [];
-    const started = Date.now();
-    let answer;
-    let ms;
-    try {
-      const resp = await fetch(`${base}/api/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
-        body: JSON.stringify({ ...scenario.request(`probe${i}`), datum: '20260901' }),
-        signal: AbortSignal.timeout(30000),
-      });
-      answer = await resp.json();
-      ms = Date.now() - started;
-    } catch (e) {
-      ms = Date.now() - started;
-      answer = { clientError: e instanceof Error ? e.name : String(e) };
-    }
-    // Work after the answer (the sams-on logout) needs a moment to arrive.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    const ok = !('clientError' in answer) && ms >= scenario.from && ms <= scenario.to && scenario.check(answer, seen);
-    if (!ok) failed++;
-    console.log(`${ok ? '✓' : '✗'} ${scenario.name}: ${ms} ms (erwartet ${scenario.from}–${scenario.to})`);
-    if (!ok) console.log(`    Antwort: ${JSON.stringify(answer)}\n    Anfragen: ${seen.join(' | ')}`);
-  }
-} finally {
-  workerd?.kill();
-  standIn.closeAllConnections();
-  standIn.close();
-  cacheStandIn.close();
-  rmSync(work, { recursive: true, force: true });
-}
-console.log(failed ? `\n${failed} von ${SCENARIOS.length} Szenarien nicht wie erwartet.` : `\nAlle ${SCENARIOS.length} Szenarien wie erwartet.`);
-process.exit(failed ? 1 : 0);
+);

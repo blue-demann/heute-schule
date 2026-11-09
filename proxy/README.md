@@ -111,14 +111,17 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   auch das Lesen der Antwort umfasst — für den Abruf eines Anbieters
   gemeinsam 10 s, für die WebUntis-Abmeldung eigene 3 s, für die
   sams-on-Abmeldung nach der Antwort eigene 5 s. Ein Anbieter, der nicht
-  antwortet oder mitten in der Antwort hängen bleibt, hält die Karte damit
-  höchstens rund 13 s auf (WebUntis: 10 s Abruf, dann 3 s Abmeldung). Die
-  WebUntis-Abmeldung läuft vor der Antwort, auch nach einem Fehler: Die App
-  fragt Kinder nacheinander ab, weil sich bei einem geteilten Klassenkonto
+  antwortet oder mitten in der Antwort hängen bleibt, hält die Antwort des
+  Proxys damit höchstens rund 13 s auf (WebUntis: 10 s Abruf, dann 3 s
+  Abmeldung). Die WebUntis-Abmeldung läuft vor der Antwort, auch nach
+  einem Fehler, sobald die Anmeldung gelesen ist: Die App fragt Kinder
+  nacheinander ab, weil sich bei einem geteilten Klassenkonto
   gleichzeitige Sitzungen stören können, und der nächste Login soll erst
-  nach der Abmeldung beginnen. Ergebnisse, die in ein Limit gelaufen sind,
-  werden nicht gecacht. Nachprüfbar in der echten Workers-Laufzeit mit
-  `node tools/probe-workerd.mjs`.
+  nach der Abmeldung beginnen; einen neuen Abruf startet sie erst, wenn
+  die laufende Anfrage beantwortet ist, höchstens nach 15 s. Ergebnisse,
+  die in ein Limit gelaufen sind, werden nicht gecacht, auch nicht der
+  Teil des anderen Anbieters. Nachprüfbar in der echten Workers-Laufzeit
+  mit `node tools/probe-workerd.mjs`.
 
 ## Offene Punkte
 

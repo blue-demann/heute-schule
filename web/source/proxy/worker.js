@@ -798,7 +798,9 @@ export default {
     // Mensamax from being hit again on every "refresh" click, especially
     // with wrong credentials. Not a time limit running out, though: a slow
     // moment at the provider would otherwise stay on the card for the whole
-    // cache time, and "refresh" could not try again.
+    // cache time, and "refresh" could not try again. Deliberately all or
+    // nothing: when one provider timed out, the other's part is not cached
+    // either, so the next refresh asks both again (the rate limit caps it).
     const timedOut = [lessonsResult, lunchResult].some((r) => r.status === 'rejected' && r.reason instanceof ProviderTimeout);
     if (!timedOut) {
       const cacheResp = new Response(JSON.stringify(result), {
