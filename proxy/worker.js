@@ -53,6 +53,11 @@ import {
 } from './validate.mjs';
 
 const FETCH_TIMEOUT_MS = 10000;
+// One limit for a provider's whole sequence of requests, response bodies
+// included (WebUntis up to five before the answer, Mensamax three, sams-on
+// four). The per-request timeout alone ends once the headers are in; a
+// server that then stalls in the body would hold the answer indefinitely.
+const PROVIDER_BUDGET_MS = 10000;
 const CACHE_TTL_SECONDS = 240; // 4 minutes
 
 // Rate limit per IP per minute. Set generously: a normal refresh costs one
@@ -109,7 +114,8 @@ async function isRateLimited(request, ctx) {
 
 // Wrapper around every request to a provider.
 // - Timeout: stops a hung third-party server from blocking the worker (and
-//   the parent's request) indefinitely.
+//   the parent's request) indefinitely. It covers the wait for the headers;
+//   reading the body is covered by the shared budget (see withBudget).
 // - Never follows redirects: the host check only covers the first URL. A
 //   followed 3xx would send the request — including session cookies or
 //   login data — to whatever host the Location header names, so one open
@@ -127,11 +133,51 @@ async function fetchWithTimeout(url, options, budget) {
   try {
     return await fetch(url, { ...options, redirect: 'manual', signal });
   } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      const limit = budget?.aborted ? 'Gesamtzeit überschritten' : `>${FETCH_TIMEOUT_MS / 1000}s`;
-      throw new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (${limit})`, { cause: e });
-    }
-    throw e;
+    throw asTimeoutError(e, url, budget);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * An aborted request or body read becomes a message naming the host and
+ * which limit ran out; any other error stays as it is.
+ * @param {unknown} e
+ * @param {string} url
+ * @param {AbortSignal} [budget]
+ */
+function asTimeoutError(e, url, budget) {
+  if (!(e instanceof Error && e.name === 'AbortError')) return e;
+  const limit = budget?.aborted ? 'Gesamtzeit überschritten' : `>${FETCH_TIMEOUT_MS / 1000}s`;
+  return new Error(`Zeitüberschreitung beim Zugriff auf ${new URL(url).hostname} (${limit})`, { cause: e });
+}
+
+/**
+ * Reads a response body. The body still hangs on the signal its request
+ * was made with, so a budget running out while reading ends the read too.
+ * @param {Response} resp
+ * @param {string} url  the request's URL, for the message
+ * @param {AbortSignal} [budget]
+ */
+async function readText(resp, url, budget) {
+  try {
+    return await resp.text();
+  } catch (e) {
+    throw asTimeoutError(e, url, budget);
+  }
+}
+
+/**
+ * Runs a provider's sequence of requests under one shared time limit.
+ * @template T
+ * @param {(budget: AbortSignal) => Promise<T>} work
+ * @returns {Promise<T>}
+ */
+async function withBudget(work) {
+  const budget = new AbortController();
+  const timer = setTimeout(() => budget.abort(), PROVIDER_BUDGET_MS);
+  try {
+    return await work(budget.signal);
   } finally {
     clearTimeout(timer);
   }
@@ -198,19 +244,21 @@ class WebUntisRejection extends Error {}
  * @param {string | null} cookie
  * @param {string} method
  * @param {Record<string, unknown>} params
+ * @param {AbortSignal} [budget]
  * @returns {Promise<unknown>}
  */
-async function webuntisRpc(server, cookie, method, params) {
+async function webuntisRpc(server, cookie, method, params, budget) {
   const safeServer = checkSafeHostname(server, { requiredSuffix: '.webuntis.com' });
-  const resp = await fetchWithTimeout(httpsUrlForHost(safeServer, '/WebUntis/jsonrpc.do'), {
+  const url = httpsUrlForHost(safeServer, '/WebUntis/jsonrpc.do');
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(cookie ? { Cookie: cookie } : {}),
     },
     body: JSON.stringify({ id: 1, method, params, jsonrpc: '2.0' }),
-  });
-  const text = await resp.text();
+  }, budget);
+  const text = await readText(resp, url, budget);
   let data;
   try {
     data = JSON.parse(text);
@@ -227,16 +275,26 @@ async function webuntisRpc(server, cookie, method, params) {
  * @param {string} datumStr
  * @returns {Promise<Lesson[]>}
  */
-async function getTimetable({ server, user, password, klasse }, datumStr) {
+async function getTimetable(webuntisCfg, datumStr) {
+  const { server, user, password, klasse } = webuntisCfg;
   if (!server || !user || !password || !klasse) {
     throw new Error('WebUntis-Konfiguration unvollständig (server/user/password/klasse)');
   }
+  return withBudget((budget) => fetchTimetable({ server, user, password, klasse }, datumStr, budget));
+}
 
+/**
+ * @param {{ server: string, user: string, password: string, klasse: string }} webuntisCfg  checked complete
+ * @param {string} datumStr
+ * @param {AbortSignal} budget
+ * @returns {Promise<Lesson[]>}
+ */
+async function fetchTimetable({ server, user, password, klasse }, datumStr, budget) {
   let auth;
   try {
     auth = validateAuth(await webuntisRpc(server, null, 'authenticate', {
       user, password, client: 'stundenplan-proxy',
-    }));
+    }, budget));
   } catch (e) {
     // Only when WebUntis itself rejected the login is "check your password"
     // worth showing. For anything else — no connection, a maintenance page
@@ -251,15 +309,15 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
 
   const dateInt = parseInt(datumStr, 10);
 
-  const classes = validateClasses(await webuntisRpc(server, cookie, 'getKlassen', {}));
+  const classes = validateClasses(await webuntisRpc(server, cookie, 'getKlassen', {}, budget));
   const classObj = classes.find(k => k.name.toLowerCase() === klasse.toLowerCase());
   if (!classObj) throw new Error(`Klasse "${klasse}" bei WebUntis nicht gefunden`);
 
   const lessons = validateLessons(await webuntisRpc(server, cookie, 'getTimetable', {
     id: classObj.id, type: 1, startDate: dateInt, endDate: dateInt,
-  }));
-  const subjects = validateSubjects(await webuntisRpc(server, cookie, 'getSubjects', {}));
-  const rooms = validateRooms(await webuntisRpc(server, cookie, 'getRooms', {}));
+  }, budget));
+  const subjects = validateSubjects(await webuntisRpc(server, cookie, 'getSubjects', {}, budget));
+  const rooms = validateRooms(await webuntisRpc(server, cookie, 'getRooms', {}, budget));
 
   /** @type {Record<number, string>} */
   const subjectNameById = {};
@@ -268,6 +326,10 @@ async function getTimetable({ server, user, password, klasse }, datumStr) {
   const roomNameById = {};
   rooms.forEach(r => { roomNameById[r.id] = r.name || '?'; });
 
+  // Awaited before the answer and outside the budget: the web app fetches
+  // children one after another because a shared class account can break a
+  // session logged in at the same moment, so the next login must not start
+  // while this logout is still under way.
   try { await webuntisRpc(server, cookie, 'logout', {}); } catch { /* not worth failing over */ }
 
   const seen = new Set();
@@ -326,11 +388,13 @@ function getSetCookies(resp) {
 /**
  * @param {string} origin
  * @param {LunchConfig} lunchCfg
+ * @param {AbortSignal} budget
  * @returns {Promise<string | null>}
  */
-async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', username = '', password = '' }) {
-  const loginPage = await fetchWithTimeout(`${origin}/login.aspx`);
-  const loginHtml = await loginPage.text();
+async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', username = '', password = '' }, budget) {
+  const loginUrl = `${origin}/login.aspx`;
+  const loginPage = await fetchWithTimeout(loginUrl, undefined, budget);
+  const loginHtml = await readText(loginPage, loginUrl, budget);
 
   const payload = [
     `__VIEWSTATE=${encodeURIComponent(extractHidden(loginHtml, '__VIEWSTATE'))}`,
@@ -343,11 +407,11 @@ async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', user
     'hdfCheck=&hdfLanguage=german&hdfLogin=&btnLogin=Anmelden',
   ].join('&');
 
-  const loginResp = await fetchWithTimeout(`${origin}/login.aspx`, {
+  const loginResp = await fetchWithTimeout(loginUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: payload,
-  });
+  }, budget);
 
   /** @type {Record<string, string>} */
   const cookies = {};
@@ -365,7 +429,7 @@ async function getMensamaxCookies(origin, { projekt = '', einrichtung = '', user
   //  2. Only a genuine success additionally sets an app auth cookie
   //     (MensaMax / mm_token / mensamax_superglue), not just the generic
   //     ASP.NET session cookie.
-  const loginHtml2 = await loginResp.text();
+  const loginHtml2 = await readText(loginResp, loginUrl, budget);
   const loginFailed = /anmeldung fehlgeschlagen/i.test(loginHtml2);
   const hasAuthCookie = !!(cookies['MensaMax'] || cookies['mm_token'] || cookies['mensamax_superglue']);
 
@@ -400,15 +464,16 @@ async function getLunchStatus(lunchCfg, datumStr, ctx) {
   if (provider !== 'mensamax') {
     return { lunch: `Schulessen: unbekannter Anbieter "${provider}"` };
   }
-  return { lunch: await getLunchStatusMensamax(lunchCfg, datumStr) };
+  return { lunch: await withBudget((budget) => getLunchStatusMensamax(lunchCfg, datumStr, budget)) };
 }
 
 /**
  * @param {LunchConfig} lunchCfg
  * @param {string} datumStr
+ * @param {AbortSignal} budget
  * @returns {Promise<string>}
  */
-async function getLunchStatusMensamax(lunchCfg, datumStr) {
+async function getLunchStatusMensamax(lunchCfg, datumStr, budget) {
   const { base } = lunchCfg;
   if (!base || !lunchCfg.username || !lunchCfg.password) {
     throw new Error('Mensamax-Konfiguration unvollständig (base/username/password)');
@@ -418,16 +483,14 @@ async function getLunchStatusMensamax(lunchCfg, datumStr) {
   // so it cannot steer the request to e.g. a redirect endpoint.
   const { origin } = checkSafeHttpsUrl(base, { requiredSuffixes: MENSAMAX_ALLOWED_DOMAINS });
 
-  const cookieHeader = await getMensamaxCookies(origin, lunchCfg);
+  const cookieHeader = await getMensamaxCookies(origin, lunchCfg, budget);
   if (!cookieHeader) return 'Schulessen: Login fehlgeschlagen';
 
-  const planResp = await fetchWithTimeout(
-    `${origin}/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx`,
-    { headers: { Cookie: cookieHeader } }
-  );
+  const planUrl = `${origin}/mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx`;
+  const planResp = await fetchWithTimeout(planUrl, { headers: { Cookie: cookieHeader } }, budget);
   if (planResp.status !== 200) return 'Schulessen: Daten nicht verfügbar';
 
-  const html = await planResp.text();
+  const html = await readText(planResp, planUrl, budget);
 
   const dayPattern = new RegExp(
     `id="td${datumStr}_\\d+"\\s+class="speiseplan-menue([^"]*)"[\\s\\S]{0,800}?<li>([^<]+)<`, 'g'
@@ -484,12 +547,15 @@ function cookieHeader(jar) {
 /**
  * @param {Response} resp
  * @param {string} method
+ * @param {string} url  the request's URL, for a timeout message
+ * @param {AbortSignal} budget
  * @returns {Promise<unknown>}
  */
-async function samsonJson(resp, method) {
+async function samsonJson(resp, method, url, budget) {
   if (!resp.ok) throw new Error(`sams-on: ${method} nicht abrufbar (HTTP ${resp.status})`);
+  const text = await readText(resp, url, budget);
   try {
-    return JSON.parse(await resp.text());
+    return JSON.parse(text);
   } catch (e) {
     throw new Error(`sams-on: keine gültige JSON-Antwort auf ${method} (HTTP ${resp.status})`, { cause: e });
   }
@@ -500,11 +566,6 @@ async function samsonJson(resp, method) {
 // (lowCreditWarning in the instance info), but a school may leave it unset,
 // and sams-on then warns not at all.
 const SAMSON_LOW_CREDIT = 5;
-
-// One limit for the whole sams-on sequence (up to four requests before the
-// answer), on top of the per-request timeout: a hanging sams-on then costs
-// at most this long per child, not four timeouts in a row.
-const SAMSON_BUDGET_MS = 15000;
 
 /**
  * @param {string | null} amount  e.g. "12,40"
@@ -529,75 +590,88 @@ async function getLunchStatusSamson(samsonCfg, datumStr, ctx) {
     throw new Error('sams-on-Konfiguration unvollständig (Schuladresse/Benutzername/Passwort)');
   }
   const origin = samsonOrigin(instanz);
+  return withBudget((budget) => fetchSamsonLunch({ origin, benutzername, passwort, guthabenAnzeigen }, datumStr, ctx, budget));
+}
+
+/**
+ * @param {{ origin: string, benutzername: string, passwort: string, guthabenAnzeigen: boolean }} account
+ * @param {string} datumStr  YYYYMMDD
+ * @param {ExecutionContext} ctx
+ * @param {AbortSignal} budget
+ * @returns {Promise<LunchResult>}
+ */
+async function fetchSamsonLunch({ origin, benutzername, passwort, guthabenAnzeigen }, datumStr, ctx, budget) {
   const instanceName = new URL(origin).hostname.split('.')[0];
   const jar = new Map();
   const headers = () => ({ 'Content-Type': SAMSON_CONTENT_TYPE, Accept: 'application/json', ...(jar.size ? { Cookie: cookieHeader(jar) } : {}) });
-  const budget = new AbortController();
-  const budgetTimer = setTimeout(() => budget.abort(), SAMSON_BUDGET_MS);
   /**
    * @param {string} path
    * @param {RequestInit} [init]
    */
-  const samsonFetch = (path, init) => fetchWithTimeout(`${origin}${path}`, { ...init, headers: headers() }, budget.signal);
+  const samsonFetch = (path, init) => fetchWithTimeout(`${origin}${path}`, { ...init, headers: headers() }, budget);
+  /**
+   * @param {Response} resp
+   * @param {string} method
+   * @param {string} path
+   */
+  const samsonRead = (resp, method, path) => samsonJson(resp, method, `${origin}${path}`, budget);
+
+  const instanceResp = await samsonFetch(`/api/instance/${instanceName}`);
+  // An unknown school name: sams-on redirects to its homepage (seen live,
+  // 302 to www.sams-on.de); a 404 would mean the same.
+  const unknownSchool = instanceResp.status === 404 || (instanceResp.status >= 300 && instanceResp.status < 400);
+  if (unknownSchool) throw new Error(`sams-on: Schule „${instanceName}“ nicht gefunden — Adresse in den Einstellungen prüfen`);
+  if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
+  collectCookies(jar, instanceResp);
+  // Whether sams-on shows the balance to users of this school at all —
+  // only read when the balance is to be shown. An unreadable instance
+  // info makes the balance "not available", it does not fail the meal
+  // status.
+  let creditHidden = /** @type {boolean | null} */ (false);
+  if (guthabenAnzeigen) {
+    try {
+      creditHidden = samsonCreditHidden(JSON.parse(await instanceResp.text()));
+    } catch {
+      creditHidden = null;
+    }
+  }
+
+  const loginResp = await samsonFetch('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: benutzername, password: passwort }),
+  });
+  if (loginResp.status === 401 || loginResp.status === 403) return { lunch: 'Schulessen: Login fehlgeschlagen' };
+  if (!loginResp.ok) throw new Error(`sams-on: Anmeldung nicht möglich (HTTP ${loginResp.status})`);
+  collectCookies(jar, loginResp);
 
   try {
-    const instanceResp = await samsonFetch(`/api/instance/${instanceName}`);
-    // An unknown school name: sams-on redirects to its homepage (seen live,
-    // 302 to www.sams-on.de); a 404 would mean the same.
-    const unknownSchool = instanceResp.status === 404 || (instanceResp.status >= 300 && instanceResp.status < 400);
-    if (unknownSchool) throw new Error(`sams-on: Schule „${instanceName}“ nicht gefunden — Adresse in den Einstellungen prüfen`);
-    if (!instanceResp.ok) throw new Error(`sams-on: nicht erreichbar (HTTP ${instanceResp.status})`);
-    collectCookies(jar, instanceResp);
-    // Whether sams-on shows the balance to users of this school at all —
-    // only read when the balance is to be shown. An unreadable instance
-    // info makes the balance "not available", it does not fail the meal
-    // status.
-    let creditHidden = /** @type {boolean | null} */ (false);
-    if (guthabenAnzeigen) {
-      try {
-        creditHidden = samsonCreditHidden(JSON.parse(await instanceResp.text()));
-      } catch {
-        creditHidden = null;
-      }
-    }
+    const accountPath = '/api/login?forceUserarea=false';
+    const accountResp = await samsonFetch(accountPath);
+    // Not logged in after all: sams-on answers a failed login like this.
+    if (accountResp.status === 401) return { lunch: 'Schulessen: Login fehlgeschlagen' };
+    // sams-on sends name, e-mail, ID card number and credit with this
+    // answer, always; only the user id and, if switched on, the credit
+    // are taken from it.
+    const account = await samsonRead(accountResp, 'login', accountPath);
+    const userId = validateSamsonAccount(account);
+    const balance = guthabenAnzeigen ? { guthaben: samsonBalance(samsonCredit(account), creditHidden) } : {};
 
-    const loginResp = await samsonFetch('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({ username: benutzername, password: passwort }),
-    });
-    if (loginResp.status === 401 || loginResp.status === 403) return { lunch: 'Schulessen: Login fehlgeschlagen' };
-    if (!loginResp.ok) throw new Error(`sams-on: Anmeldung nicht möglich (HTTP ${loginResp.status})`);
-    collectCookies(jar, loginResp);
-
-    try {
-      const accountResp = await samsonFetch('/api/login?forceUserarea=false');
-      // Not logged in after all: sams-on answers a failed login like this.
-      if (accountResp.status === 401) return { lunch: 'Schulessen: Login fehlgeschlagen' };
-      // sams-on sends name, e-mail, ID card number and credit with this
-      // answer, always; only the user id and, if switched on, the credit
-      // are taken from it.
-      const account = await samsonJson(accountResp, 'login');
-      const userId = validateSamsonAccount(account);
-      const balance = guthabenAnzeigen ? { guthaben: samsonBalance(samsonCredit(account), creditHidden) } : {};
-
-      const day = `${datumStr.slice(0, 4)}-${datumStr.slice(4, 6)}-${datumStr.slice(6, 8)}`;
-      const ordersResp = await samsonFetch(`/api/users/${userId}/orders/view?dateFrom=${day}&dateTill=${day}`);
-      const meals = validateSamsonOrders(await samsonJson(ordersResp, 'orders/view'))
-        .filter((o) => o.dayId === day)
-        .map((o) => samsonMealName(o.title))
-        .filter((name) => name !== '');
-      return { lunch: meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt', ...balance };
-    } finally {
-      // Sent after the answer, outside the shared time limit, so a slow
-      // sams-on does not hold up the card. Not worth failing over: if it
-      // does not go through, the session expires on its own.
-      ctx.waitUntil(
-        fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' })
-          .then(() => {}, () => {})
-      );
-    }
+    const day = `${datumStr.slice(0, 4)}-${datumStr.slice(4, 6)}-${datumStr.slice(6, 8)}`;
+    const ordersPath = `/api/users/${userId}/orders/view?dateFrom=${day}&dateTill=${day}`;
+    const ordersResp = await samsonFetch(ordersPath);
+    const meals = validateSamsonOrders(await samsonRead(ordersResp, 'orders/view', ordersPath))
+      .filter((o) => o.dayId === day)
+      .map((o) => samsonMealName(o.title))
+      .filter((name) => name !== '');
+    return { lunch: meals.length ? `Essen bestellt: ${meals.join(' / ')}` : 'Kein Essen bestellt', ...balance };
   } finally {
-    clearTimeout(budgetTimer);
+    // Sent after the answer, outside the shared time limit, so a slow
+    // sams-on does not hold up the card. Not worth failing over: if it
+    // does not go through, the session expires on its own.
+    ctx.waitUntil(
+      fetchWithTimeout(`${origin}/api/logout?forceUserarea=false`, { method: 'POST', headers: headers(), body: '{}' })
+        .then(() => {}, () => {})
+    );
   }
 }
 

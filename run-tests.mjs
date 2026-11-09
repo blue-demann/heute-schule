@@ -1537,7 +1537,7 @@ function webuntisHandler(overrides = {}) {
     test: (url) => url.includes('/WebUntis/jsonrpc.do'),
     respond: async (url, options) => {
       const method = JSON.parse(options.body).method;
-      if (method in overrides) return overrides[method]();
+      if (method in overrides) return overrides[method](url, options);
       const results = {
         authenticate: { sessionId: 'abc123' },
         getKlassen: [{ id: 1, name: '9c' }],
@@ -1859,6 +1859,7 @@ function fakeTimers() {
         if (timer.ms === ms) { pending.delete(id); timer.fn(); }
       }
     },
+    pendingCount() { return pending.size; },
     restore() { globalThis.setTimeout = realSetTimeout; globalThis.clearTimeout = realClearTimeout; },
   };
 }
@@ -1869,6 +1870,21 @@ function hangingRequest(reached = () => {}) {
     options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
     reached();
   });
+}
+// A response whose headers arrive, but whose body stops after a first piece
+// and only ends when the request is aborted — what Node and workerd do with
+// a server that stalls mid-body (checked against a real stalling server).
+function hangingBody(reached = () => {}) {
+  return (u, options) => {
+    const body = new ReadableStream({
+      start(stream) {
+        stream.enqueue(new TextEncoder().encode('{"teil'));
+        options.signal.addEventListener('abort', () => stream.error(options.signal.reason), { once: true });
+        reached();
+      },
+    });
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
 }
 // Fails instead of hanging when a promise does not settle in real time.
 async function settlesWithin(promise, what) {
@@ -1928,40 +1944,6 @@ await testAsync('sams-on: the answer does not wait for the logout', async () => 
     assertEqual((await answer.json()).lunch, 'Kein Essen bestellt');
     timers.fire(10000); // the logout's own timeout ends it
     await settlesWithin(ctx.drain(), 'the logout');
-  } finally {
-    timers.restore();
-    restoreFetch();
-  }
-});
-await testAsync('sams-on: a request that hangs ends after its own timeout, with a message', async () => {
-  const timers = fakeTimers();
-  try {
-    let reached;
-    const loginStarted = new Promise((resolve) => { reached = resolve; });
-    const server = samsonServer({ overrides: { 'POST /api/login': hangingRequest(reached) } });
-    const { ctx, response } = startLunch(server, samsonLunch());
-    await loginStarted;
-    timers.fire(10000);
-    assertEqual((await (await settlesWithin(response, 'the answer')).json()).lunchFehler, 'Zeitüberschreitung beim Zugriff auf lessing.sams-on.de (>10s)');
-    await settlesWithin(ctx.drain(), 'the logout');
-  } finally {
-    timers.restore();
-    restoreFetch();
-  }
-});
-await testAsync('sams-on: the whole sequence has one shared time limit; the logout still goes out', async () => {
-  const timers = fakeTimers();
-  try {
-    let reached;
-    const ordersStarted = new Promise((resolve) => { reached = resolve; });
-    const server = samsonServer({ overrides: { 'GET /api/users/8/orders/view': hangingRequest(reached) } });
-    const { ctx, response } = startLunch(server, samsonLunch());
-    await ordersStarted;
-    timers.fire(15000);
-    assertEqual((await (await settlesWithin(response, 'the answer')).json()).lunchFehler, 'Zeitüberschreitung beim Zugriff auf lessing.sams-on.de (Gesamtzeit überschritten)');
-    await settlesWithin(ctx.drain(), 'the logout');
-    const last = server.calls[server.calls.length - 1];
-    assertEqual(`${last.method} ${new URL(last.url).pathname}`, 'POST /api/logout');
   } finally {
     timers.restore();
     restoreFetch();
@@ -2174,6 +2156,153 @@ await testAsync('getSetCookies falls back to a single set-cookie header when get
   // the login — this test's point is only that reading the fallback path
   // doesn't throw, not the login outcome itself.
   assertEqual(body.lunch, 'Schulessen: Login fehlgeschlagen');
+});
+
+// ── One time limit per provider, response bodies included ───────────────
+//
+// Every request a provider makes before the answer, each in both ways a
+// server can hang: no headers at all, or headers and then a stalled body.
+// The per-request timeout only covers the first; the shared budget has to
+// end both. The counter-check in each case shows the stand-in really
+// hangs: before the budget runs out, the answer is still open.
+
+console.log('\nOne time limit per provider (headers and body)');
+
+const BUDGET_MS = 10000;
+const HANG_KINDS = [
+  ['no headers', hangingRequest],
+  ['headers, then a stalled body', hangingBody],
+];
+const WEBUNTIS_CFG = { server: 'schule.webuntis.com', user: 'u', password: 'p', klasse: '9c' };
+const MENSAMAX_PLAN_HTML = '<html><td id="td20260901_1" class="speiseplan-menue tdSelected"><ul><li>Nudeln<</li></ul></td></html>';
+function mensamaxServer(overrides = {}) {
+  return {
+    test: (url) => url.includes('parentsmensa.de'),
+    respond: async (url, options = {}) => {
+      const key = `${(options.method || 'GET').toUpperCase()} ${new URL(url).pathname}`;
+      if (overrides[key]) return overrides[key](new URL(url), options);
+      if (key.endsWith('/PlanForm.aspx')) return new Response(MENSAMAX_PLAN_HTML);
+      return mensamaxLoginHandler().respond(url, options);
+    },
+  };
+}
+const BUDGET_CASES = [
+  ...['authenticate', 'getKlassen', 'getTimetable', 'getSubjects', 'getRooms'].map((method) => ({
+    provider: 'WebUntis', step: method, field: 'stundenFehler', host: 'schule.webuntis.com',
+    start: (hang) => ({ handlers: [webuntisHandler({ [method]: hang })], body: { webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' } }),
+  })),
+  ...['GET /login.aspx', 'POST /login.aspx', 'GET /mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx'].map((key) => ({
+    provider: 'Mensamax', step: key, field: 'lunchFehler', host: 'x.parentsmensa.de',
+    start: (hang) => ({ handlers: [mensamaxServer({ [key]: hang })], body: { webuntis: {}, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' } }),
+  })),
+  ...['GET /api/instance/lessing', 'POST /api/login', 'GET /api/login', 'GET /api/users/8/orders/view'].map((key) => ({
+    provider: 'sams-on', step: key, field: 'lunchFehler', host: 'lessing.sams-on.de',
+    // Only status and cookies of the login answer are used, never its body.
+    bodyUnread: key === 'POST /api/login',
+    // With the balance switched on, the instance info's body is read too.
+    start: (hang) => ({ handlers: [samsonServer({ overrides: { [key]: hang } }).handler], body: { webuntis: {}, lunch: samsonLunch({ guthabenAnzeigen: true }), datum: '20261103' } }),
+  })),
+];
+
+for (const c of BUDGET_CASES) {
+  for (const [kind, makeHang] of HANG_KINDS) {
+    if (c.bodyUnread && makeHang === hangingBody) {
+      await testAsync(`${c.provider}, ${c.step} — ${kind}: the body is never read, the answer does not wait for it`, async () => {
+        const { handlers, body } = c.start(makeHang());
+        globalThis.caches = makeCachesStub();
+        mockFetch(handlers);
+        const ctx = makeCtx();
+        const answer = await (await settlesWithin(proxyWorker.fetch(apiRequest(body), TEST_ENV, ctx), 'the answer')).json();
+        await settlesWithin(ctx.drain(), 'the work after the answer');
+        restoreFetch();
+        assert(!String(answer[c.field]).includes('Zeitüberschreitung'), answer[c.field]);
+      });
+      continue;
+    }
+    await testAsync(`${c.provider}, ${c.step} — ${kind}: the shared time limit ends it, with a message`, async () => {
+      const timers = fakeTimers();
+      try {
+        let reached;
+        const hangStarted = new Promise((resolve) => { reached = resolve; });
+        const { handlers, body } = c.start(makeHang(reached));
+        globalThis.caches = makeCachesStub();
+        mockFetch(handlers);
+        const ctx = makeCtx();
+        const response = proxyWorker.fetch(apiRequest(body), TEST_ENV, ctx);
+        await settlesWithin(hangStarted, `the request to ${c.step}`);
+        const early = await Promise.race([response.then(() => 'answered'), new Promise((resolve) => realSetTimeout(resolve, 50, 'open'))]);
+        assertEqual(early, 'open', 'counter-check: the stand-in does not hang');
+        timers.fire(BUDGET_MS);
+        const answer = await (await settlesWithin(response, 'the answer')).json();
+        assertEqual(answer[c.field], `Zeitüberschreitung beim Zugriff auf ${c.host} (Gesamtzeit überschritten)`);
+        timers.fire(BUDGET_MS); // a logout still under way runs into its own timeout
+        await settlesWithin(ctx.drain(), 'the work after the answer');
+      } finally {
+        timers.restore();
+        restoreFetch();
+      }
+    });
+  }
+}
+
+await testAsync('WebUntis: the logout is done before the answer goes out (the next login must not overlap it)', async () => {
+  const events = [];
+  globalThis.caches = makeCachesStub();
+  mockFetch([webuntisHandler({
+    logout: async () => {
+      events.push('logout started');
+      await new Promise((resolve) => realSetTimeout(resolve, 20));
+      events.push('logout done');
+      return new Response(JSON.stringify({ result: {} }));
+    },
+  })]);
+  const ctx = makeCtx();
+  const resp = await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }), TEST_ENV, ctx);
+  events.push('answer');
+  restoreFetch();
+  assertEqual((await resp.json()).stundenFehler, null);
+  assertEqual(events.join(' → '), 'logout started → logout done → answer');
+});
+
+await testAsync('after a normal run, no time limit of any provider is left running', async () => {
+  const timers = fakeTimers();
+  try {
+    const sams = samsonServer({ orders: [] });
+    for (const [handlers, body] of [
+      [[webuntisHandler()], { webuntis: WEBUNTIS_CFG, lunch: {}, datum: '20260901' }],
+      [[mensamaxServer()], { webuntis: {}, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' }],
+      [[sams.handler], { webuntis: {}, lunch: samsonLunch({ guthabenAnzeigen: true }), datum: '20261103' }],
+    ]) {
+      globalThis.caches = makeCachesStub();
+      mockFetch(handlers);
+      const ctx = makeCtx();
+      const answer = await (await settlesWithin(proxyWorker.fetch(apiRequest(body), TEST_ENV, ctx), 'the answer')).json();
+      await settlesWithin(ctx.drain(), 'the work after the answer');
+      assert(!answer.stundenFehler || !answer.lunchFehler, `counter-check: the run did not succeed: ${JSON.stringify(answer)}`);
+      assertEqual(timers.pendingCount(), 0, 'timers still pending');
+    }
+  } finally {
+    timers.restore();
+    restoreFetch();
+  }
+});
+
+await testAsync('a body that is merely slow, inside the limit, is read in full', async () => {
+  globalThis.caches = makeCachesStub();
+  mockFetch([mensamaxServer({
+    'GET /mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx': () => new Response(new ReadableStream({
+      async start(stream) {
+        for (const piece of MENSAMAX_PLAN_HTML.match(/.{1,10}/gs)) {
+          await new Promise((resolve) => realSetTimeout(resolve, 1));
+          stream.enqueue(new TextEncoder().encode(piece));
+        }
+        stream.close();
+      },
+    })),
+  })]);
+  const resp = await proxyWorker.fetch(apiRequest({ webuntis: {}, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' }), TEST_ENV, makeCtx());
+  restoreFetch();
+  assertEqual((await resp.json()).lunch, 'Essen bestellt: Nudeln');
 });
 
 delete globalThis.caches;

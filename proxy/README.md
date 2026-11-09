@@ -45,8 +45,7 @@ selbst. Ablauf wie die sams-on-Web-App: `GET /api/instance/<schule>` (startet
 das Session-Cookie), `POST /api/login`, `GET /api/login` (`user.userId`),
 `GET /api/users/<id>/orders/view?dateFrom=<Tag>&dateTill=<Tag>`,
 `POST /api/logout` (nach der Antwort, per `ctx.waitUntil`). Nur lesend. Für
-den ganzen Ablauf gilt ein gemeinsames Zeitlimit von 15 s zusätzlich zu den
-10 s je Anfrage. Antworten prüft `validate.mjs`, Menünamen bereitet `text.mjs`
+den ganzen Ablauf gilt das gemeinsame Zeitlimit (siehe Sicherheit). Antworten prüft `validate.mjs`, Menünamen bereitet `text.mjs`
 auf (HTML-Zeilenumbrüche raus, Allergen-Kürzel-Zeile weg). Das Guthaben
 (`creditAmount`) schickt sams-on in `GET /api/login` immer mit; der Proxy gibt
 es nur weiter, wenn `lunch.samson.guthabenAnzeigen` gesetzt ist, als
@@ -108,6 +107,14 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   `fetchWithTimeout`). Die Prüfung oben gilt nur für die erste URL; eine
   gefolgte Weiterleitung könnte die Anfrage samt Session-Cookie an einen
   beliebigen Host schicken.
+- Zeitlimits: je Anfrage 10 s bis zu den Headern (`fetchWithTimeout`), dazu
+  ein gemeinsames Limit von 10 s für den ganzen Ablauf eines Anbieters
+  (`withBudget`), das auch das Lesen der Antworten umfasst. Ein Server, der
+  mitten in der Antwort hängen bleibt, hält die Karte damit höchstens 10 s
+  auf. Die WebUntis-Abmeldung läuft vor der Antwort und außerhalb dieses
+  Limits: Die App fragt Kinder nacheinander ab, weil sich bei einem
+  geteilten Klassenkonto gleichzeitige Sitzungen stören können, und der
+  nächste Login soll erst nach der Abmeldung beginnen.
 
 ## Offene Punkte
 

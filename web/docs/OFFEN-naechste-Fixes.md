@@ -1,6 +1,6 @@
 # Offene Punkte
 
-HS-OFF · v8 · 2026-11-09 · 51c20f28 · gültig
+HS-OFF · v9 · 2026-11-09 · eed08ae3 · gültig
 
 **Stand: 09.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
@@ -77,6 +77,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (neunte Runde, [Prüfbericht ID3UKZT](PEER-REVIEW-2026-10-30.md), Fund A-1) Der Test „the logout still goes out“ erkannte nicht, wenn der Logout an das gemeinsame Zeitlimit gehängt wird: Das Test-`fetch` nahm auch Anfragen mit bereits abgebrochenem Signal an, das echte nicht | Das Test-`fetch` bricht solche Anfragen ab wie das echte. Gegenprobe: Logout mit dem Signal des Zeitlimits macht genau diesen Test rot, der unveränderte Code bleibt grün (30.10.2026, Version 0.4.2) |
 | 🟢 (dieselbe Runde, A-2, A-4, B-1, C-1 bis C-3, D-2, D-3, K-1 bis K-5) Speichersperre selbst ungetestet; dass `hideCredit` nur bei eingeschaltetem Guthaben gelesen wird, ungetestet; fehlt die Schuladresse, hörte ein Screenreader keine Begründung (Toast ohne Live-Region, WCAG 2.2, 4.1.3 AA; Feld ohne Fehlerhinweis, 3.3.1 A); `role="alert"` an per `hidden` umgeschalteten Start-Hinweisen; „Guthaben wird … nicht geführt“ behauptete mehr, als `hideCredit` sagt; Zeichenreferenzen wurden doppelt dekodiert (`&#38;lt;` → `<`); Unschärfen in Datenschutzerklärung, PHP-Quelle, Testetiketten und Zahlen in `PROJEKT.md`; aus `web/` entfernte Dateien bleiben bis zu einer Woche im Cloudflare-Cache | Prüfung beim Speichern als eigene Funktion `samsonAddressProblem`, Meldung am Feld als `samsonInstanceFieldError`, beide mit Property-Tests über die Einfüge-Klassen. Fehlt die Adresse, sagt das Feld nach dem Speicherversuch „Bitte die Adresse Deiner Schule bei sams-on eintragen …“ und trägt `aria-invalid="true"`. Der Toast ist eine dauerhafte Region mit `role="status"`. Start-Hinweise ohne `role="alert"`, mit Test. Anzeige „Diese Schule zeigt das Guthaben bei sams-on nicht an“. Dekodieren in einem Durchgang, Property-Test „kodieren und dekodieren gibt den Text zurück“. Datenschutzerklärung (vom User freigegeben): Kontonummer nur für die Bestellabfrage, sams-on im Technik-Absatz. PHP-Quellen korrigiert, siehe Punkt 5. Cache-Lehre in `PROJEKT.md` Abschnitt 10, Kontrolle als Punkt 7. Kommentar, dass sams-on ohne seinen Content-Type leer antwortet; Storno als offene Frage in Punkt 5. Mutanten: Logout mit Zeitlimit, `hideCredit` ohne Schalter gelesen, Dekodieren in drei Durchgängen, Speichersperre aus, keine Meldung bei fehlender Adresse, fehlend/ungültig vertauscht, Toast als neues Element, Toast ohne `role`, `role="alert"` am Start-Hinweis, Toast wird nie geleert — je mindestens ein Test rot. Grün bleiben die Verdrahtung im Klick-Handler (Feld markieren) und der Anzeigetext; beide im Browser geprüft (Feld: `aria-invalid="true"`, Meldung, Fokus; Karte zeigt den neuen Text). Bewusst nicht umgesetzt: eine Passwort-Empfehlung an die Familien wegen der PHP-Version bei sams-on (B-2) — das ist Sache des Anbieters, nicht dieser App. Zurückgestellt: A-3 (Punkt 6), A-5 und D-1 (Punkt 5) (30.10.2026, Version 0.4.2) |
 | Kontrolle Cloudflare-Cache (Folge aus A-4 der neunten Runde): entfernte Berichte könnten weiter ausgeliefert werden | Am 09.11.2026 ohne Cache-Buster geprüft: `/docs/PEER-REVIEW-2026-10-09b.md` und `/docs/PEER-REVIEW-2026-10-29.md` liefern `404`, Gegenprobe `/docs/PEER-REVIEW-2026-10-30.md` liefert `200` (09.11.2026) |
+| 🟢 (neunte Runde, [Prüfbericht ID3UKZT](PEER-REVIEW-2026-10-30.md), Fund A-3) Das Zeitlimit je Anfrage endet mit den Headern; ein Server, der danach im Inhalt hängen bleibt, hielt WebUntis und Mensamax unbegrenzt fest. Bei sams-on meldete ein Ablauf beim Lesen „keine gültige JSON-Antwort“ | Gemeinsames Zeitlimit von 10 s (vom User festgelegt) je Anbieter-Ablauf über `withBudget`, das auch das Lesen der Antworten umfasst (`readText`); sams-on vorher 15 s. Meldung beim Lesen wie vor den Headern. Die WebUntis-Abmeldung bleibt vor der Antwort und außerhalb des Limits — die App fragt Kinder nacheinander ab, weil sich Sitzungen eines geteilten Klassenkontos stören können (Rückfrage des Users zu mehreren Tagen nacheinander). Vorab in Node und workerd gegen einen echten, mitten in der Antwort hängenden Server geprüft, dass ein Abbruch das Lesen beendet (Gegenprobe ohne Abbruch: hängt weiter). Tests über jede Anfrage-Position in zwei Klassen (ohne Header, Inhalt hängt), je mit Gegenprobe. Mutanten: Limit bei je einem Anbieter entfernt, Lesefehler nicht übersetzt, Zeitgeber nicht aufgeräumt, Meldung ohne Gesamtlimit, Lesen ohne `readText` an drei Stellen, Limit 15 s, sams-on-Lesen im Parse-`try`, WebUntis-Abmeldung nach der Antwort — alle 12 je mindestens ein Test rot (09.11.2026, Version 0.4.4) |
 
 ## Noch offen
 
@@ -154,13 +155,14 @@ Zeitpunkt-Momentaufnahmen unverändert.
      PAN-OS-Verwaltungsoberflächen). Die Versionsnummer ist ein Indiz, kein
      Beweis: AlmaLinux-Pakete können Korrekturen zurückportieren, ohne sie zu
      ändern. Der User weist den Betreiber darauf hin.
-6. **🟢 Zeitlimit für die ganze Antwort auch bei WebUntis und Mensamax**
-   (neunte Runde, A-3). Der Einzel-Timeout in `fetchWithTimeout` endet, sobald
-   die Header da sind; ein Server, der danach den Inhalt nicht zu Ende
-   schickt, hält den Abruf unbegrenzt fest. sams-on fängt das mit seinem
-   gemeinsamen Zeitlimit ab, WebUntis (bis zu sechs Abrufe nacheinander) und
-   Mensamax nicht. Dasselbe Muster dort übernehmen; ändert das Verhalten bei
-   zwei Anbietern, deshalb ein eigener Schritt.
+6. **🟢 Kein Zeitlimit in der Web-App beim Abruf vom Proxy** (bei der
+   Planung von A-3 aufgefallen, 09.11.2026). `fetchChild()` in
+   `web/index.html` wartet ohne eigenes Limit auf den Proxy, ebenso der
+   ccCampus-Abruf im Browser. Der Proxy selbst antwortet seit 0.4.4
+   innerhalb von rund 10 s je Anbieter; offen bleibt ein hängendes Netz auf
+   dem Handy, dann zeigt die Karte unbegrenzt „Lädt …“. Möglich: Limit
+   etwas über dem des Proxys und eine Meldung auf der Karte. Vom User als
+   eigener Punkt gewünscht, nicht Teil von 0.4.4.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.
