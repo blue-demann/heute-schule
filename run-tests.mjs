@@ -2445,6 +2445,50 @@ for (const c of BUDGET_CASES.filter((bc, i, all) => all.findIndex((other) => oth
     assertEqual(caches.resultKeys().length, 1);
   });
 }
+// The everyday configuration: a child has a timetable and lunch. When one
+// provider runs into the time limit while the other delivers, nothing is
+// cached, so the next refresh asks both again (all or nothing).
+const MIXED_CASES = [
+  ['WebUntis hangs, Mensamax delivers', 'stundenFehler', 'lunchFehler', (hang) => [recordingWebuntis({ getTimetable: hang }).handler, mensamaxServer()]],
+  ['Mensamax hangs, WebUntis delivers', 'lunchFehler', 'stundenFehler', (hang) => [webuntisHandler(), mensamaxServer({ 'GET /mensamax/Essenbestellung/bestellen-stornieren/PlanForm.aspx': hang })]],
+];
+for (const [name, hungField, deliveredField, handlersFor] of MIXED_CASES) {
+  await testAsync(`${name}: the delivered part is shown, but nothing is cached`, async () => {
+    const timers = fakeTimers();
+    try {
+      let reached;
+      const hangStarted = new Promise((resolve) => { reached = resolve; });
+      const caches = makeCachesStub();
+      globalThis.caches = caches;
+      mockFetch(handlersFor(hangingRequest(reached)));
+      const ctx = makeCtx();
+      const body = { webuntis: WEBUNTIS_CFG, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' };
+      const response = proxyWorker.fetch(apiRequest(body), TEST_ENV, ctx);
+      await settlesWithin(hangStarted, 'the hanging request');
+      await new Promise((resolve) => realSetTimeout(resolve, 50));
+      timers.fire(BUDGET_MS);
+      const answer = await (await settlesWithin(response, 'the answer')).json();
+      await settlesWithin(ctx.drain(), 'the work after the answer');
+      assert(String(answer[hungField]).includes('Zeitüberschreitung'), answer[hungField]);
+      assertEqual(answer[deliveredField], null);
+      assertEqual(caches.resultKeys().length, 0, 'the result was cached although one provider ran into the time limit');
+    } finally {
+      timers.restore();
+      restoreFetch();
+    }
+  });
+}
+await testAsync('counter-check: WebUntis and Mensamax both deliver — the result is cached', async () => {
+  const caches = makeCachesStub();
+  globalThis.caches = caches;
+  mockFetch([webuntisHandler(), mensamaxServer()]);
+  const ctx = makeCtx();
+  const answer = await (await proxyWorker.fetch(apiRequest({ webuntis: WEBUNTIS_CFG, lunch: mensamaxLunch('https://x.parentsmensa.de'), datum: '20260901' }), TEST_ENV, ctx)).json();
+  await ctx.drain();
+  restoreFetch();
+  assertEqual(`${answer.stundenFehler} ${answer.lunchFehler}`, 'null null');
+  assertEqual(caches.resultKeys().length, 1);
+});
 await testAsync('counter-check: a failed login is still cached, the next refresh does not ask WebUntis again', async () => {
   const caches = makeCachesStub();
   globalThis.caches = caches;
@@ -3154,43 +3198,75 @@ test('nothing stored yet, or readable settings: no notice, no question', () => {
 // Tapping another day or ⟳ while a refresh still runs starts a new one. The
 // properties: an answer is shown only while its refresh is the latest one
 // (else a slow answer for the day before overwrites the card of the day now
-// selected), and never more than one proxy request is on its way (children
-// often share a class account, and two logins at once break each other).
+// selected); a card that does not show the selected day yet says it is
+// loading; and the page starts a proxy request only once its previous one
+// settled, or once the 15 s wait for it ran out (children often share a
+// class account, and two logins at once may break each other).
 
 console.log('\nDashboard: overlapping refreshes (index.html)');
 
 function dashboardUnderTest() {
   const pending = [];
   const renders = [];
+  const overlaps = [];
   const spinner = { on: false };
   const busy = { value: 'false' };
   let taps = 0;
   let answering = null;
   const timers = [];
+  const waitOverFor = new Set();
+  // What each card shows: loading or not, and the day (or error) drawn last.
+  const cardFor = (id) => {
+    const card = { id, loading: false, shows: null, fromTap: null, drawn: 0, panelDrawn: 0 };
+    card.classList = { contains: (cls) => cls === 'fetching' && card.loading };
+    card.querySelector = () => null;
+    return card;
+  };
+  const cards = { a: cardFor('a'), b: cardFor('b'), c: cardFor('c') };
   const sandbox = {
-    setTimeout: (fn, ms) => { timers.push({ fn, ms }); },
+    setTimeout: (fn, ms) => { const tap = taps; timers.push({ fn: () => { waitOverFor.add(tap); fn(); }, ms }); },
     cfg: { proxyUrl: 'https://proxy.test', children: ['a', 'b', 'c'].map((id) => ({ id, webuntis: {}, lunch: {} })) },
-    cardsById: { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' } },
+    cardsById: { ...cards },
     lastDataById: {},
     activeOffset: 0,
     dateStrFor: (offset) => `day${offset}`,
     lunchRequestFields: () => ({}),
-    setCardLoading() {},
-    renderChildResult: (card, child, data, error) => renders.push({ child: child.id, date: data ? data.datum : error, fromTap: answering, latestTap: taps }),
+    setCardLoading: (card) => { card.loading = true; },
+    renderHiddenHint: (el, child, card) => { card.panelDrawn++; },
+    renderChildResult: (card, child, data, error) => {
+      Object.assign(card, { loading: false, shows: data ? data.datum : error, fromTap: answering, drawn: card.drawn + 1 });
+      if (answering !== null) renders.push({ child: child.id, date: data ? data.datum : error, fromTap: answering, latestTap: taps });
+    },
     btnRefresh: { classList: { add: () => { spinner.on = true; }, remove: () => { spinner.on = false; } } },
     childCards: { setAttribute: (name, value) => { busy.value = value; } },
     fetch: (url, options) => new Promise((resolve, reject) => {
       const body = JSON.parse(options.body);
+      // Only the latest refresh starts requests, so a request that starts
+      // while another is open must come after that refresh's wait ran out.
+      if (pending.length && !waitOverFor.has(taps)) overlaps.push(`${body.webuntis.id} ${body.datum} while ${pending.map((r) => `${r.child} ${r.date}`).join()} is open`);
       pending.push({ child: body.webuntis.id, date: body.datum, tap: taps, resolve, reject });
     }),
+    // What deleting all data needs around it.
+    window: { confirm: () => true },
+    localStorage: { removeItem() {} },
+    STORAGE_KEY: 'k',
+    storedConfigUnreadable: false,
+    storageBlocked: false,
+    emptyConfig: () => ({ proxyUrl: 'https://proxy.test', children: [] }),
+    updateUnreadableNotice() {},
+    renderSetup() {},
+    renderDashboard() {},
+    toast() {},
   };
   for (const child of sandbox.cfg.children) child.webuntis.id = child.id;
-  const page = inlineScriptDefinitions(['refreshRun', 'requestInFlight', 'IN_FLIGHT_WAIT_MS', 'refreshAll', 'fetchChild', 'abandonRefreshes'], sandbox);
+  const page = inlineScriptDefinitions(['refreshRun', 'requestInFlight', 'IN_FLIGHT_WAIT_MS', 'NO_CONNECTION_PROXY', 'refreshAll', 'fetchChild', 'abandonRefreshes', 'redrawCard', 'deleteAllData'], sandbox);
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   return {
-    sandbox, pending, renders, spinner, busy,
+    sandbox, pending, renders, overlaps, spinner, busy, cards, page,
     async tap(offset) { sandbox.activeOffset = offset; taps++; page.refreshAll(); await settle(); },
-    async abandon() { page.abandonRefreshes(); await settle(); },
+    async deleteAll() { page.deleteAllData(); await settle(); },
+    // Hiding a subject (🚫) or showing it again (👁) draws the card anew.
+    async hideOrShow(id) { page.redrawCard(cards[id], sandbox.cfg.children.find((c) => c.id === id)); await settle(); },
     // Lets every timer of the given length run out (the wait for a request
     // that hangs in the network).
     async timeOut(ms) { for (const t of timers.splice(0)) { if (t.ms === ms) t.fn(); else timers.push(t); } for (let i = 0; i < 5; i++) await settle(); },
@@ -3199,8 +3275,9 @@ function dashboardUnderTest() {
       answering = request.tap;
       if (how === 'ok') request.resolve({ ok: true, json: async () => ({ datum: request.date, stunden: [] }) });
       else if (how === 'http') request.resolve({ ok: false, status: 502 });
-      else request.reject(new TypeError('Failed to fetch'));
+      else request.reject(new TypeError('Load failed'));
       for (let i = 0; i < 5; i++) await settle();
+      answering = null;
     },
     taps: () => taps,
   };
@@ -3208,26 +3285,36 @@ function dashboardUnderTest() {
 
 /** @param {ReturnType<typeof dashboardUnderTest>} d */
 function checkDashboardInvariants(d, rendersBefore) {
-  assert(d.pending.length <= 1, `${d.pending.length} proxy requests on their way at once`);
+  assertEqual(d.overlaps.join('; '), '', 'a request started while another was open and the wait had not run out');
+  const selected = `day${d.sandbox.activeOffset}`;
   for (const r of d.renders.slice(rendersBefore)) {
     assert(r.fromTap === r.latestTap, `card ${r.child} shows the answer of tap ${r.fromTap}, the latest tap is ${r.latestTap}`);
-    assert(r.date === `day${d.sandbox.activeOffset}` || !r.date.startsWith('day'), `card ${r.child} shows ${r.date}, selected is day${d.sandbox.activeOffset}`);
+    assert(r.date === selected || !r.date.startsWith('day'), `card ${r.child} shows ${r.date}, selected is ${selected}`);
+  }
+  for (const card of Object.values(d.cards)) {
+    if (card.loading) continue;
+    const shown = card.shows && card.shows.startsWith('day') ? card.shows : `an error of tap ${card.fromTap}`;
+    assert(shown === selected || card.fromTap === d.taps(), `card ${card.id} shows ${shown} without saying it loads, selected is ${selected} (tap ${d.taps()})`);
+    const kept = d.sandbox.lastDataById[card.id];
+    assert(!kept || kept.datum === card.shows, `card ${card.id} keeps ${kept && kept.datum} for 👁/🚫, but shows ${card.shows}`);
   }
   if (d.pending.length) assert(d.spinner.on && d.busy.value === 'true', 'a request is on its way, but the spinner is off');
 }
 
-// Named classes of what a parent does while a refresh runs.
+// Named classes of what a parent does, or what happens, while a refresh runs.
 const OVERLAP_STEPS = [
-  ['another day while a request is on its way', (random) => ({ act: 'tap', offset: 1 + Math.floor(random() * 3) })],
-  ['⟳ again on the same day (double tap)', () => ({ act: 'tap', offset: 'same' })],
+  ['another day while a request is on its way', (random) => ({ act: 'tap', shift: 1 + Math.floor(random() * 3) })],
+  ['⟳ again on the same day (double tap)', () => ({ act: 'tap', shift: 0 })],
+  ['a subject is hidden or shown again (🚫/👁)', (random) => ({ act: 'hideOrShow', card: 'abc'[Math.floor(random() * 3)] })],
+  ['the 15 s wait for a hanging request runs out', () => ({ act: 'timeOut' })],
   ['the proxy answers', () => ({ act: 'answer', how: 'ok' })],
   ['the proxy answers with an HTTP error', () => ({ act: 'answer', how: 'http' })],
   ['the network fails', () => ({ act: 'answer', how: 'network' })],
 ];
-await testAsync(`a late answer never overwrites a newer refresh, never two requests at once (${PROPERTY_TEST_ITERATIONS} generated tap sequences, seed ${PROPERTY_TEST_SEED})`, async () => {
+await testAsync(`a late answer never overwrites a newer refresh, a card not showing the selected day says it loads, a second request waits (${PROPERTY_TEST_ITERATIONS} generated sequences, seed ${PROPERTY_TEST_SEED})`, async () => {
   const random = mulberry32(PROPERTY_TEST_SEED);
   for (let i = 0; i < PROPERTY_TEST_ITERATIONS; i++) {
-    const steps = Array.from({ length: 2 + Math.floor(random() * 8) }, () => {
+    const steps = Array.from({ length: 2 + Math.floor(random() * 10) }, () => {
       const [name, make] = OVERLAP_STEPS[Math.floor(random() * OVERLAP_STEPS.length)];
       return { name, ...make(random) };
     });
@@ -3236,7 +3323,10 @@ await testAsync(`a late answer never overwrites a newer refresh, never two reque
       await d.tap(0);
       for (const step of steps) {
         const before = d.renders.length;
-        if (step.act === 'tap') await d.tap(step.offset === 'same' ? d.sandbox.activeOffset : step.offset);
+        // Four days to pick from; "another day" is never the selected one.
+        if (step.act === 'tap') await d.tap((d.sandbox.activeOffset + step.shift) % 4);
+        else if (step.act === 'hideOrShow') await d.hideOrShow(step.card);
+        else if (step.act === 'timeOut') await d.timeOut(15000);
         else if (d.pending.length) await d.answer(step.how);
         checkDashboardInvariants(d, before);
       }
@@ -3249,9 +3339,7 @@ await testAsync(`a late answer never overwrites a newer refresh, never two reque
       // The latest refresh fills every card exactly once.
       const latest = d.renders.filter((r) => r.fromTap === lastTap);
       assertEqual(latest.map((r) => r.child).sort().join(''), 'abc');
-      for (const r of latest) {
-        if (r.date.startsWith('day')) assertEqual(d.sandbox.lastDataById[r.child].datum, `day${d.sandbox.activeOffset}`);
-      }
+      assert(Object.values(d.cards).every((card) => !card.loading), 'every refresh is done, but a card still says it loads');
       assert(!d.spinner.on && d.busy.value === 'false', 'every refresh is done, but the spinner still turns');
     } catch (e) {
       throw new Error(`case ${i} (steps: ${steps.map((s) => s.name).join(' → ')}): ${e.message}`, { cause: e });
@@ -3270,6 +3358,69 @@ await testAsync('the reviewer’s case: "morgen" while "heute" still loads — t
   for (let i = 0; i < 3; i++) await d.answer('ok');
   assertEqual(d.renders.map((r) => `${r.child} ${r.date}`).join(), 'a day1,b day1,c day1');
 });
+await testAsync('another day with two children: every card says at once that it loads, not only when its turn comes', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  for (let i = 0; i < 3; i++) await d.answer('ok');
+  assertEqual(Object.values(d.cards).map((c) => `${c.shows}${c.loading ? ' (lädt)' : ''}`).join(), 'day0,day0,day0', 'counter-check: all cards show today, none loads');
+  await d.tap(1);
+  assertEqual(Object.values(d.cards).map((c) => `${c.shows}${c.loading ? ' (lädt)' : ''}`).join(), 'day0 (lädt),day0 (lädt),day0 (lädt)');
+  await d.hideOrShow('b');
+  assert(d.cards.b.loading, 'hiding a subject while the card loads drew the day before as if it were current');
+});
+await testAsync('a failed refresh forgets the answer kept for the day before; 👁/🚫 then keep the error', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  for (let i = 0; i < 3; i++) await d.answer('ok');
+  assertEqual(d.sandbox.lastDataById.a.datum, 'day0', 'counter-check: the answer for today is kept');
+  await d.tap(1);
+  await d.answer('network');
+  assertEqual(`${d.sandbox.lastDataById.a} ${d.cards.a.shows}`, `undefined ${d.page.NO_CONNECTION_PROXY}`);
+  const drawn = d.cards.a.drawn;
+  await d.hideOrShow('a');
+  assertEqual(`${d.cards.a.shows} ${d.cards.a.drawn - drawn} ${d.cards.a.panelDrawn}`, `${d.page.NO_CONNECTION_PROXY} 0 1`, 'only the panel of hidden subjects is drawn again');
+});
+await testAsync('hiding or showing a subject draws the card again from the kept answer', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  for (let i = 0; i < 3; i++) await d.answer('ok');
+  const drawn = d.cards.b.drawn;
+  await d.hideOrShow('b');
+  assertEqual(`${d.cards.b.shows} ${d.cards.b.drawn - drawn} ${d.cards.b.loading}`, 'day0 1 false');
+});
+await testAsync('no connection: the card says so in German instead of the browser’s text; an HTTP error keeps its status', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  await d.answer('network');
+  await d.answer('http');
+  assertEqual(d.renders.map((r) => r.date).join(' | '), `${d.page.NO_CONNECTION_PROXY} | HTTP 502`);
+  assert(!/load failed|failed to fetch/i.test(d.page.NO_CONNECTION_PROXY) && d.page.NO_CONNECTION_PROXY.includes('VPN'), d.page.NO_CONNECTION_PROXY);
+});
+// ccCampus runs in the browser: its two requests, each failing in the
+// network or answering, with the text the card then shows.
+async function ccCampusLunchWith(login, plan) {
+  const sandbox = {
+    URL,
+    fetch: (url) => (url.endsWith('/Login/Login') ? login() : plan()),
+  };
+  const page = inlineScriptDefinitions(['CCCAMPUS_ALLOWED_DOMAINS', 'ccCampusDomainAllowed', 'decodeHtmlEntitiesClient', 'NO_CONNECTION_CCCAMPUS', 'noConnectionToCcCampus', 'fetchCcCampusLunch'], sandbox);
+  const result = await page.fetchCcCampusLunch({ base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '1', pin: '2' }, '20261110');
+  return { result, NO_CONNECTION: page.NO_CONNECTION_CCCAMPUS };
+}
+const ccLoginOk = () => Promise.resolve({ text: async () => JSON.stringify({ token: 't' }) });
+const ccPlanOk = () => Promise.resolve({ ok: true, text: async () => '<div class="status-node" data-date="2026-11-10" title="Menü 1">' });
+const ccOffline = () => Promise.reject(new TypeError('Load failed'));
+await testAsync('ccCampus without connection, at the login or at the plan: the German note, not the browser’s text', async () => {
+  for (const [login, plan] of [[ccOffline, ccPlanOk], [ccLoginOk, ccOffline]]) {
+    const { result, NO_CONNECTION } = await ccCampusLunchWith(login, plan);
+    assertEqual(result.lunchFehler, NO_CONNECTION);
+    assert(NO_CONNECTION.includes('ccCampus') && NO_CONNECTION.includes('VPN'), NO_CONNECTION);
+  }
+  const { result } = await ccCampusLunchWith(ccLoginOk, ccPlanOk);
+  assertEqual(`${result.lunch} ${result.lunchFehler}`, 'Essen bestellt: Menü 1 null', 'counter-check: with a connection, the order shows');
+  const garbled = await ccCampusLunchWith(() => Promise.resolve({ text: async () => '<html>' }), ccPlanOk);
+  assertEqual(garbled.result.lunchFehler, 'ccCampus-Login: unerwartete Antwort', 'counter-check: an answer that is no JSON keeps its own message');
+});
 await testAsync('a request that hangs in the network holds a new refresh for 15 s at most, its late answer is dropped', async () => {
   const d = dashboardUnderTest();
   await d.tap(0);
@@ -3282,10 +3433,10 @@ await testAsync('a request that hangs in the network holds a new refresh for 15 
   for (let i = 0; i < 3; i++) await d.answer('ok');
   assertEqual(d.renders.map((r) => `${r.child} ${r.date}`).join(), 'a day1,b day1,c day1');
 });
-await testAsync('deleting all data drops the answer still on its way, and stops the spinner', async () => {
+await testAsync('deleting all data (the button’s own handler) drops the answer still on its way, and stops the spinner', async () => {
   const d = dashboardUnderTest();
   await d.tap(0);
-  await d.abandon();
+  await d.deleteAll();
   assert(!d.spinner.on && d.busy.value === 'false', 'spinner still on');
   await d.answer('ok');
   assertEqual(`${d.renders.length} ${d.pending.length} ${JSON.stringify(d.sandbox.lastDataById)}`, '0 0 {}');

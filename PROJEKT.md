@@ -1,8 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v11 · 2026-11-09 · 677a0a5b · gültig
+HS-PRJ · v12 · 2026-11-11 · 2106c2ea · gültig
 
-**Stand: 09.11.2026 · Version 0.4.5**
+**Stand: 11.11.2026 · Version 0.4.7**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -366,8 +366,8 @@ lief in einer früheren Fassung dieses Dokuments unbemerkt auseinander).
 | Verdrahtung | `deploy.sh`, `.github/workflows/ci.yml` | Die Gates müssen auch aufgerufen werden: Reihenfolge, `npm ci`, `npm audit --include=dev`, kein `npx` ohne `--no-install`, Commit als Versionsnachricht, CI mit Lese-Token und ohne Install-Skripte |
 | `samsonOrigin()` (Property-Tests), `samsonMealName()`, `validateSamsonAccount()`, `validateSamsonOrders()` und der komplette sams-on-Ablauf im Worker | `proxy/hostcheck.mjs`, `proxy/text.mjs`, `proxy/validate.mjs`, `proxy/worker.js` | Instanz-Name: gültige Namen ergeben genau `https://<name>.sams-on.de`, jede benannte Angriffsklasse (Punkt, Pfad/Query/Fragment, Userinfo/Port, Prozent-Kodierung, Leerraum, Nicht-ASCII, Bindestrich am Rand, ganze URL) wird abgelehnt. `userId` mit Zeichen, die den Pfad ändern könnten, wird abgelehnt, bevor die Bestellungen abgefragt werden. Menünamen aus echten sams-on-Texten; eine letzte Zeile aus Allergen-Codes fällt weg, ein kurzes Wort wie „Ei“ bleibt (beides als Property-Test); ungültige Zeichenreferenzen bleiben stehen, statt zu werfen (feste Beispielwerte); Kodieren und Dekodieren gibt jeden Text zurück, auch einen, der selbst wie eine Zeichenreferenz aussieht (Property-Test). Datum der Bestellung auch mit Uhrzeit, mit Zeitzone abgelehnt. Der Worker läuft gegen einen nachgebauten sams-on-Server: Reihenfolge wie die Web-App, nur der eigene Schul-Host, keine Weiterleitungen, Session-Cookie aus dem Login, falsches Passwort, Login mit 403, Login ohne Session, Logout mit der angemeldeten Session (auch nach kaputter Antwort), die Antwort wartet nicht auf den Logout, unbekannte Schule, kaputte Antworten, Wartungsseite, Cookies mit Trennzeichen. Guthaben: ausgeschaltet nirgends in der Antwort, eingeschaltet als Betrag, hervorgehoben unter 5,00 €, unerwartetes Format „nicht abrufbar“ ohne Folgen für den Essensstatus, bei einer Schule mit `hideCredit` ohne Betrag; die Instanz-Info wird ohne Häkchen gar nicht gelesen. Das Test-`fetch` lehnt wie das echte Anfragen mit bereits abgebrochenem Signal ab |
 | `extractSamsonInstance()`, `samsonInstanceFieldError()`, `samsonAddressProblem()`, `lunchRequestFields()` (Property-Tests); `loadConfig()`/`saveConfig()`, `toast()` (benannte Klassen mit festen Werten) | `web/index.html` (Inline-Script) | Der Test schneidet genau diese Definitionen aus der Seite und führt sie in einem eigenen Kontext aus. Adresse: jede benannte Einfüge-Form wird zum Schulnamen (Name, Großschreibung mit Leerraum, Adresse aus der Browserzeile, ohne `https://`, gemeinsame Login-Seite mit `?instance=`), jede benannte Täuschung wird abgelehnt (Look-alike-Host, fremder Host mit `?instance=`, Userinfo, tiefere Subdomain, sams-on-Host ohne Schule, Name mit Punkt oder Pfad). Anfrage: Ein Kind, das schon alle Anbieter hatte, schickt je Anbieter nur dessen Felder, ccCampus und Unbekanntes nur den Anbieter. Speichern: Jede brauchbare Adresse lässt speichern, jede unbrauchbare hält an und meldet „keine sams-on-Adresse“, eine fehlende erst nach dem Speicherversuch „bitte eintragen“; Kinder ohne sams-on halten nie an, bei mehreren Kindern wird das erste betroffene genannt. Gespeicherte Einstellungen: gesperrter Speicher und unlesbarer Inhalt zeigen je ihren eigenen Hinweis und fragen vor dem Überschreiben. Der Toast schreibt in eine dauerhafte `role="status"`-Region; kein anfangs verstecktes Element trägt `role="alert"` |
-| Zeitlimits | `proxy/worker.js`, `tools/probe-workerd.mjs` | Jede Abruf-Anfrage einzeln (WebUntis 5 ohne die Abmeldung, Mensamax 3, sams-on 4), je in zwei benannten Klassen: hängt ohne Header, hängt nach den Headern im Inhalt. Das gemeinsame Limit beendet beide mit „Zeitüberschreitung … (Gesamtzeit überschritten)“; Gegenprobe in jedem Fall: vorher ist die Antwort noch offen. War eine Sitzung offen, geht die Abmeldung trotzdem raus, ohne Sitzung keine. Eigene Klasse: Inhalt, den der Proxy nie liest (sams-on-Login), hält nichts auf. Dass das Limit *gemeinsam* gilt, zeigt eine Test-Uhr, die wirklich vorrückt: Anbieter, die je 4 s brauchen, enden nach 10 s (WebUntis mit Abmeldung 13 s), Gegenprobe mit 1,5 s je Anfrage läuft durch. Die WebUntis-Abmeldung: vor der Antwort fertig, nach eigenen 3 s beendet, wenn sie hängt, auch nach Fehlern gesendet, sobald die Anmeldung gelesen ist. Ergebnisse mit Zeitüberschreitung werden nicht gecacht, geprüft in jedem Zeitlimit-Fall (jeder Anbieter, beide Hängeklassen); Gegenproben: dieselben Nachbauten ohne Stocken und ein falsches Passwort werden gecacht. Die nachgebaute hängende Antwort ist durch `node tools/probe-workerd.mjs` belegt: Es startet den echten `worker.js` in workerd (aus `node_modules`, ohne `wrangler`) gegen einen lokalen Nachbau der Anbieter, der stockt (7 Szenarien, gegen 0.4.4 schlagen 3 an); von Hand, nicht in der Testsuite |
-| Überlappende Abrufe | `web/index.html` (`refreshAll`, `fetchChild`) | Property-Test über 200 zufällige Tipp-Abfolgen aus benannten Klassen (anderer Tag, während eine Anfrage läuft; Doppeltipp auf ⟳; Antwort; HTTP-Fehler; Netzfehler): Eine Antwort erscheint nur, solange ihr Abruf der letzte ist, nie sind zwei Anfragen zugleich unterwegs, der letzte Abruf füllt jede Karte genau einmal, der Spinner läuft, solange eine Anfrage unterwegs ist. Dazu der Fall aus der elften Runde („morgen“, während „heute“ lädt), die Obergrenze von 15 s für eine im Netz hängende Anfrage und „Alle Daten löschen“ während eines Abrufs. 10 Mutanten, je mindestens ein Test rot. Die Funktionen werden wie die übrigen Browser-Tests aus dem Inline-Script geschnitten |
+| Zeitlimits | `proxy/worker.js`, `tools/probe-workerd.mjs` | Jede Abruf-Anfrage einzeln (WebUntis 5 ohne die Abmeldung, Mensamax 3, sams-on 4), je in zwei benannten Klassen: hängt ohne Header, hängt nach den Headern im Inhalt. Das gemeinsame Limit beendet beide mit „Zeitüberschreitung … (Gesamtzeit überschritten)“; Gegenprobe in jedem Fall: vorher ist die Antwort noch offen. War eine Sitzung offen, geht die Abmeldung trotzdem raus, ohne Sitzung keine. Eigene Klasse: Inhalt, den der Proxy nie liest (sams-on-Login), hält nichts auf. Dass das Limit *gemeinsam* gilt, zeigt eine Test-Uhr, die wirklich vorrückt: Anbieter, die je 4 s brauchen, enden nach 10 s (WebUntis mit Abmeldung 13 s), Gegenprobe mit 1,5 s je Anfrage läuft durch. Die WebUntis-Abmeldung: vor der Antwort fertig, nach eigenen 3 s beendet, wenn sie hängt, auch nach Fehlern gesendet, sobald die Anmeldung gelesen ist. Ergebnisse mit Zeitüberschreitung werden nicht gecacht, geprüft in jedem Zeitlimit-Fall (jeder Anbieter, beide Hängeklassen) und für den Alltagsfall, dass ein Anbieter hängt, während der andere liefert (beide Richtungen; Mutant „cachen, wenn der andere geliefert hat“ rot); Gegenproben: dieselben Nachbauten ohne Stocken, beide Anbieter zusammen und ein falsches Passwort werden gecacht. Die nachgebaute hängende Antwort ist durch `node tools/probe-workerd.mjs` belegt: Es startet den echten `worker.js` in workerd (aus `node_modules`, ohne `wrangler`) gegen einen lokalen Nachbau der Anbieter, der stockt (7 Szenarien, gegen 0.4.4 schlagen 3 an); von Hand, nicht in der Testsuite |
+| Überlappende Abrufe | `web/index.html` (`refreshAll`, `fetchChild`, `redrawCard`, `deleteAllData`, `fetchCcCampusLunch`) | Property-Test über 200 zufällige Abfolgen aus benannten Klassen (anderer Tag, während eine Anfrage läuft; Doppeltipp auf ⟳; 🚫/👁 an einer Karte; die 15 s für eine hängende Anfrage laufen ab; Antwort; HTTP-Fehler; Netzfehler). Ein kleines Kartenmodell hält fest, was jede Karte zeigt. Eigenschaften: Eine Antwort erscheint nur, solange ihr Abruf der letzte ist; eine Karte, die nicht den gewählten Tag zeigt, zeigt „Lädt …“; was für 🚫/👁 gemerkt ist, gehört zu dem, was die Karte zeigt; eine zweite Anfrage startet erst, wenn die vorige beantwortet ist oder ihre 15 s abgelaufen sind; der letzte Abruf füllt jede Karte genau einmal; der Spinner läuft, solange eine Anfrage unterwegs ist. Dazu feste Fälle: „morgen“, während „heute“ lädt; alle Karten sofort auf „Lädt …“; ein gescheiterter Abruf vergisst den Vortag; die deutsche Meldung ohne Verbindung (Proxy und beide ccCampus-Anfragen); die 15-s-Grenze; „Alle Daten löschen“ über den echten Handler. Mutanten, je mindestens ein Test rot: keine Ladeanzeige beim Tipp, 🚫/👁 nimmt die Ladeanzeige weg, Fehlerweg behält den Vortag, Löschen ohne Abbruch, Browsertext statt Meldung (Proxy, ccCampus-Anmeldung, ccCampus-Speiseplan), keine 15-s-Grenze, gar kein Warten, Kette ohne Laufprüfung, 🚫/👁 ohne Neuzeichnen; Kontrollen: inhaltsgleiche Änderung grün, geänderter Meldungstext rot. Die Funktionen werden wie die übrigen Browser-Tests aus dem Inline-Script geschnitten |
 | `buildCacheKeyMaterial()` | `proxy/cachekey.mjs` | Cache-Bypass-Regression — jeder Regressionstest hier existiert wegen eines tatsächlich gefundenen Fehlers, nicht vorsorglich |
 | `export default { fetch }` (Routing, Rate-Limit, Cache, WebUntis/Mensamax-Pfade) | `proxy/worker.js` | Der komplette HTTP-Handler, direkt aufgerufen — kleiner selbstgebauter `caches`-Stub (Map) plus gemocktes `fetch()` statt `wrangler dev`/Miniflare; native `Request`/`Response`/`URL` (Node ≥18), keine neue Abhängigkeit |
 
@@ -515,7 +515,7 @@ relativer Link würde dort ins Leere laufen:
   gemeinsam gilt (beide Zeitgeber gleich lang); dazu gecachte
   Zeitüberschreitungen, das fehlende Wort „Guthaben“ und Doku-Widersprüche —
   in Version 0.4.5 behoben
-- [Prüfbericht der elften Runde (ID9ZBJZ)](PEER-REVIEW-2026-11-09b.md) —
+- [Prüfbericht der elften Runde (ID9ZBJZ)](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-11-09b.md) —
   frische Sitzung, Prüfobjekt der Folge-Fix 0.4.5. Kein 🔴; alle Befunde der
   zehnten Runde behoben, „höchstens rund 13 s“ in workerd bestätigt. Fand,
   dass beim Tageswechsel während eines langsamen Abrufs die späte Antwort
@@ -523,6 +523,14 @@ relativer Link würde dort ins Leere laufen:
   Doppeltipp auf ⟳ parallele Anmeldungen startete; dazu zwei ungesicherte
   Wege beim Nicht-Cachen, ein Aufräumfehler im Prüfwerkzeug und
   Doku-Ungenauigkeiten — in Version 0.4.6 behoben
+- [Prüfbericht der zwölften Runde (ID9KS64)](PEER-REVIEW-2026-11-09c.md) —
+  frische Sitzung, Prüfobjekt der Folge-Fix 0.4.6. Kein 🔴. Fand, dass nach
+  einem Tageswechsel eine Karte bis zu 15 s den alten Tag ohne Ladeanzeige
+  zeigte und dass „nie zwei Anmeldungen gleichzeitig“ nicht trägt; dazu
+  ungetestetes Ganz-oder-gar-nicht-Cachen, ungetestetes Löschen während
+  eines Abrufs, Daten des Vortags über 🚫/👁, Lücken im Testgenerator und
+  Strg+C im Prüfwerkzeug — in Version 0.4.7 behoben; die Silbentrennung
+  „Bartholomä-us“ bleibt bewusst (kein WCAG-Verstoß)
 
 Auf der Website ([`ueber.html`](https://github.com/blue-demann/heute-schule/blob/main/web/ueber.html),
 Abschnitt „Technische Details") sind bewusst nur die beiden aktuellsten
@@ -839,12 +847,26 @@ Meilensteine seit dem ersten Commit (27.08.2026):
   während eines Abrufs den Tag wechselt oder erneut ⟳ tippt, sieht nur noch
   die Antwort des letzten Abrufs; eine späte Antwort für den vorher
   gewählten Tag wird verworfen. Der neue Abruf wartet auf die laufende
-  Anfrage, höchstens 15 s, damit sich nie zwei Anmeldungen am selben
-  Klassenkonto überschneiden. Lange Namen auf der Karte werden nach Silben
-  getrennt. Die Prüfung „Zeitüberschreitung wird nicht gecacht“ läuft für
-  jeden Anbieter und beide Hängeklassen; `tools/probe-workerd.mjs` räumt
-  auf jedem Weg auf und prüft, dass auf seinem Port der eigene Proxy
-  antwortet.
+  Anfrage, höchstens 15 s, damit sich die eigenen Anmeldungen der App am
+  selben Klassenkonto nicht überschneiden. Lange Namen auf der Karte werden
+  nach Silben getrennt. Die Prüfung „Zeitüberschreitung wird nicht gecacht“
+  läuft für jeden Anbieter und beide Hängeklassen; `tools/probe-workerd.mjs`
+  räumt auf jedem Fehlerweg auf und prüft, dass auf seinem Port der eigene
+  Proxy antwortet.
+- **Folge-Fix aus der zwölften Prüfrunde** (11.11.2026, Version 0.4.7) —
+  Nach dem Tippen auf einen Tag oder ⟳ zeigen alle Karten sofort „Lädt …“,
+  nicht erst, wenn sie an der Reihe sind; 🚫/👁 während des Ladens lassen
+  die Ladeanzeige stehen. Scheitert ein Abruf, holen 🚫/👁 nicht mehr die
+  Daten des vorigen Tages zurück. Ohne Verbindung steht auf der Karte
+  „Keine Verbindung zum Server – Netz oder VPN prüfen, dann ⟳ tippen.“
+  statt des Browsertexts („Load failed“), bei ccCampus entsprechend. Die
+  Aussage zum Nacheinander-Abfragen ist auf das Haltbare zurückgenommen:
+  Die App trennt ihre eigenen Anmeldungen, solange keine Anfrage auf dem
+  Hinweg zum Proxy hängt; andere Geräte, eine neu geladene Seite und
+  andere Familien am selben Klassenkonto kann sie nicht steuern (bewusst
+  keine Sperre im Proxy). `tools/probe-workerd.mjs` räumt auch bei Strg+C
+  auf. Neue Tests für die Ladeanzeige, „ein Anbieter hängt, der andere
+  liefert“ und „Alle Daten löschen“ über den echten Handler.
 
 **Release-Bulletin-Konvention:** Versionsnummer in `web/ueber.html`
 (`VERSION`-Konstante) wird bei sicherheitsrelevanten oder funktionalen

@@ -6,7 +6,7 @@
 // Run by hand, e.g. after a workerd update; takes about a minute.
 //   node tools/probe-workerd.mjs
 // Exit code 0: every scenario as expected; 1: at least one is not; 2: the
-// probe itself could not run. Starts no wrangler and reaches no real
+// probe itself could not run; 130/143: stopped by Ctrl+C or SIGTERM. Starts no wrangler and reaches no real
 // provider: every outbound request of the worker goes to the stand-in.
 
 import http from 'node:http';
@@ -122,12 +122,22 @@ async function freePort() {
 
 /**
  * Starts workerd and runs every scenario. Returns the exit code; cleans up
- * on every way out, so no workerd and no temp directory stay behind.
+ * on every way out, Ctrl+C and SIGTERM included, so no workerd and no temp
+ * directory stay behind.
  * @returns {Promise<number>}
  */
 async function main() {
   const work = mkdtempSync(join(tmpdir(), 'probe-workerd-'));
   let workerd;
+  // Node ends on a signal without running `finally`, so the signal cleans up
+  // itself.
+  const stop = (signal) => {
+    workerd?.kill();
+    rmSync(work, { recursive: true, force: true });
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
   try {
     const standInPort = await listen(standIn);
     const cachePort = await listen(cacheStandIn);
@@ -197,6 +207,8 @@ const proxy :Workerd.Worker = (
     console.log(failed ? `\n${failed} von ${SCENARIOS.length} Szenarien nicht wie erwartet.` : `\nAlle ${SCENARIOS.length} Szenarien wie erwartet.`);
     return failed ? 1 : 0;
   } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
     workerd?.kill();
     standIn.closeAllConnections();
     standIn.close();

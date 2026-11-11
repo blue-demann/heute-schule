@@ -981,7 +981,7 @@
   // confirmation: the button lives in settings, where accidental taps
   // happen too, and the action can't be undone.
   var btnDeleteAll = document.getElementById('btnDeleteAll');
-  btnDeleteAll.addEventListener('click', function(){
+  function deleteAllData(){
     var count = cfg.children.length;
     var question = count === 1
       ? 'Wirklich alle Daten von 1 Kind auf diesem Gerät löschen? Das lässt sich nicht rückgängig machen.'
@@ -1012,7 +1012,8 @@
     toast(removed
       ? 'Alle Daten auf diesem Gerät wurden gelöscht.'
       : '⚠ Der Speicher dieses Geräts ließ sich nicht leeren. Was dort liegt, ist noch vorhanden.');
-  });
+  }
+  btnDeleteAll.addEventListener('click', deleteAllData);
 
   // ── Dashboard view ──
   var cardsById = {};
@@ -1102,24 +1103,25 @@
       btn.addEventListener('click', function(){
         child.hiddenFaecher = child.hiddenFaecher.filter(function(f){ return f !== subject; });
         saveConfig(cfg);
-        var data = lastDataById[child.id];
-        if (data){
-          renderChildResult(card, child, data, null);
-        } else {
-          // Für dieses Kind liegt kein Abruf-Ergebnis im Speicher, der
-          // Abruf ist also fehlgeschlagen — die Karte zeigt gerade eine
-          // Fehlermeldung. renderChildResult() würde hier über data.lunch
-          // stolpern und das Panel nie aktualisieren; das Fach wäre
-          // ausgetragen, sähe aber bis zum Neuladen unverändert aus. Das
-          // Panel allein neu zu zeichnen genügt, die Fehleranzeige der
-          // Karte bleibt stehen.
-          renderHiddenHint(el, child, card);
-        }
+        redrawCard(card, child);
       });
       chip.appendChild(span); chip.appendChild(btn);
       chips.appendChild(chip);
     });
     el.appendChild(chips);
+  }
+
+  // Draws a card again after a subject was hidden or shown, from the answer
+  // kept for it. Without one (the last refresh failed, the card shows its
+  // error) only the panel of hidden subjects is drawn again. A card that is
+  // loading stays marked as loading: what it shows is not yet the selected
+  // day.
+  function redrawCard(card, child){
+    var loading = card.classList.contains('fetching');
+    var data = lastDataById[child.id];
+    if (data) renderChildResult(card, child, data, null);
+    else renderHiddenHint(card.querySelector('[data-hidden-hint]'), child, card);
+    if (loading) setCardLoading(card);
   }
 
   function renderChildResult(card, child, data, requestError){
@@ -1227,7 +1229,7 @@
           hideBtn.addEventListener('click', function(){
             if (child.hiddenFaecher.indexOf(s.fach) === -1) child.hiddenFaecher.push(s.fach);
             saveConfig(cfg);
-            renderChildResult(card, child, lastDataById[child.id], null);
+            redrawCard(card, child);
           });
           tdAction.appendChild(hideBtn);
         });
@@ -1305,6 +1307,16 @@
     return { provider: provider };
   }
 
+  // A request that never got an answer (no network, a VPN exit that does
+  // not get through, a server answering without the headers the browser
+  // needs) rejects with a browser-specific text like "Load failed". The
+  // card says in German what happened and what helps instead.
+  var NO_CONNECTION_PROXY = 'Keine Verbindung zum Server – Netz oder VPN prüfen, dann ⟳ tippen.';
+  var NO_CONNECTION_CCCAMPUS = 'Keine Verbindung zu ccCampus – Netz oder VPN prüfen, dann ⟳ tippen.';
+  function noConnectionToCcCampus(){
+    throw new Error(NO_CONNECTION_CCCAMPUS);
+  }
+
   function fetchCcCampusLunch(providerCfg, datumStr){
     var base = (providerCfg.base || 'https://cccampus.mbs5online.de/ordering').replace(/\/$/, '');
     if (!providerCfg.kundennummer || !providerCfg.pin){
@@ -1328,7 +1340,7 @@
       },
       body: 'identifierValue=' + encodeURIComponent(providerCfg.kundennummer) + '&secretValue=' + encodeURIComponent(providerCfg.pin) + '&identifierType=0&secretType=0',
     })
-      .then(function(resp){ return resp.text(); })
+      .then(function(resp){ return resp.text(); }, noConnectionToCcCampus)
       .then(function(loginText){
         var loginJson;
         try { loginJson = JSON.parse(loginText); } catch(e){
@@ -1364,7 +1376,7 @@
               else text = 'Essen bestellt: ' + title;
               return { lunch: text, lunchFehler: null };
             });
-          });
+          }, noConnectionToCcCampus);
       })
       .catch(function(err){
         return { lunch: null, lunchFehler: String(err.message || err) };
@@ -1377,7 +1389,6 @@
       renderChildResult(card, child, null, 'Keine Proxy-URL eingetragen — unter ⚙️ Einstellungen nachtragen.');
       return Promise.resolve();
     }
-    setCardLoading(card);
     var date = dateStrFor(activeOffset);
     var lunchIsCcCampus = child.lunch && child.lunch.provider === 'cccampus';
     var lunchCfg = child.lunch || {};
@@ -1394,6 +1405,8 @@
       .then(function(resp){
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         return resp.json();
+      }, function(){
+        throw new Error(NO_CONNECTION_PROXY);
       });
 
     var lunchPromise = lunchIsCcCampus
@@ -1419,6 +1432,9 @@
       })
       .catch(function(err){
         if (run !== refreshRun) return;
+        // The kept answer belongs to an earlier refresh, perhaps another
+        // day; hiding or showing a subject must not bring it back.
+        delete lastDataById[child.id];
         renderChildResult(card, child, null, String(err.message || err));
       });
   }
@@ -1431,9 +1447,13 @@
   // refresh starts only once it has settled: it may be logged in with the
   // same shared class account the new refresh is about to use.
   var requestInFlight = Promise.resolve();
-  // The proxy answers within about 13 s whatever the provider does, logout
-  // included. A request still open after that hangs in the network and holds
-  // no WebUntis session any more, so a new refresh waits no longer than this.
+  // Once the proxy has a request, it answers within about 13 s whatever the
+  // provider does, logout included. A request still open after 15 s mostly
+  // hangs on its way back, and a new refresh waits no longer than that, so a
+  // dead connection cannot block the app. The price: a request that hung on
+  // its way *to* the proxy may still be logged in when the next one starts.
+  // Other devices, a reloaded page and other families on the same class
+  // account are beyond what this page can order anyway.
   var IN_FLIGHT_WAIT_MS = 15000;
 
   function refreshAll(){
@@ -1441,12 +1461,15 @@
     var run = ++refreshRun;
     btnRefresh.classList.add('spin');
     childCards.setAttribute('aria-busy', 'true');
+    // Every card shows at once that it is loading: until its turn comes it
+    // still shows the day selected before.
+    cfg.children.forEach(function(child){ setCardLoading(cardsById[child.id]); });
     // Sequential rather than parallel: several children often share the
-    // same WebUntis login (a class-wide shared account) — two nearly
-    // simultaneous logins from the same account can break each other's
-    // session on WebUntis. Fetching sequentially avoids that reliably, at
-    // the cost of a bit of time on refresh. A refresh that is no longer the
-    // latest starts no further child.
+    // same WebUntis login (a class-wide shared account), and two logins at
+    // once from the same account may break each other's session on
+    // WebUntis. Fetching one after the other keeps this page's own logins
+    // apart, at the cost of a bit of time on refresh. A refresh that is no
+    // longer the latest starts no further child.
     var settled = Promise.race([
       requestInFlight.then(function(){}, function(){}),
       new Promise(function(resolve){ setTimeout(resolve, IN_FLIGHT_WAIT_MS); }),

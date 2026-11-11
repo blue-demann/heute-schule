@@ -1,8 +1,8 @@
 # Offene Punkte
 
-HS-OFF · v11 · 2026-11-09 · f77f795a · gültig
+HS-OFF · v12 · 2026-11-11 · 602cd53f · gültig
 
-**Stand: 09.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 11.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -40,7 +40,11 @@ Testabsicherung, siehe unten und
 Eine elfte Runde am 09.11.2026 prüfte deren Folge-Fix (Version 0.4.5): kein
 🔴, eine späte Antwort konnte beim Tageswechsel den falschen Tag auf die
 Karte schreiben, dazu kleinere Funde, siehe unten und
-[Prüfbericht der elften Runde (ID9ZBJZ)](PEER-REVIEW-2026-11-09b.md).
+[Prüfbericht der elften Runde (ID9ZBJZ)](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-11-09b.md).
+Eine zwölfte Runde am 09.11.2026 prüfte deren Folge-Fix (Version 0.4.6):
+kein 🔴, nach dem Tageswechsel zeigte eine Karte bis zu 15 s den alten Tag
+ohne Ladeanzeige, und „nie zwei Anmeldungen gleichzeitig“ trug nicht, siehe
+unten und [Prüfbericht der zwölften Runde (ID9KS64)](PEER-REVIEW-2026-11-09c.md).
 (Links zu Berichten, die nicht Teil des `web/docs/`-Dumps sind, zeigen
 bewusst auf GitHub statt auf eine relative Datei — dort würde ein
 relativer Link ins Leere laufen.) Alle Berichte bleiben als
@@ -89,9 +93,13 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (zehnte Runde, [Prüfbericht IDBRBGB](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-11-09.md), Funde A-1, D-1, K-1, K-2) Die WebUntis-Abmeldung lief ohne Zeitlimit; hing ihre Antwort im Inhalt, wartete der Proxy unbegrenzt, und weil die App Kinder nacheinander abfragt, standen alle Karten auf „Lädt …“. Nach einem Fehler gab es gar keine Abmeldung. „Höchstens 10 s“ in Commit, `proxy/README.md` und hier stimmte damit nicht, dazu weitere veraltete Stellen | Jede Anfrage läuft unter einem Limit (`withBudget`), das eigene Zeitlimit je Anfrage fällt weg: Abruf 10 s gemeinsam, WebUntis-Abmeldung eigene 3 s vor der Antwort und auch nach Fehlern (`finally`), sams-on-Abmeldung eigene 5 s nach der Antwort. Höchstens rund 13 s je Antwort des Proxys. Die Meldung „(>10s)“ (A-4) gibt es damit nicht mehr. Doku an allen genannten Stellen korrigiert (09.11.2026, Version 0.4.5) |
 | 🟡 (dieselbe Runde, A-2, A-3) Mit dem Umbau der Zeitlimit-Tests in 0.4.4 fiel der Test weg, der sicherte, dass die sams-on-Abmeldung nach Ablauf des Limits noch rausgeht (Mutant „Abmeldung am gemeinsamen Limit“ blieb grün). Dass das Limit *gemeinsam* gilt, prüfte kein Test: Einzel- und Gesamtlimit waren gleich lang, die Test-Uhr feuerte beide zugleich | Jeder Zeitlimit-Fall prüft, dass eine offene Sitzung abgemeldet wird und ohne Sitzung keine Abmeldung rausgeht. Test-Uhr mit `advance()`, die wirklich vorrückt: Anbieter mit 4 s je Anfrage müssen nach 10 s enden (WebUntis 13 s), Gegenprobe mit 1,5 s läuft durch. Mutanten: eigenes Limit je Anfrage bei WebUntis, Mensamax und sams-on, beide Abmeldungen am gemeinsamen Limit, Abmeldung nur im Erfolgsfall oder ohne eigenes Limit, Zeitüberschreitungen gecacht, nichts gecacht, Zeitüberschreitung als einfacher `Error`, Limits 12 s / 5 s / 10 s, Lesen ohne `readText`, Zeitgeber nicht aufgeräumt, Abbruch nicht übersetzt — alle 16 je mindestens ein Test rot (09.11.2026, Version 0.4.5) |
 | 🟢 (dieselbe Runde, C-1, C-2, D-2) Zeitüberschreitungen wurden wie andere Fehler 4 Minuten gecacht, „Aktualisieren“ half nicht; auf der Karte fehlte das Wort „Guthaben“ (Screenreader las nur Emoji und Betrag); die workerd-Prüfung, auf der die Tests ruhen, lag nicht im Repo | Ergebnisse, die in ein Limit gelaufen sind (`ProviderTimeout`), werden nicht gecacht; ein falsches Passwort weiter schon (Test und Gegenprobe). Karte: „💶 Guthaben 12,40 €“, „bald aufladen“ in eigener Zeile, rechter Block höchstens halbe Breite — vorher rutschte er bei „bald aufladen“ und „sams-on zeigt kein Guthaben“ unter den Namen (im Browser auf 375 px gemessen: Kopf 48 statt 76 px). `tools/probe-workerd.mjs`: echter `worker.js` in workerd gegen einen stockenden Nachbau der Anbieter, 7 Szenarien grün; gegen 0.4.4 schlagen genau die drei Abmelde-Fälle an. Nicht übernommen: Abbrüche über Worker-Logs zählen (C-1) — der Proxy protokolliert bewusst nichts (09.11.2026, Version 0.4.5) |
-| 🟡 (elfte Runde, [Prüfbericht ID9ZBJZ](PEER-REVIEW-2026-11-09b.md), Fund C-1) Wechselte man den Tag, während ein Abruf lief, schrieb dessen späte Antwort den Stundenplan des vorher gewählten Tages auf die Karte, der Reiter zeigte weiter den neuen Tag. Ein Doppeltipp auf ⟳ startete zwei Abrufketten nebeneinander, also parallele Anmeldungen am selben Klassenkonto | Jeder Abruf trägt eine Nummer, eine Antwort erscheint und wird gespeichert nur, solange ihr Abruf der letzte ist; ein überholter Abruf startet kein weiteres Kind. Der neue Abruf wartet auf die laufende Anfrage, höchstens 15 s (der Proxy ist nach rund 13 s fertig und abgemeldet, eine länger offene Anfrage hängt im Netz). „Alle Daten löschen“ verwirft eine laufende Antwort. Property-Test über 200 Tipp-Abfolgen, 10 Mutanten je mindestens ein Test rot; im Browser mit einer Attrappe nachgestellt (09.11.2026, Version 0.4.6) |
+| 🟡 (elfte Runde, [Prüfbericht ID9ZBJZ](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-11-09b.md), Fund C-1) Wechselte man den Tag, während ein Abruf lief, schrieb dessen späte Antwort den Stundenplan des vorher gewählten Tages auf die Karte, der Reiter zeigte weiter den neuen Tag. Ein Doppeltipp auf ⟳ startete zwei Abrufketten nebeneinander, also parallele Anmeldungen am selben Klassenkonto | Jeder Abruf trägt eine Nummer, eine Antwort erscheint und wird gespeichert nur, solange ihr Abruf der letzte ist; ein überholter Abruf startet kein weiteres Kind. Der neue Abruf wartet auf die laufende Anfrage, höchstens 15 s (hat der Proxy die Anfrage, ist er nach rund 13 s fertig und abgemeldet; die Grenzen davon siehe zwölfte Runde, A-1). „Alle Daten löschen“ verwirft eine laufende Antwort. Property-Test über 200 Tipp-Abfolgen, 10 Mutanten je mindestens ein Test rot; im Browser mit einer Attrappe nachgestellt (09.11.2026, Version 0.4.6) |
 | 🟢 (dieselbe Runde, A-1, A-2, A-3) Dass Zeitüberschreitungen nicht gecacht werden, prüfte nur der Fall „WebUntis ohne Header“: Mutanten „nur das Stundenplan-Ergebnis geprüft“ und „Abbruch beim Lesen als einfacher `Error`“ blieben grün. Dass dann auch der Teil des anderen Anbieters nicht gecacht wird, stand nirgends; ebenso wenig, dass die Abmeldung nach Fehlern erst gilt, sobald die Anmeldung gelesen ist | Jeder Zeitlimit-Fall (jeder Anbieter, beide Hängeklassen) prüft, dass nichts gecacht wird; Gegenprobe: dieselben Nachbauten ohne Stocken werden gecacht. Beide Mutanten jetzt rot. Ganz oder gar nicht cachen bleibt bewusst so (vom User entschieden), steht jetzt in `PROJEKT.md`, `proxy/README.md` und im Code-Kommentar; die Abmeldung ebenso präzisiert (09.11.2026, Version 0.4.6) |
 | 🟢 (dieselbe Runde, C-2, D-1, K-1 bis K-5) „Bartholomäus“ brach bei 320 px mitten im Wort; `tools/probe-workerd.mjs` ließ auf dem Fehlerweg workerd und den Temp-Ordner zurück und nahm jeden Server auf seinem Port als den eigenen; veraltete Stellen in der Doku | Namen mit Silbentrennung (`hyphens:auto`, Seite ist als Deutsch markiert). Das Werkzeug beendet sich erst nach dem Aufräumen, holt sich einen freien Port und erkennt den eigenen Proxy an dessen Antwort; auf dem Fehlerweg nachgestellt: Exit 2, nichts bleibt zurück. Doku: `budgetedFetch`, „Audit-Runden“ ohne Zahl, „je Antwort des Proxys“, rund eine Minute Laufzeit, Link „frühere Runden“ auf die Projekt-Doku (09.11.2026, Version 0.4.6) |
+| 🟡 (zwölfte Runde, [Prüfbericht ID9KS64](PEER-REVIEW-2026-11-09c.md), Fund C-1) Nach einem Tageswechsel zeigte bei mehreren Kindern eine Karte bis zu 13 s (bei hängender Anfrage 15 s) den alten Tag in voller Deckkraft, weil sie erst „Lädt …“ zeigte, wenn ihr Abruf an der Reihe war | Beim Tippen zeigen alle Karten sofort „Lädt …“; 🚫/👁 während des Ladens lassen die Ladeanzeige stehen. Die Tests führen ein Kartenmodell (was jede Karte zeigt), die Mutanten „keine Ladeanzeige beim Tipp“ und „🚫/👁 nimmt sie weg“ sind rot; im Browser mit einer Attrappe nachgestellt (11.11.2026, Version 0.4.7) |
+| 🟡 (dieselbe Runde, A-1, K-2) „So überschneiden sich nie zwei Anmeldungen am selben Klassenkonto“ trug nicht: Hängt eine Anfrage auf dem Hinweg zum Proxy, beginnt ihre Anmeldung später, als die 15 s annehmen; Neuladen, ein zweites Gerät und andere Familien am selben Klassenkonto steuert die App gar nicht. Die Testtabelle widersprach dem eigenen 15-s-Test, die Mutanten waren nicht aufgezählt | Aussage in Code-Kommentar, `PROJEKT.md` und `proxy/README.md` auf das Haltbare zurückgenommen: Die App trennt ihre eigenen Anmeldungen, solange keine Anfrage auf dem Hinweg hängt. Bewusst keine Sperre je Konto im Proxy (vom User entschieden): neue Infrastruktur für ein Risiko, dessen Schaden nicht belegt ist. Testtabelle mit Mutanten (11.11.2026, Version 0.4.7) |
+| 🟢 (dieselbe Runde, A-2, B-1, C-2, D-1, D-2, K-1) Ganz-oder-gar-nicht-Cachen ungetestet, weil in jedem Zeitlimit-Fall der andere Anbieter unkonfiguriert war; dass „Alle Daten löschen“ einen laufenden Abruf verwirft, prüfte nur ein direkter Aufruf; nach einem gescheiterten Abruf holten 🚫/👁 die Daten des Vortags zurück; im Testgenerator fehlte „die 15 s laufen ab“, „anderer Tag“ traf manchmal denselben; Strg+C ließ den Temp-Ordner des Prüfwerkzeugs liegen; Versionszeile in `PROJEKT.md` veraltet | Fälle „WebUntis hängt, Mensamax liefert“ und umgekehrt, nichts wird gecacht (Mutant rot), Gegenprobe beide liefern; Löschen als eigene Funktion, der Test ruft den echten Handler (Mutant rot); ein gescheiterter Abruf vergisst die gemerkten Daten (Mutant rot); Generator um „15 s laufen ab“ und „🚫/👁“ ergänzt, „anderer Tag“ immer ein anderer; das Werkzeug räumt bei Strg+C und SIGTERM auf (nachgestellt, Gegenprobe am alten Stand: Ordner blieb liegen). Die Silbentrennung „Bartholomä-us“ (C-3) bleibt bewusst so: kein WCAG-2.2-Verstoß (11.11.2026, Version 0.4.7) |
+| Aus dem Alltag (09.11.2026): Über einen VPN-Standort, der `workers.dev` nicht erreichte, zeigten die Karten nur Safaris „Load failed“, ohne Hinweis, was zu tun ist | Ohne Verbindung steht „Keine Verbindung zum Server – Netz oder VPN prüfen, dann ⟳ tippen.“, bei ccCampus entsprechend; HTTP-Fehler behalten ihren Status. Bewusst kein automatischer zweiter Versuch: Ging nur die Antwort verloren, liefe eine zweite Anmeldung (11.11.2026, Version 0.4.7) |
 
 ## Noch offen
 
@@ -175,14 +183,16 @@ Zeitpunkt-Momentaufnahmen unverändert.
    ccCampus-Abruf im Browser. Der Proxy selbst antwortet seit 0.4.5
    innerhalb von höchstens rund 13 s; offen bleibt ein hängendes Netz auf
    dem Handy, dann zeigt die Karte unbegrenzt „Lädt …“. Ein neuer Abruf
-   wartet seit 0.4.6 höchstens 15 s auf eine solche Anfrage. Möglich: Limit
-   etwas über dem des Proxys und eine Meldung auf der Karte. Vom User als
+   wartet seit 0.4.6 höchstens 15 s auf eine solche Anfrage; eine Anfrage,
+   die der Browser abbricht, meldet seit 0.4.7 „Keine Verbindung …“.
+   Möglich: Limit etwas über dem des Proxys und eine Meldung auf der Karte. Vom User als
    eigener Punkt gewünscht, nicht Teil von 0.4.4.
 7. **Kontrolle ab 16.11.2026:** Die aus `web/docs/` entfernten Berichte
-   der neunten und zehnten Runde (`/docs/PEER-REVIEW-2026-10-30.md`,
-   `/docs/PEER-REVIEW-2026-11-09.md`) liefern ohne Cache-Buster `404`
-   (Cloudflare hält Dateien bis zu einer Woche, siehe `PROJEKT.md`
-   Abschnitt 10; für den zweiten gilt die Woche ab dem Deploy von 0.4.6).
+   der neunten, zehnten und elften Runde (`/docs/PEER-REVIEW-2026-10-30.md`,
+   `/docs/PEER-REVIEW-2026-11-09.md`, `/docs/PEER-REVIEW-2026-11-09b.md`)
+   liefern ohne Cache-Buster `404` (Cloudflare hält Dateien bis zu einer
+   Woche, siehe `PROJEKT.md` Abschnitt 10; für den zehnten gilt die Woche
+   ab dem Deploy von 0.4.6, für den elften ab dem Deploy von 0.4.7).
    Danach diesen Punkt streichen.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine

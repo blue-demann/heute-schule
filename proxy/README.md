@@ -118,7 +118,11 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   nacheinander ab, weil sich bei einem geteilten Klassenkonto
   gleichzeitige Sitzungen stören können, und der nächste Login soll erst
   nach der Abmeldung beginnen; einen neuen Abruf startet sie erst, wenn
-  die laufende Anfrage beantwortet ist, höchstens nach 15 s. Ergebnisse,
+  ihre laufende Anfrage beantwortet ist, höchstens nach 15 s. Das trennt
+  nur die eigenen Anmeldungen dieser Seite, und auch die nicht, wenn eine
+  Anfrage auf dem Hinweg zum Proxy hängt; ein zweites Gerät, eine neu
+  geladene Seite oder andere Familien am selben Klassenkonto kann die App
+  nicht steuern. Ergebnisse,
   die in ein Limit gelaufen sind, werden nicht gecacht, auch nicht der
   Teil des anderen Anbieters. Nachprüfbar in der echten Workers-Laufzeit
   mit `node tools/probe-workerd.mjs`.
