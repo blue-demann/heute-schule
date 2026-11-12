@@ -1,8 +1,8 @@
 # Offene Punkte
 
-HS-OFF · v12 · 2026-11-11 · 602cd53f · gültig
+HS-OFF · v13 · 2026-11-12 · 0a3beaa4 · gültig
 
-**Stand: 11.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 12.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -194,6 +194,21 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Woche, siehe `PROJEKT.md` Abschnitt 10; für den zehnten gilt die Woche
    ab dem Deploy von 0.4.6, für den elften ab dem Deploy von 0.4.7).
    Danach diesen Punkt streichen.
+8. **🟢 Bekannte Lücken in Entwicklungswerkzeugen** (beim Push am
+   12.11.2026 von Dependabot gemeldet, `npm audit` zeigt sie bei jedem
+   Deploy). `minimatch` 10.2.6
+   ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
+   Denial of Service, behoben ab 11.0.1) und `glob` 13.0.6
+   ([GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4)),
+   beide mittelschwer. Sie stecken nur in `c8` (Coverage) und `eslint`
+   (Lint), also in Werkzeugen, die beim Prüfen laufen; ausgeliefert werden
+   sie weder mit der Website noch mit dem Proxy (Dependabot führt sie als
+   „development“). Angreifbar wären sie nur über präparierte Muster in der
+   eigenen Konfiguration. `npm audit fix --force` würde `c8` und `eslint`
+   auf ältere Hauptversionen zurücksetzen. Möglich: auf Versionen von `c8`
+   und `eslint` warten, die die behobenen Pakete mitbringen, oder
+   `minimatch`/`glob` per `overrides` in `package.json` anheben und dann
+   Tests, Lint und Coverage prüfen.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.
