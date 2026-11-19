@@ -1,27 +1,27 @@
 # Übergabe: Heute Schule
 
-IDNCVVS · v4 · 2026-11-19 · aa2d88e4 · gültig
+IDNCVVS · v5 · 2026-11-19 · 88fe667d · gültig
 
 Zweck: Stand für eine neue Sitzung und den Orchestrator. Für den Stand genügt Abschnitt 1.
 Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zuerst lesen ·
 5 Fallen · 6 Für andere Projekte
 
 ## 1. Stand auf einen Blick
-- Phase: Wartung, live 0.4.7 (Website und Proxy aus `eb409e1`, deployt 19.11.2026)
-- Ampel: grün – die App läuft stabil, alle Befunde der zwölf Prüfrunden sind erledigt, `npm audit` meldet keine Lücken, eine juristische Prüfung steht nicht mehr an.
-- Zuletzt: 2026-11-19 – Die App nutzt derzeit nur der eigene Haushalt, die juristische Prüfung entfällt; sie bleibt aber für andere Familien nutzbar; sams-on läuft laut User einwandfrei; Lücken in Entwicklungswerkzeugen behoben (`eslint` 10.15.0, `overrides` für `c8`). Offene Punkte v16, Projekt-Doku v14; deployt und live geprüft.
-- Repo: `main` · Übergabe-Commit auf `eb409e1`, gepusht · uncommittet: nein · ungepusht: nein
+- Phase: Wartung – **alles erledigt, die Arbeit ruht bis zum nächsten Ereignis** (Fehlerbild aus dem Alltag, Dependabot-Meldung, neuer Wunsch). Live 0.4.7 aus `eb409e1`; 0.4.8 ist gepusht, der Deploy durch User steht aus.
+- Ampel: grün – die App läuft stabil, alle Befunde der zwölf Prüfrunden sind erledigt, `npm audit` meldet keine Lücken, eine juristische Prüfung steht nicht an.
+- Zuletzt: 2026-11-19 – 0.4.8: Zeitlimit von 15 s für Abrufe in der App (OFFEN 4 erledigt) und Seite springt am neuen Tag auf „Heute“ (Fehlerbild aus dem Alltag). Vorher am selben Tag: juristische Prüfung entfallen, sams-on bestätigt, Lücken in Entwicklungswerkzeugen behoben. Offene Punkte v19, Projekt-Doku v16.
+- Repo: `main` · drei Commits auf `172f666` (0.4.8 und diese Übergabe), gepusht · uncommittet: nein · ungepusht: nein
 - Sitzung: „Heute Schule“ · Startordner: `~/dev/claude`
 - Termine: keine
 
 ## 2. Als Nächstes
-1. Zeitlimit in der Web-App beim Abruf vom Proxy (OFFEN 4): mit User planen, dann umsetzen.
-2. Inline-Script nach `web/app.js` auslagern (OFFEN 2, zusammen mit OFFEN 3): größeres Vorhaben, erst mit dem `grilling`-Skill planen.
-3. Nach jeder größeren Änderung eine frische, unabhängige Prüfrunde anbieten (Vorlage in `prompts/`, Muster in `PROJEKT.md` Abschnitt 9).
+Keine geplanten Schritte. Bei einem neuen Ereignis zuerst diese Übergabe und die offenen Punkte lesen, dann mit User planen.
+1. Geparkt, nur auf Wunsch: Inline-Script nach `web/app.js` auslagern (OFFEN 2, zusammen mit OFFEN 3), erst mit dem `grilling`-Skill planen; Deploy-Token je Worker (OFFEN 1), sobald Cloudflare es unterstützt.
+2. Nach jeder größeren Änderung eine frische, unabhängige Prüfrunde anbieten (Vorlage in `prompts/`, Muster in `PROJEKT.md` Abschnitt 9).
 
 ## 3. Wartet auf User
-- Hinweis an den sams-on-Betreiber zur PHP-Version, falls noch nicht geschehen.
-- Deploys startet User selbst mit `./deploy.sh`.
+- Deploy von 0.4.8 mit `./deploy.sh`; auf dem Handy braucht der Service Worker meist zwei Neuladen.
+- Ob 0.4.8 (Zeitlimit, Tageswechsel) eine frische Prüfrunde bekommt; die Abfragekette hatte in den Runden zehn bis zwölf jedes Mal Funde.
 
 ## 4. Zuerst lesen
 1. [Projekt-Kontext](CLAUDE.md) (`CLAUDE.md`, wird automatisch geladen)
@@ -42,5 +42,5 @@ Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zue
 - Prüfsitzungen lesen nie `Verarbeitungsverzeichnis-INTERN.md`, `web/impressum.html` oder `web/datenschutz.html` (gitignored, echte Personendaten).
 
 ## 6. Für andere Projekte
-- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v14, HS-OFF v16 und IDNCVVS v4.
+- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v16, HS-OFF v19 und IDNCVVS v5.
 - Prozessentwicklung, Vorschlag für den Entwicklungsprozess (IDU6829): Regel „Commits nur mit ausdrücklich genannten Pfaden“ präzisieren auf `git commit -- <pfade>`, weil ein vorgemerktes Löschen sonst unbemerkt mitgeht (am 11.11.2026 hier passiert, vor dem Push korrigiert).
