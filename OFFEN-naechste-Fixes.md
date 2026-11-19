@@ -1,11 +1,11 @@
 # Offene Punkte
 
-HS-OFF · v14 · 2026-11-19 · 67cb4500 · gültig
+HS-OFF · v15 · 2026-11-19 · 0972f5ca · gültig
 
 **Stand: 19.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
-offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
-live verifiziert — die Historie dazu steht in
+offen. Seither wurden alle umgesetzt und live verifiziert; die juristische
+Prüfung entfiel am 19.11.2026 (siehe unten) — die Historie dazu steht in
 [QA-Bericht-2026-08-27-v0.1.1.md](https://github.com/blue-demann/heute-schule/blob/main/QA-Bericht-2026-08-27-v0.1.1.md)
 und [PEER-REVIEW-2026-08-27.md](https://github.com/blue-demann/heute-schule/blob/main/PEER-REVIEW-2026-08-27.md).
 Eine dritte Prüfrunde am 31.08. (frische Sitzungen, kein Vorwissen) ergänzte
@@ -101,20 +101,13 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟢 (dieselbe Runde, A-2, B-1, C-2, D-1, D-2, K-1) Ganz-oder-gar-nicht-Cachen ungetestet, weil in jedem Zeitlimit-Fall der andere Anbieter unkonfiguriert war; dass „Alle Daten löschen“ einen laufenden Abruf verwirft, prüfte nur ein direkter Aufruf; nach einem gescheiterten Abruf holten 🚫/👁 die Daten des Vortags zurück; im Testgenerator fehlte „die 15 s laufen ab“, „anderer Tag“ traf manchmal denselben; Strg+C ließ den Temp-Ordner des Prüfwerkzeugs liegen; Versionszeile in `PROJEKT.md` veraltet | Fälle „WebUntis hängt, Mensamax liefert“ und umgekehrt, nichts wird gecacht (Mutant rot), Gegenprobe beide liefern; Löschen als eigene Funktion, der Test ruft den echten Handler (Mutant rot); ein gescheiterter Abruf vergisst die gemerkten Daten (Mutant rot); Generator um „15 s laufen ab“ und „🚫/👁“ ergänzt, „anderer Tag“ immer ein anderer; das Werkzeug räumt bei Strg+C und SIGTERM auf (nachgestellt, Gegenprobe am alten Stand: Ordner blieb liegen). Die Silbentrennung „Bartholomä-us“ (C-3) bleibt bewusst so: kein WCAG-2.2-Verstoß (11.11.2026, Version 0.4.7) |
 | Aus dem Alltag (09.11.2026): Über einen VPN-Standort, der `workers.dev` nicht erreichte, zeigten die Karten nur Safaris „Load failed“, ohne Hinweis, was zu tun ist | Ohne Verbindung steht „Keine Verbindung zum Server – Netz oder VPN prüfen, dann ⟳ tippen.“, bei ccCampus entsprechend; HTTP-Fehler behalten ihren Status. Bewusst kein automatischer zweiter Versuch: Ging nur die Antwort verloren, liefe eine zweite Anmeldung (11.11.2026, Version 0.4.7) |
 | Kontrolle Cloudflare-Cache nach 0.4.6 und 0.4.7: die aus `web/docs/` entfernten Berichte der neunten, zehnten und elften Runde könnten weiter ausgeliefert werden | Am 19.11.2026 ohne Cache-Buster geprüft: `/docs/PEER-REVIEW-2026-10-30.md`, `/docs/PEER-REVIEW-2026-11-09.md` und `/docs/PEER-REVIEW-2026-11-09b.md` liefern `404`, Gegenprobe `/docs/PEER-REVIEW-2026-11-09c.md` liefert `200` (19.11.2026) |
+| 🟡 Juristische Prüfung (bisher offener Punkt 1): Die Haushaltsausnahme (Art. 2 Abs. 2 lit. c DSGVO) griff nicht mehr, weil eine familienfremde Familie mitnutzte; offen waren eine juristische Einschätzung und die Speicherdauer der Cloudflare-Server-Logs | Entfällt (vom User entschieden, 19.11.2026): Die App nutzt nur noch der eigene Haushalt. Die anderen Familien haben aufgehört, weil ihnen die Pflege von Passwörtern und Zugängen mehr Aufwand machte, als die App ihnen brachte. Damit greift die Haushaltsausnahme. Der Punkt lebt wieder auf, sobald eine Familie außerhalb des Haushalts die App nutzt; Begründung und Bedingung in `PROJEKT.md` Abschnitt 7 |
+| 🟡 sams-on fertig prüfen (bisher offener Punkt 5): Offen waren Fragen, die erst echte Bestellungen beantworten (Menüname in `title`, Form von `dayId`, Stornos, Sitzung der Eltern, Guthabenformat, `hideCredit`) | Laut User läuft sams-on mit dem Konto der Familie im Alltag einwandfrei (19.11.2026). Einzeln nachgestellt sind die Fragen damit nicht, im Alltag wäre eine Abweichung aber auf der Karte aufgefallen. Den Betreiber auf die PHP-Version hinzuweisen, liegt beim User außerhalb dieser App (siehe neunte Runde, B-2). Das Entfernen nicht mehr gebrauchter Anbieter steht jetzt als eigener Punkt 5 unten |
+| 🟢 Bekannte Lücken in Entwicklungswerkzeugen (bisher offener Punkt 7, von Dependabot am 12.11.2026 gemeldet): `minimatch` 10.2.6 ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), Denial of Service) und `glob` 13.0.6 ([GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4)), nur in `eslint` und `c8`, nicht ausgeliefert | `eslint` auf 10.15.0 angehoben, das `minimatch` 11 mitbringt; dazu `eslint-plugin-html` 8.2.1, weil 8.2.0 mit diesem `eslint` beim Prüfen der HTML-Dateien abstürzt. `c8` 12.0.0 hängt über `test-exclude` 8.0.0 noch an den alten Fassungen; deshalb hebt `overrides` in `package.json` nur unterhalb von `test-exclude` `glob` auf 14 und `minimatch` auf 11. `npm audit` meldet 0 Lücken. Gegenproben: 403 Tests grün; die Lint-Tests („lint flags innerHTML …“) waren mit 8.2.0 rot, sind also echte Läufe über die HTML-Dateien; die Coverage-Tabelle ist vor und nach der Änderung gleich, auch `tools/check-live-headers.mjs`, die nur über das Datei-Sammeln von `all: true` erscheint. Der `overrides`-Eintrag fällt weg, sobald eine `c8`-Version die behobenen Pakete selbst mitbringt (19.11.2026) |
 
 ## Noch offen
 
-1. **🟡 Juristische Prüfung.** Die Haushaltsausnahme (Art. 2 Abs. 2 lit. c
-   DSGVO) deckt nur rein familiäre Nutzung ab — eine zweite,
-   familienfremde Familie nutzt bereits aktiv mit (ccCampus-Essensanbieter,
-   siehe `PROJEKT.md` Abschnitt 1), die Ausnahme dürfte also schon jetzt
-   nicht mehr greifen, nicht erst „bei weiterer Ausweitung". Vorbereitet:
-   `Verarbeitungsverzeichnis-INTERN.md` (Entwurf, Art. 30, AVV-Punkt
-   verifiziert), TOM-Abschnitt in der
-   Datenschutzerklärung. Noch zu tun:
-   - Einschätzung durch jemanden mit juristischem Hintergrund einholen
-   - Speicherdauer der Cloudflare-Server-Logs klären
-2. **🟡 Workers-Recht des Deploy-Tokens gilt kontoweit.** Ein Token, der
+1. **🟡 Workers-Recht des Deploy-Tokens gilt kontoweit.** Ein Token, der
    nur den einen Worker `stundenplan-proxy` bearbeiten darf, lässt sich
    derzeit nicht anlegen — Cloudflare lehnt das mit
    „com.cloudflare.edge.worker.script is not a supported resource type" ab
@@ -122,7 +115,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
    gilt deshalb für das ganze Konto und erreicht auch fremde Worker darin,
    etwa den von Spektrum. Gegenstück: dasselbe gilt dort umgekehrt.
    Wiedervorlage, sobald Cloudflare den Ressourcentyp unterstützt.
-3. **🟡 Inline-Script in `web/index.html` ist nicht typgeprüft** (aus der
+2. **🟡 Inline-Script in `web/index.html` ist nicht typgeprüft** (aus der
    Planung vom 09.10.2026, bewusst zurückgestellt). `tsc` kann JavaScript in
    HTML nicht lesen; der größte JS-Block des Projekts (rund 900 Zeilen) liegt
    deshalb außerhalb der Typprüfung, ebenso die ccCampus-Antworten, die im
@@ -132,53 +125,12 @@ Zeitpunkt-Momentaufnahmen unverändert.
    (Entscheidungs-Log), braucht strict-Nacharbeit am DOM-Code und einen
    sorgfältigen Test auf den echten Geräten — deshalb nicht im
    Wartungs-Vorhaben.
-4. **Kosmetisch: Meldung bei abgelehnter Anfrage** (Peer-Review 09.10.,
+3. **Kosmetisch: Meldung bei abgelehnter Anfrage** (Peer-Review 09.10.,
    siebte Runde, C-1). Lehnt der Proxy eine Anfrage mit 400 ab (Feld kein
    Text), zeigt die Karte nur „HTTP 400“. Tritt mit der App selbst nicht
    auf, weil sie nur Text schickt; eine verständliche Meldung wäre trotzdem
-   besser. Betrifft das Inline-Script, passt zu Punkt 3.
-5. **🟡 sams-on fertig prüfen** (neuer Anbieter seit 29.10.2026, Version
-   0.4.0). Gebaut nach den Antworten, die das Testkonto gezeigt hat; offen ist,
-   was erst eine echte Bestellung zeigen kann:
-   - Enthält `title` in `orders/view` den Menünamen oder nur die Kategorie
-     („Fleisch“, „vegetarisch“)? Bei der Kategorie den Namen aus anderer
-     Quelle holen.
-   - Kommt `dayId` als reines Datum? Seit 0.4.1 ist auch eine Uhrzeit dahinter
-     erlaubt; mit Zeitzone oder in anderer Form zeigt die Karte eine
-     Fehlermeldung statt eines falschen Status.
-   - Tauchen stornierte Bestellungen in `orders/view` auf? Der Code liest kein
-     Statusfeld und würde sie als „Essen bestellt“ zeigen (neunte Runde, D-3).
-   - Beendet ein Login über den Proxy eine gleichzeitig offene Sitzung der
-     Eltern im sams-on-Browser?
-   - Guthaben: Format `creditAmount` („0,00“) am Testkonto gesehen; mit
-     echtem Guthaben gegenprüfen, ob es dasselbe Format bleibt.
-   - Belegt am 29.10.: Erster echter Abruf über den Live-Proxy mit dem Konto
-     der Familie funktioniert (Login, „Kein Essen bestellt“, Guthaben wie
-     erwartet); eine Sperre wie bei ccCampus gibt es nicht. Eine unbekannte
-     Schule beantwortet sams-on mit einer Weiterleitung (302) auf
-     `www.sams-on.de`; die Meldung „Schule … nicht gefunden“ dafür ist seit
-     dem Deploy von 0.4.1 am 30.10. live (in der neunten Runde bestätigt).
-   - Fehlt `hideCredit` in der Instanz-Info oder ist es `null`, zeigt die
-     sams-on-Oberfläche den Betrag nicht an (sie prüft auf „gleich false“),
-     der Proxy aber schon. Mit einer echten Schule klären, was dort steht,
-     dann angleichen (neunte Runde, D-1).
-   - Läuft schon der Login ins gemeinsame Zeitlimit, nachdem sams-on ihn
-     verarbeitet hat, geht kein Logout raus; die Sitzung läuft dann von
-     selbst ab. Für die Frage nach der Sitzung der Eltern (oben) gut zu
-     wissen (neunte Runde, A-5).
-   - Mensamax-Anbindung entfernen, sobald sie niemand mehr braucht.
-   - PHP bei sams-on: Der Server meldet im Header `X-Powered-By: PHP/8.2.33`.
-     Die kritischen PHP-Lücken CVE-2026-109618/-109619 sind im 8.2-Zweig
-     erst ab 8.2.35 behoben (Sicherheitshinweise der PHP-Entwickler
-     [GHSA-w8hw-w9fx-j79w](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w)
-     und [GHSA-6wmf-4rv5-p3rp](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp)
-     vom 21.10.2026; 8.2.35 laut [php.net-Changelog](https://www.php.net/ChangeLog-8.php#8.2.35)
-     am 22.10.). Laut [Unit 42](https://unit42.paloaltonetworks.com/cve-2026-109618-cve-2026-109619/)
-     werden sie seit 29.10. aktiv ausgenutzt (dort gegen
-     PAN-OS-Verwaltungsoberflächen). Die Versionsnummer ist ein Indiz, kein
-     Beweis: AlmaLinux-Pakete können Korrekturen zurückportieren, ohne sie zu
-     ändern. Der User weist den Betreiber darauf hin.
-6. **🟢 Kein Zeitlimit in der Web-App beim Abruf vom Proxy** (bei der
+   besser. Betrifft das Inline-Script, passt zu Punkt 2.
+4. **🟢 Kein Zeitlimit in der Web-App beim Abruf vom Proxy** (bei der
    Planung von A-3 aufgefallen, 09.11.2026). `fetchChild()` in
    `web/index.html` wartet ohne eigenes Limit auf den Proxy, ebenso der
    ccCampus-Abruf im Browser. Der Proxy selbst antwortet seit 0.4.5
@@ -188,21 +140,15 @@ Zeitpunkt-Momentaufnahmen unverändert.
    die der Browser abbricht, meldet seit 0.4.7 „Keine Verbindung …“.
    Möglich: Limit etwas über dem des Proxys und eine Meldung auf der Karte. Vom User als
    eigener Punkt gewünscht, nicht Teil von 0.4.4.
-7. **🟢 Bekannte Lücken in Entwicklungswerkzeugen** (beim Push am
-   12.11.2026 von Dependabot gemeldet, `npm audit` zeigt sie bei jedem
-   Deploy). `minimatch` 10.2.6
-   ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
-   Denial of Service, behoben ab 11.0.1) und `glob` 13.0.6
-   ([GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4)),
-   beide mittelschwer. Sie stecken nur in `c8` (Coverage) und `eslint`
-   (Lint), also in Werkzeugen, die beim Prüfen laufen; ausgeliefert werden
-   sie weder mit der Website noch mit dem Proxy (Dependabot führt sie als
-   „development“). Angreifbar wären sie nur über präparierte Muster in der
-   eigenen Konfiguration. `npm audit fix --force` würde `c8` und `eslint`
-   auf ältere Hauptversionen zurücksetzen. Möglich: auf Versionen von `c8`
-   und `eslint` warten, die die behobenen Pakete mitbringen, oder
-   `minimatch`/`glob` per `overrides` in `package.json` anheben und dann
-   Tests, Lint und Coverage prüfen.
+5. **🟢 Nicht mehr gebrauchte Anbieter entfernen** (19.11.2026). Seit nur
+   noch der eigene Haushalt die App nutzt, braucht womöglich nicht mehr
+   jeder Anbieter jemanden: ccCampus kam für die zweite Familie dazu, für
+   Mensamax stand das Entfernen schon als Absicht im früheren Punkt 5. Jeder
+   entfernte Anbieter verkleinert Proxy, Allowlists, CSP-Freigaben und die
+   Menge an Zugangsdaten, die durch den Proxy laufen. Zuerst mit dem User
+   klären, welche Anbieter der Haushalt nutzt; gespeicherte Einstellungen
+   mit einem entfernten Anbieter brauchen eine verständliche Meldung statt
+   eines Fehlers.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.

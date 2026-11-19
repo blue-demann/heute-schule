@@ -1,6 +1,6 @@
 # Übergabe: Heute Schule
 
-IDNCVVS · v1 · 2026-11-19 · 2893457e · gültig
+IDNCVVS · v2 · 2026-11-19 · 45aeca04 · gültig
 
 Zweck: Stand für eine neue Sitzung und den Orchestrator. Für den Stand genügt Abschnitt 1.
 Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zuerst lesen ·
@@ -8,23 +8,24 @@ Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zue
 
 ## 1. Stand auf einen Blick
 - Phase: Wartung, live 0.4.7 (Website und Proxy aus `ddd1497`, deployt 12.11.2026)
-- Ampel: gelb – die App läuft stabil, alle Befunde der zwölf Prüfrunden sind erledigt; die juristische Prüfung (OFFEN 1) steht seit August aus.
-- Zuletzt: 2026-11-19 – Kontrolle bestanden: Die drei aus der Website entfernten Prüfberichte liefern `404`. OFFEN v14 schließt den Punkt; diese Übergabe neu angelegt.
-- Repo: `main` · Übergabe-Commit auf `e06e8d0` · uncommittet: nein · ungepusht: der Übergabe-Commit, bis User den Push freigibt
+- Ampel: grün – die App läuft stabil, alle Befunde der zwölf Prüfrunden sind erledigt, `npm audit` meldet keine Lücken, eine juristische Prüfung steht nicht mehr an.
+- Zuletzt: 2026-11-19 – Die App nutzt nur noch der eigene Haushalt, die juristische Prüfung entfällt; sams-on läuft laut User einwandfrei; Lücken in Entwicklungswerkzeugen behoben (`eslint` 10.15.0, `overrides` für `c8`). Offene Punkte v15, Projekt-Doku v13.
+- Repo: `main` · Wartungs-Commit auf `3678983` · uncommittet: nein · ungepusht: der Wartungs-Commit, bis User den Push freigibt
 - Sitzung: „Heute Schule“ · Startordner: `~/dev/claude`
 - Termine: keine
 
 ## 2. Als Nächstes
-1. Beim nächsten Deploy geht die neue Fassung von `web/docs/OFFEN-naechste-Fixes.md` mit live; ein eigener Deploy dafür ist nicht nötig.
-2. Lücken in Entwicklungswerkzeugen (OFFEN 7, Dependabot-Warnung #2): neue Versionen von `c8` und `eslint` abwarten oder `minimatch`/`glob` per `overrides` anheben.
-3. Zeitlimit in der Web-App beim Abruf vom Proxy (OFFEN 6): mit User planen, dann umsetzen.
-4. Inline-Script nach `web/app.js` auslagern (OFFEN 3, zusammen mit OFFEN 4): größeres Vorhaben, erst mit dem `grilling`-Skill planen.
+1. Mit User klären, welche Essensanbieter der Haushalt noch nutzt, dann die anderen entfernen (OFFEN 5).
+2. Beim nächsten Deploy gehen Projekt-Doku, offene Punkte und `web/README.md` mit live; ein eigener Deploy dafür ist nicht nötig.
+3. Zeitlimit in der Web-App beim Abruf vom Proxy (OFFEN 4): mit User planen, dann umsetzen.
+4. Inline-Script nach `web/app.js` auslagern (OFFEN 2, zusammen mit OFFEN 3): größeres Vorhaben, erst mit dem `grilling`-Skill planen.
 5. Nach jeder größeren Änderung eine frische, unabhängige Prüfrunde anbieten (Vorlage in `prompts/`, Muster in `PROJEKT.md` Abschnitt 9).
 
 ## 3. Wartet auf User
-- Freigabe für den Push des Übergabe-Commits.
-- Juristische Einschätzung zur Haushaltsausnahme und Speicherdauer der Cloudflare-Logs (OFFEN 1).
-- sams-on mit einer echten Bestellung prüfen und den Betreiber auf die PHP-Version hinweisen (OFFEN 5).
+- Freigabe für den Push des Wartungs-Commits.
+- Welche Essensanbieter der Haushalt nutzt (OFFEN 5).
+- Datenschutzerklärung und Verarbeitungsverzeichnis (gitignored, echte Personendaten, Claude liest sie nicht) darauf prüfen, ob sie noch die Nutzung durch andere Familien beschreiben.
+- Hinweis an den sams-on-Betreiber zur PHP-Version, falls noch nicht geschehen.
 - Deploys startet User selbst mit `./deploy.sh`.
 
 ## 4. Zuerst lesen
@@ -38,11 +39,12 @@ Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zue
 - Claude deployt nicht und ruft `wrangler` nie direkt auf; `deploy.sh` braucht den Schlüsselbund, den nur User erreicht.
 - Commits immer mit `git commit -- <pfade>`: Ein vorgemerktes `git rm` landet sonst im nächsten Commit, auch wenn nur andere Pfade mit `git add` vorgemerkt sind.
 - `web/docs/` und `web/source/proxy/` sind byte-gleiche Kopien; bei jeder Änderung an `PROJEKT.md`, `OFFEN-naechste-Fixes.md`, dem verlinkten Bericht oder `proxy/*` die Kopie mitziehen. Ein aus `web/` entfernter Bericht bleibt bis zu einer Woche im Cloudflare-Cache, deshalb danach ohne Cache-Buster auf `404` prüfen.
+- `overrides` in `package.json` hebt `glob` und `minimatch` unter `test-exclude` an; entfernen, sobald eine `c8`-Version sie selbst mitbringt (Dependabot-PRs für `c8` daraufhin prüfen). `eslint-plugin-html` unter 8.2.1 stürzt mit `eslint` ab 10.15 ab.
 - Die Testsuite schreibt fehlgeschlagene Tests auf stderr, die Zusammenfassung auf stdout; wer Mutanten automatisch auswertet, liest beides.
 - Browser-Prüfungen nur an einer Kopie von `web/` im Scratchpad mit vorgeschaltetem `fetch`-Stub; der Startbefehl kommt als vorübergehender Eintrag in `~/dev/claude/.claude/launch.json`, danach zurücksetzen. Keine erfundenen Zugangsdaten an den Proxy.
 - „Load failed“ auf dem Handy lag bisher am Netz (VPN-Standort), nicht an der App; zuerst den Proxy direkt prüfen.
 - Prüfsitzungen lesen nie `Verarbeitungsverzeichnis-INTERN.md`, `web/impressum.html` oder `web/datenschutz.html` (gitignored, echte Personendaten).
 
 ## 6. Für andere Projekte
-- Prozessentwicklung: IDNCVVS (diese Übergabe) ins Verzeichnis `records/VERZEICHNIS.md` aufnehmen; die IDs der Prüfberichte stehen dort schon.
+- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v13, HS-OFF v15 und IDNCVVS v2.
 - Prozessentwicklung, Vorschlag für den Entwicklungsprozess (IDU6829): Regel „Commits nur mit ausdrücklich genannten Pfaden“ präzisieren auf `git commit -- <pfade>`, weil ein vorgemerktes Löschen sonst unbemerkt mitgeht (am 11.11.2026 hier passiert, vor dem Push korrigiert).

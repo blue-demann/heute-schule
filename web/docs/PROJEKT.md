@@ -1,8 +1,8 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v12 · 2026-11-11 · 2106c2ea · gültig
+HS-PRJ · v13 · 2026-11-19 · 660f0adf · gültig
 
-**Stand: 11.11.2026 · Version 0.4.7**
+**Stand: 19.11.2026 · Version 0.4.7**
 
 Dieses Dokument bündelt die Gedanken hinter dem Projekt: warum es existiert,
 welche Entscheidungen getroffen wurden (und welche bewusst nicht), wie es
@@ -48,8 +48,11 @@ per Mail.
 Mit der Zeit kam eine zweite Familie dazu (Essensanbieter ccCampus statt
 Mensamax), was den Anbieter-Teil der Architektur von „für eine Schule fest
 verdrahtet" zu „pro Kind konfigurierbar, zwei Anbieter unterstützt"
-weiterentwickelt hat. Die Seite ist inzwischen darauf ausgelegt, den Link an
-weitere befreundete Familien weiterzugeben.
+weiterentwickelt hat. Die Seite ist darauf ausgelegt, den Link an
+weitere befreundete Familien weiterzugeben. Stand 19.11.2026 nutzt sie nur
+noch der eigene Haushalt: Den anderen Familien war die Pflege von
+Passwörtern und Zugängen mehr Aufwand, als die App ihnen brachte
+(Folgen in Abschnitt 7).
 
 ## 2. Requirements
 
@@ -290,25 +293,24 @@ offen benannt statt verschwiegen.
   (Technische und organisatorische Maßnahmen), eRecht24-Textbausteine für
   die Standardabschnitte.
 - **Interne Grenze, technisch relevant:** Die Haushaltsausnahme
-  (Art. 2 Abs. 2 lit. c DSGVO) deckt nur rein familiäre Nutzung ab — mit
-  der zweiten, familienfremden Familie aus Abschnitt 1 dürfte sie bereits
-  heute nicht mehr greifen, nicht erst bei weiterer Ausweitung — mit
-  vollen DSGVO-Pflichten als Konsequenz (u. a. Art. 30 Verzeichnis von
-  Verarbeitungstätigkeiten, Art. 32 TOMs). **Das ist eine Frage des
-  Anwendungsbereichs, keine Frage
-  der Sicherheitsqualität** — sie hängt daran, *wessen* Daten verarbeitet
-  werden (Personen außerhalb des eigenen Haushalts oder nicht), nicht daran,
-  wie gut Cache-Fix, Rate-Limit oder Security-Header inzwischen sind. Die
-  seither umgesetzten TOMs und das Verarbeitungsverzeichnis sind die
-  richtige *Reaktion* darauf, dass die Ausnahme entfällt — sie machen die
-  Frage nicht überflüssig, sondern sind der erste Schritt, sie zu
-  beantworten.
+  (Art. 2 Abs. 2 lit. c DSGVO) deckt nur rein familiäre Nutzung ab. Solange
+  eine familienfremde Familie mitnutzte (Abschnitt 1), griff sie nicht, mit
+  vollen DSGVO-Pflichten als Folge (u. a. Art. 30 Verzeichnis von
+  Verarbeitungstätigkeiten, Art. 32 TOMs). Stand 19.11.2026 nutzt nur noch
+  der eigene Haushalt die App; damit greift die Ausnahme, und die geplante
+  juristische Prüfung entfällt (vom User entschieden). **Das ist eine Frage
+  des Anwendungsbereichs, keine Frage der Sicherheitsqualität**: Sie hängt
+  daran, *wessen* Daten verarbeitet werden, nicht daran, wie gut Cache-Fix,
+  Rate-Limit oder Security-Header sind. Die Seite bleibt öffentlich
+  erreichbar; die Ausnahme hängt deshalb auch daran, dass der Link nicht
+  weitergegeben wird. Nutzt wieder eine Familie außerhalb des Haushalts die
+  App, gelten die vollen Pflichten, und die Prüfung lebt wieder auf. TOMs,
+  Datenschutzerklärung und Verarbeitungsverzeichnis bleiben bestehen.
 - **`Verarbeitungsverzeichnis-INTERN.md`** — Entwurf nach Art. 30, bewusst
   *nicht* Teil von `web/` (wird nicht deployed, nicht öffentlich).
 - **Kein Rechtsrat.** Alle rechtlichen Einordnungen in diesem Projekt
-  (einschließlich dieses Dokuments) sind Laienarbeit zur Vorbereitung eines
-  Gesprächs mit qualifiziertem rechtlichem Beistand, keine geprüfte
-  Rechtsauskunft. Offene Punkte dazu: Abschnitt 12.
+  (einschließlich dieses Dokuments) sind Laienarbeit, keine geprüfte
+  Rechtsauskunft.
 
 ## 8. Tools & APIs
 
@@ -656,6 +658,14 @@ behoben mit `4.149.0`. Am 29.10.2026 brach das Audit-Gate den ersten Deploy
 von 0.3.4 ab, bevor etwas hochgeladen wurde: hohe Lücken in `undici` (über
 `miniflare`), betroffen `wrangler` bis `4.152.0`. Angehoben auf `4.153.0`,
 die älteste Version ohne Befund (Audit und Lizenztest sauber).
+Das Gate bricht erst bei hohen Lücken ab; mittelschwere in den
+Entwicklungswerkzeugen werden trotzdem behoben. Am 19.11.2026 betraf das
+`minimatch` und `glob` in `eslint` und `c8`: `eslint` ab 10.15.0 bringt die
+behobenen Fassungen mit (dazu `eslint-plugin-html` 8.2.1, mit 8.2.0 stürzt
+das Prüfen der HTML-Dateien ab). `c8` 12.0.0 zieht sie über `test-exclude`
+noch nicht nach; dafür hebt `overrides` in `package.json` nur unterhalb von
+`test-exclude` `glob` auf 14 und `minimatch` auf 11. Der Eintrag fällt weg,
+sobald eine `c8`-Version die behobenen Pakete selbst mitbringt.
 `deploy.sh` setzt `WRANGLER_SEND_METRICS=false` und
 `WRANGLER_SEND_ERROR_REPORTS=false`: Ohne das schickt `wrangler` bei jedem
 Lauf Nutzungsdaten an Cloudflare und fragt bei einem Absturz, ob es seine
@@ -878,9 +888,9 @@ genug gehalten, um ohne Rückfrage zu verstehen, *was* und *warum*.
 
 Wird nicht dupliziert — siehe:
 
-- [`OFFEN-naechste-Fixes.md`](OFFEN-naechste-Fixes.md) — technische und
-  rechtliche Punkte, aktuell im Kern die juristische Prüfung vor weiterer
-  Ausweitung.
+- [`OFFEN-naechste-Fixes.md`](OFFEN-naechste-Fixes.md) — technische
+  Punkte; eine juristische Prüfung steht nicht an, solange nur der eigene
+  Haushalt die App nutzt (Abschnitt 7).
 - [`web/README.md`](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), Abschnitt „Neue Ideen" — Feature-
   Vorschläge (z. B. Custom-Termine), noch nicht bewertet.
 

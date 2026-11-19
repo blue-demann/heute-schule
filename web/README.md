@@ -125,25 +125,23 @@ nennt eRecht24 jetzt explizit als Quelle, mit Link (Abschnitt am Ende der
 Seite). Kein Ersatz für eine anwaltliche Prüfung im Zweifelsfall — diese
 Einschätzung ist eine Projektnotiz für die Weiterentwicklung.
 
-## ⚠ Juristische Prüfung nötig: rechtliche Rolle hat sich vermutlich geändert
+## Rechtliche Rolle: Haushaltsausnahme
 
-**Kein Rechtsrat, sondern ein Merkposten aus zwei Peer-Reviews (27.08. und
-31.08.2026).**
+**Kein Rechtsrat, sondern eine Projektnotiz.**
 
 Die **Haushaltsausnahme (Art. 2 Abs. 2 lit. c DSGVO)** deckt ausschließlich
-persönliche oder familiäre Tätigkeiten ab. Mit dem Essensanbieter ccCampus
-nutzt bereits eine befreundete, familienfremde Familie aktiv mit — die
-Ausnahme dürfte damit schon jetzt nicht mehr greifen, nicht erst bei
-künftiger Ausweitung. Dann werden personenbezogene Daten *fremder Kinder*
-verarbeitet, und der Betreiber ist voll Verantwortlicher im Sinne der DSGVO.
+persönliche oder familiäre Tätigkeiten ab. Solange eine befreundete,
+familienfremde Familie mitnutzte (Essensanbieter ccCampus), griff sie nicht:
+Dann werden personenbezogene Daten *fremder Kinder* verarbeitet, und der
+Betreiber ist voll Verantwortlicher im Sinne der DSGVO, mit Pflichten wie dem
+Verzeichnis von Verarbeitungstätigkeiten (Art. 30) und dokumentierten
+technischen und organisatorischen Maßnahmen (Art. 32).
 
-Damit kommen Pflichten dazu, die eine Datenschutzerklärung allein nicht
-abdeckt — u. a. ein Verzeichnis von Verarbeitungstätigkeiten (Art. 30) und
-dokumentierte technische/organisatorische Maßnahmen (Art. 32).
+Stand 19.11.2026 nutzt nur noch der eigene Haushalt die App; damit greift die
+Ausnahme, und die geplante juristische Prüfung entfällt. Nutzt wieder eine
+Familie außerhalb des Haushalts die App, lebt die Frage wieder auf. Bereits
+erledigt und weiter gültig:
 
-Zu klären, bevor der Kreis weiter wächst:
-
-- [ ] Einschätzung durch jemanden mit juristischem Hintergrund einholen
 - [x] AVV mit Cloudflare verifiziert (28.08.2026, im Konto bestätigt, nicht
       nur angenommen) — Details in `Verarbeitungsverzeichnis-INTERN.md`
       Abschnitt 4
