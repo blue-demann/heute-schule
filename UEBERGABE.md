@@ -1,24 +1,23 @@
 # Übergabe: Heute Schule
 
-IDNCVVS · v3 · 2026-11-19 · d662af38 · gültig
+IDNCVVS · v4 · 2026-11-19 · aa2d88e4 · gültig
 
 Zweck: Stand für eine neue Sitzung und den Orchestrator. Für den Stand genügt Abschnitt 1.
 Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zuerst lesen ·
 5 Fallen · 6 Für andere Projekte
 
 ## 1. Stand auf einen Blick
-- Phase: Wartung, live 0.4.7 (Website und Proxy aus `ddd1497`, deployt 12.11.2026)
+- Phase: Wartung, live 0.4.7 (Website und Proxy aus `eb409e1`, deployt 19.11.2026)
 - Ampel: grün – die App läuft stabil, alle Befunde der zwölf Prüfrunden sind erledigt, `npm audit` meldet keine Lücken, eine juristische Prüfung steht nicht mehr an.
-- Zuletzt: 2026-11-19 – Die App nutzt derzeit nur der eigene Haushalt, die juristische Prüfung entfällt; sie bleibt aber für andere Familien nutzbar; sams-on läuft laut User einwandfrei; Lücken in Entwicklungswerkzeugen behoben (`eslint` 10.15.0, `overrides` für `c8`). Offene Punkte v16, Projekt-Doku v14.
-- Repo: `main` · zwei Wartungs-Commits auf `3678983`, gepusht · uncommittet: nein · ungepusht: nein
+- Zuletzt: 2026-11-19 – Die App nutzt derzeit nur der eigene Haushalt, die juristische Prüfung entfällt; sie bleibt aber für andere Familien nutzbar; sams-on läuft laut User einwandfrei; Lücken in Entwicklungswerkzeugen behoben (`eslint` 10.15.0, `overrides` für `c8`). Offene Punkte v16, Projekt-Doku v14; deployt und live geprüft.
+- Repo: `main` · Übergabe-Commit auf `eb409e1`, gepusht · uncommittet: nein · ungepusht: nein
 - Sitzung: „Heute Schule“ · Startordner: `~/dev/claude`
 - Termine: keine
 
 ## 2. Als Nächstes
-1. Beim nächsten Deploy gehen Projekt-Doku, offene Punkte und `web/README.md` mit live; ein eigener Deploy dafür ist nicht nötig.
-2. Zeitlimit in der Web-App beim Abruf vom Proxy (OFFEN 4): mit User planen, dann umsetzen.
-3. Inline-Script nach `web/app.js` auslagern (OFFEN 2, zusammen mit OFFEN 3): größeres Vorhaben, erst mit dem `grilling`-Skill planen.
-4. Nach jeder größeren Änderung eine frische, unabhängige Prüfrunde anbieten (Vorlage in `prompts/`, Muster in `PROJEKT.md` Abschnitt 9).
+1. Zeitlimit in der Web-App beim Abruf vom Proxy (OFFEN 4): mit User planen, dann umsetzen.
+2. Inline-Script nach `web/app.js` auslagern (OFFEN 2, zusammen mit OFFEN 3): größeres Vorhaben, erst mit dem `grilling`-Skill planen.
+3. Nach jeder größeren Änderung eine frische, unabhängige Prüfrunde anbieten (Vorlage in `prompts/`, Muster in `PROJEKT.md` Abschnitt 9).
 
 ## 3. Wartet auf User
 - Hinweis an den sams-on-Betreiber zur PHP-Version, falls noch nicht geschehen.
@@ -43,5 +42,5 @@ Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zue
 - Prüfsitzungen lesen nie `Verarbeitungsverzeichnis-INTERN.md`, `web/impressum.html` oder `web/datenschutz.html` (gitignored, echte Personendaten).
 
 ## 6. Für andere Projekte
-- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v14, HS-OFF v16 und IDNCVVS v3.
+- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v14, HS-OFF v16 und IDNCVVS v4.
 - Prozessentwicklung, Vorschlag für den Entwicklungsprozess (IDU6829): Regel „Commits nur mit ausdrücklich genannten Pfaden“ präzisieren auf `git commit -- <pfade>`, weil ein vorgemerktes Löschen sonst unbemerkt mitgeht (am 11.11.2026 hier passiert, vor dem Push korrigiert).
