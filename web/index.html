@@ -784,15 +784,46 @@
     refreshAll();
   }
 
-  btnDayToday.addEventListener('click', function(){
+  // The calendar day the tiles and the date line were drawn for. Every
+  // offset counts from it, so a page left open overnight, or brought back
+  // from the background the next morning, would keep showing yesterday
+  // while ⟳ already fetched today.
+  var shownDay = dateStrFor(0);
+
+  function selectToday(){
     windowIndex = 1;
     activeOffset = 0;
+    shownDay = dateStrFor(0);
     renderDayToggle();
     renderDateDisplay();
+  }
+
+  function showToday(){
+    selectToday();
     refreshAll();
-  });
+  }
+
+  // On a new day the page starts over on "Heute" and loads it. With the
+  // settings open it only draws the tiles anew; going back to the overview
+  // loads anyway. On the same day nothing happens: every refresh logs in
+  // at the providers, so a fresh one stays the user's choice (⟳).
+  function checkNewDay(){
+    if (dateStrFor(0) === shownDay) return;
+    selectToday();
+    if (!dashboard.classList.contains('hidden')) refreshAll();
+  }
+
+  btnDayToday.addEventListener('click', showToday);
   btnDayA.addEventListener('click', function(){ selectDayIndex(windowIndex); });
   btnDayB.addEventListener('click', function(){ selectDayIndex(windowIndex + 1); });
+
+  // Coming back to the foreground (also from the back-forward cache), and
+  // once a minute for a screen left on overnight.
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible') checkNewDay();
+  });
+  window.addEventListener('pageshow', checkNewDay);
+  setInterval(checkNewDay, 60000);
 
   renderDayToggle();
   renderDateDisplay();

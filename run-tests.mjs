@@ -3521,6 +3521,64 @@ await testAsync('counter-check: without overlap, all three cards show the day', 
   assertEqual(d.renders.map((r) => `${r.child} ${r.date}`).join(), 'a day2,b day2,c day2');
 });
 
+// ── A page left open overnight ─────────────────────────────────────────────
+//
+// The day tiles and the date line count from the day they were drawn for.
+// When the page comes back to the foreground, or once a minute, it checks
+// whether a new day began; then it starts over on "Heute" and loads it.
+// On the same day it does nothing (every refresh logs in at the providers).
+
+console.log('\nA page left open overnight starts over on "Heute"');
+
+function dayWatchUnderTest() {
+  const calls = [];
+  const sandbox = {
+    today: '20261119',
+    activeOffset: 0,
+    windowIndex: 1,
+    dashboardHidden: false,
+    renderDayToggle: () => calls.push(`tiles ${sandbox.activeOffset}/${sandbox.windowIndex}`),
+    renderDateDisplay: () => calls.push('date'),
+    refreshAll: () => calls.push(`refresh ${sandbox.activeOffset}`),
+  };
+  sandbox.dateStrFor = (offset) => { assertEqual(offset, 0, 'only today is compared'); return sandbox.today; };
+  sandbox.dashboard = { classList: { contains: (cls) => cls === 'hidden' && sandbox.dashboardHidden } };
+  const page = inlineScriptDefinitions(['shownDay', 'selectToday', 'showToday', 'checkNewDay'], sandbox);
+  return { sandbox, page, calls };
+}
+
+test('a new day with another day selected: back on "Heute", tiles and date drawn anew, the new day loads', () => {
+  const { sandbox, page, calls } = dayWatchUnderTest();
+  Object.assign(sandbox, { activeOffset: 1, windowIndex: 2, today: '20261120' });
+  page.checkNewDay();
+  assertEqual(`${calls.join()} | ${sandbox.activeOffset}/${sandbox.windowIndex}`, 'tiles 0/1,date,refresh 0 | 0/1');
+});
+test('counter-check: on the same day nothing happens, and a new day starts over only once', () => {
+  const { sandbox, page, calls } = dayWatchUnderTest();
+  Object.assign(sandbox, { activeOffset: 1, windowIndex: 2 });
+  page.checkNewDay();
+  assertEqual(`${calls.join()} | ${sandbox.activeOffset}/${sandbox.windowIndex}`, ' | 1/2', 'the same day changed something');
+  sandbox.today = '20261120';
+  page.checkNewDay();
+  page.checkNewDay();
+  assertEqual(calls.filter((c) => c.startsWith('refresh')).length, 1, 'the new day loaded more than once');
+});
+test('with the settings open, a new day draws the tiles anew but loads nothing', () => {
+  const { sandbox, page, calls } = dayWatchUnderTest();
+  Object.assign(sandbox, { activeOffset: 3, windowIndex: 2, today: '20261120', dashboardHidden: true });
+  page.checkNewDay();
+  assertEqual(`${calls.join()} | ${sandbox.activeOffset}/${sandbox.windowIndex}`, 'tiles 0/1,date | 0/1');
+  page.checkNewDay();
+  assertEqual(calls.length, 2, 'a second check on the same new day drew again');
+});
+test('tapping "Heute" after midnight takes the new day: the next check does not load again', () => {
+  const { sandbox, page, calls } = dayWatchUnderTest();
+  sandbox.today = '20261120';
+  page.showToday();
+  page.checkNewDay();
+  assertEqual(calls.join(), 'tiles 0/1,date,refresh 0');
+});
+
 // ── ccCampus domain allowlist: index.html and _headers must agree ────────
 //
 // Two independent mechanisms check the same domain list: the CSP
