@@ -118,7 +118,8 @@ ausgelagert, damit sie ohne Cloudflare-Runtime testbar ist — siehe
   nacheinander ab, weil sich bei einem geteilten Klassenkonto
   gleichzeitige Sitzungen stören können, und der nächste Login soll erst
   nach der Abmeldung beginnen; einen neuen Abruf startet sie erst, wenn
-  ihre laufende Anfrage beantwortet ist, höchstens nach 15 s. Das trennt
+  ihre laufende Anfrage beantwortet ist; jede Anfrage bricht sie nach 15 s
+  ab. Das trennt
   nur die eigenen Anmeldungen dieser Seite, und auch die nicht, wenn eine
   Anfrage auf dem Hinweg zum Proxy hängt; ein zweites Gerät, eine neu
   geladene Seite oder andere Familien am selben Klassenkonto kann die App

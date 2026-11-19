@@ -1317,6 +1317,34 @@
     throw new Error(NO_CONNECTION_CCCAMPUS);
   }
 
+  // A request that gets no answer at all (a network that swallows packets)
+  // would leave the card on "Lädt …" for good. Every proxy request, and the
+  // ccCampus run in the browser as a whole, therefore ends after 15 s, the
+  // answer's body included. The proxy itself answers within about 13 s
+  // whatever the provider does, so a proxy request still open by then hangs
+  // in the network.
+  var REQUEST_LIMIT_MS = 15000;
+  var PROXY_TIMEOUT = 'Server-Timeout – Netz prüfen, ⟳ tippen.';
+  var CCCAMPUS_TIMEOUT = 'ccCampus-Timeout – Netz prüfen, ⟳ tippen.';
+  // Runs work(signal) under the limit: when it runs out, the result rejects
+  // with an error named "RequestTimeout" carrying the message, and the
+  // signal aborts the requests still open. The limit rejects first, so the
+  // abort's own "no connection" error never reaches the card.
+  function withRequestLimit(work, timeoutMessage){
+    var controller = new AbortController();
+    var timer;
+    var limit = new Promise(function(resolve, reject){
+      timer = setTimeout(function(){
+        var timeout = new Error(timeoutMessage);
+        timeout.name = 'RequestTimeout';
+        reject(timeout);
+        controller.abort();
+      }, REQUEST_LIMIT_MS);
+    });
+    return Promise.race([work(controller.signal), limit])
+      .finally(function(){ clearTimeout(timer); });
+  }
+
   function fetchCcCampusLunch(providerCfg, datumStr){
     var base = (providerCfg.base || 'https://cccampus.mbs5online.de/ordering').replace(/\/$/, '');
     if (!providerCfg.kundennummer || !providerCfg.pin){
@@ -1331,6 +1359,16 @@
           + 'Bitte melde Dich beim Betreiber — es ist eine einmalige Freischaltung nötig.',
       });
     }
+    return withRequestLimit(function(signal){
+      return ccCampusLunchRun(base, providerCfg, datumStr, signal);
+    }, CCCAMPUS_TIMEOUT)
+      .catch(function(err){
+        return { lunch: null, lunchFehler: String(err.message || err) };
+      });
+  }
+
+  // Logs in at ccCampus and reads the day's status off the week plan.
+  function ccCampusLunchRun(base, providerCfg, datumStr, signal){
     return fetch(base + '/Login/Login', {
       method: 'POST',
       headers: {
@@ -1339,6 +1377,7 @@
         'X-Requested-With': 'XMLHttpRequest',
       },
       body: 'identifierValue=' + encodeURIComponent(providerCfg.kundennummer) + '&secretValue=' + encodeURIComponent(providerCfg.pin) + '&identifierType=0&secretType=0',
+      signal: signal,
     })
       .then(function(resp){ return resp.text(); }, noConnectionToCcCampus)
       .then(function(loginText){
@@ -1352,7 +1391,7 @@
         var token = loginJson && loginJson.token;
         if (!token) throw new Error('ccCampus-Login erfolgreich, aber kein Token gefunden');
 
-        return fetch(base + '/Mealplan/Weekplan', { headers: { 'Authorization': 'Bearer ' + token } })
+        return fetch(base + '/Mealplan/Weekplan', { headers: { 'Authorization': 'Bearer ' + token }, signal: signal })
           .then(function(planResp){
             if (!planResp.ok) return { lunch: 'Schulessen: Daten nicht verfügbar', lunchFehler: null };
             return planResp.text().then(function(planText){
@@ -1377,9 +1416,6 @@
               return { lunch: text, lunchFehler: null };
             });
           }, noConnectionToCcCampus);
-      })
-      .catch(function(err){
-        return { lunch: null, lunchFehler: String(err.message || err) };
       });
   }
 
@@ -1393,21 +1429,24 @@
     var lunchIsCcCampus = child.lunch && child.lunch.provider === 'cccampus';
     var lunchCfg = child.lunch || {};
 
-    var proxyPromise = fetch(cfg.proxyUrl + '/api/status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        webuntis: child.webuntis,
-        lunch: lunchRequestFields(lunchCfg),
-        datum: date,
-      }),
-    })
-      .then(function(resp){
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        return resp.json();
-      }, function(){
-        throw new Error(NO_CONNECTION_PROXY);
-      });
+    var proxyPromise = withRequestLimit(function(signal){
+      return fetch(cfg.proxyUrl + '/api/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webuntis: child.webuntis,
+          lunch: lunchRequestFields(lunchCfg),
+          datum: date,
+        }),
+        signal: signal,
+      })
+        .then(function(resp){
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.json();
+        }, function(){
+          throw new Error(NO_CONNECTION_PROXY);
+        });
+    }, PROXY_TIMEOUT);
 
     var lunchPromise = lunchIsCcCampus
       ? fetchCcCampusLunch(child.lunch.cccampus, date)
@@ -1432,11 +1471,16 @@
       })
       .catch(function(err){
         if (run !== refreshRun) return;
-        // The kept answer belongs to an earlier refresh, perhaps another
-        // day; hiding or showing a subject must not bring it back.
-        delete lastDataById[child.id];
-        renderChildResult(card, child, null, String(err.message || err));
+        showChildError(child, String(err.message || err));
+        return err.name === 'RequestTimeout';
       });
+  }
+
+  function showChildError(child, message){
+    // The kept answer belongs to an earlier refresh, perhaps another day;
+    // hiding or showing a subject must not bring it back.
+    delete lastDataById[child.id];
+    renderChildResult(cardsById[child.id], child, null, message);
   }
 
   // Every refresh gets a number, and an answer is shown only while its
@@ -1445,16 +1489,14 @@
   var refreshRun = 0;
   // The proxy request currently on its way (or the last one, settled). A new
   // refresh starts only once it has settled: it may be logged in with the
-  // same shared class account the new refresh is about to use.
+  // same shared class account the new refresh is about to use. Its limit
+  // (REQUEST_LIMIT_MS) bounds that wait, so a dead connection cannot block
+  // the app. Once the proxy has a request, it answers within about 13 s,
+  // logout included; the price of the limit: a request that hung on its way
+  // *to* the proxy may still be logged in when the next one starts. Other
+  // devices, a reloaded page and other families on the same class account
+  // are beyond what this page can order anyway.
   var requestInFlight = Promise.resolve();
-  // Once the proxy has a request, it answers within about 13 s whatever the
-  // provider does, logout included. A request still open after 15 s mostly
-  // hangs on its way back, and a new refresh waits no longer than that, so a
-  // dead connection cannot block the app. The price: a request that hung on
-  // its way *to* the proxy may still be logged in when the next one starts.
-  // Other devices, a reloaded page and other families on the same class
-  // account are beyond what this page can order anyway.
-  var IN_FLIGHT_WAIT_MS = 15000;
 
   function refreshAll(){
     if (!cfg.children.length) return;
@@ -1469,19 +1511,23 @@
     // once from the same account may break each other's session on
     // WebUntis. Fetching one after the other keeps this page's own logins
     // apart, at the cost of a bit of time on refresh. A refresh that is no
-    // longer the latest starts no further child.
-    var settled = Promise.race([
-      requestInFlight.then(function(){}, function(){}),
-      new Promise(function(resolve){ setTimeout(resolve, IN_FLIGHT_WAIT_MS); }),
-    ]);
+    // longer the latest starts no further child. A proxy request that ran
+    // into its limit means the network or the proxy does not answer, which
+    // holds for every child: the ones still to come show that at once
+    // instead of waiting out the limit one after the other.
+    var timedOut = false;
     cfg.children
       .reduce(function(chain, child){
         return chain.then(function(){
           if (run !== refreshRun) return;
+          if (timedOut){
+            showChildError(child, PROXY_TIMEOUT);
+            return;
+          }
           requestInFlight = fetchChild(child, run);
-          return requestInFlight;
+          return requestInFlight.then(function(limitRanOut){ if (limitRanOut) timedOut = true; });
         });
-      }, settled)
+      }, requestInFlight.then(function(){}, function(){}))
       .finally(function(){
         if (run !== refreshRun) return;
         btnRefresh.classList.remove('spin');

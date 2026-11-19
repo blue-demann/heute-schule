@@ -3200,8 +3200,9 @@ test('nothing stored yet, or readable settings: no notice, no question', () => {
 // (else a slow answer for the day before overwrites the card of the day now
 // selected); a card that does not show the selected day yet says it is
 // loading; and the page starts a proxy request only once its previous one
-// settled, or once the 15 s wait for it ran out (children often share a
-// class account, and two logins at once may break each other).
+// settled (children often share a class account, and two logins at once may
+// break each other). Every request ends after 15 s at most and is then
+// aborted, so that wait is bounded.
 
 console.log('\nDashboard: overlapping refreshes (index.html)');
 
@@ -3213,8 +3214,11 @@ function dashboardUnderTest() {
   const busy = { value: 'false' };
   let taps = 0;
   let answering = null;
-  const timers = [];
-  const waitOverFor = new Set();
+  let fetches = 0;
+  const signals = [];
+  // Open timers by id, each with the tap that set it.
+  const timers = new Map();
+  let nextTimer = 1;
   // What each card shows: loading or not, and the day (or error) drawn last.
   const cardFor = (id) => {
     const card = { id, loading: false, shows: null, fromTap: null, drawn: 0, panelDrawn: 0 };
@@ -3224,7 +3228,9 @@ function dashboardUnderTest() {
   };
   const cards = { a: cardFor('a'), b: cardFor('b'), c: cardFor('c') };
   const sandbox = {
-    setTimeout: (fn, ms) => { const tap = taps; timers.push({ fn: () => { waitOverFor.add(tap); fn(); }, ms }); },
+    setTimeout: (fn, ms) => { const id = nextTimer++; timers.set(id, { fn, ms, tap: taps }); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+    AbortController,
     cfg: { proxyUrl: 'https://proxy.test', children: ['a', 'b', 'c'].map((id) => ({ id, webuntis: {}, lunch: {} })) },
     cardsById: { ...cards },
     lastDataById: {},
@@ -3239,12 +3245,18 @@ function dashboardUnderTest() {
     },
     btnRefresh: { classList: { add: () => { spinner.on = true; }, remove: () => { spinner.on = false; } } },
     childCards: { setAttribute: (name, value) => { busy.value = value; } },
+    // Like the real fetch, an aborted request rejects and is gone.
     fetch: (url, options) => new Promise((resolve, reject) => {
       const body = JSON.parse(options.body);
-      // Only the latest refresh starts requests, so a request that starts
-      // while another is open must come after that refresh's wait ran out.
-      if (pending.length && !waitOverFor.has(taps)) overlaps.push(`${body.webuntis.id} ${body.datum} while ${pending.map((r) => `${r.child} ${r.date}`).join()} is open`);
-      pending.push({ child: body.webuntis.id, date: body.datum, tap: taps, resolve, reject });
+      fetches++;
+      signals.push(options.signal);
+      if (pending.length) overlaps.push(`${body.webuntis.id} ${body.datum} while ${pending.map((r) => `${r.child} ${r.date}`).join()} is open`);
+      const request = { child: body.webuntis.id, date: body.datum, tap: taps, resolve, reject };
+      pending.push(request);
+      options.signal.addEventListener('abort', () => {
+        pending.splice(pending.indexOf(request), 1);
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+      });
     }),
     // What deleting all data needs around it.
     window: { confirm: () => true },
@@ -3259,17 +3271,27 @@ function dashboardUnderTest() {
     toast() {},
   };
   for (const child of sandbox.cfg.children) child.webuntis.id = child.id;
-  const page = inlineScriptDefinitions(['refreshRun', 'requestInFlight', 'IN_FLIGHT_WAIT_MS', 'NO_CONNECTION_PROXY', 'refreshAll', 'fetchChild', 'abandonRefreshes', 'redrawCard', 'deleteAllData'], sandbox);
+  const page = inlineScriptDefinitions(['refreshRun', 'requestInFlight', 'REQUEST_LIMIT_MS', 'PROXY_TIMEOUT', 'withRequestLimit', 'NO_CONNECTION_PROXY', 'refreshAll', 'fetchChild', 'showChildError', 'abandonRefreshes', 'redrawCard', 'deleteAllData'], sandbox);
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   return {
-    sandbox, pending, renders, overlaps, spinner, busy, cards, page,
+    sandbox, pending, renders, overlaps, spinner, busy, cards, page, signals, timers,
+    fetches: () => fetches,
     async tap(offset) { sandbox.activeOffset = offset; taps++; page.refreshAll(); await settle(); },
     async deleteAll() { page.deleteAllData(); await settle(); },
     // Hiding a subject (🚫) or showing it again (👁) draws the card anew.
     async hideOrShow(id) { page.redrawCard(cards[id], sandbox.cfg.children.find((c) => c.id === id)); await settle(); },
-    // Lets every timer of the given length run out (the wait for a request
-    // that hangs in the network).
-    async timeOut(ms) { for (const t of timers.splice(0)) { if (t.ms === ms) t.fn(); else timers.push(t); } for (let i = 0; i < 5; i++) await settle(); },
+    // Lets every open timer of the given length run out (the limit of a
+    // request that hangs in the network), each for the tap that set it.
+    async timeOut(ms) {
+      for (const [id, t] of [...timers]) {
+        if (t.ms !== ms) continue;
+        timers.delete(id);
+        answering = t.tap;
+        t.fn();
+        for (let i = 0; i < 8; i++) await settle();
+        answering = null;
+      }
+    },
     async answer(how) {
       const request = pending.shift();
       answering = request.tap;
@@ -3285,7 +3307,7 @@ function dashboardUnderTest() {
 
 /** @param {ReturnType<typeof dashboardUnderTest>} d */
 function checkDashboardInvariants(d, rendersBefore) {
-  assertEqual(d.overlaps.join('; '), '', 'a request started while another was open and the wait had not run out');
+  assertEqual(d.overlaps.join('; '), '', 'a request started while another was open');
   const selected = `day${d.sandbox.activeOffset}`;
   for (const r of d.renders.slice(rendersBefore)) {
     assert(r.fromTap === r.latestTap, `card ${r.child} shows the answer of tap ${r.fromTap}, the latest tap is ${r.latestTap}`);
@@ -3306,7 +3328,7 @@ const OVERLAP_STEPS = [
   ['another day while a request is on its way', (random) => ({ act: 'tap', shift: 1 + Math.floor(random() * 3) })],
   ['⟳ again on the same day (double tap)', () => ({ act: 'tap', shift: 0 })],
   ['a subject is hidden or shown again (🚫/👁)', (random) => ({ act: 'hideOrShow', card: 'abc'[Math.floor(random() * 3)] })],
-  ['the 15 s wait for a hanging request runs out', () => ({ act: 'timeOut' })],
+  ['the 15 s limit of the open request runs out', () => ({ act: 'timeOut' })],
   ['the proxy answers', () => ({ act: 'answer', how: 'ok' })],
   ['the proxy answers with an HTTP error', () => ({ act: 'answer', how: 'http' })],
   ['the network fails', () => ({ act: 'answer', how: 'network' })],
@@ -3398,18 +3420,33 @@ await testAsync('no connection: the card says so in German instead of the browse
 });
 // ccCampus runs in the browser: its two requests, each failing in the
 // network or answering, with the text the card then shows.
-async function ccCampusLunchWith(login, plan) {
+// The limit's timer runs out only when the test says so (limitRunsOut).
+async function ccCampusLunchWith(login, plan, { limitRunsOut = false } = {}) {
+  const timers = new Map();
+  let nextTimer = 1;
+  const signals = [];
   const sandbox = {
     URL,
-    fetch: (url) => (url.endsWith('/Login/Login') ? login() : plan()),
+    AbortController,
+    setTimeout: (fn, ms) => { const id = nextTimer++; timers.set(id, { fn, ms }); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+    fetch: (url, options) => { signals.push(options.signal); return url.endsWith('/Login/Login') ? login(options) : plan(options); },
   };
-  const page = inlineScriptDefinitions(['CCCAMPUS_ALLOWED_DOMAINS', 'ccCampusDomainAllowed', 'decodeHtmlEntitiesClient', 'NO_CONNECTION_CCCAMPUS', 'noConnectionToCcCampus', 'fetchCcCampusLunch'], sandbox);
-  const result = await page.fetchCcCampusLunch({ base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '1', pin: '2' }, '20261110');
-  return { result, NO_CONNECTION: page.NO_CONNECTION_CCCAMPUS };
+  const page = inlineScriptDefinitions(['CCCAMPUS_ALLOWED_DOMAINS', 'ccCampusDomainAllowed', 'decodeHtmlEntitiesClient', 'NO_CONNECTION_CCCAMPUS', 'noConnectionToCcCampus', 'REQUEST_LIMIT_MS', 'CCCAMPUS_TIMEOUT', 'withRequestLimit', 'ccCampusLunchRun', 'fetchCcCampusLunch'], sandbox);
+  const running = page.fetchCcCampusLunch({ base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '1', pin: '2' }, '20261110');
+  for (let i = 0; i < 8; i++) await new Promise((resolve) => setImmediate(resolve));
+  const limitsOpen = [...timers.values()].map((t) => t.ms);
+  if (limitRunsOut) for (const [id, t] of [...timers]) { timers.delete(id); t.fn(); }
+  const result = await running;
+  return { result, NO_CONNECTION: page.NO_CONNECTION_CCCAMPUS, TIMEOUT: page.CCCAMPUS_TIMEOUT, signals, limitsOpen, timersLeft: timers.size };
 }
 const ccLoginOk = () => Promise.resolve({ text: async () => JSON.stringify({ token: 't' }) });
 const ccPlanOk = () => Promise.resolve({ ok: true, text: async () => '<div class="status-node" data-date="2026-11-10" title="Menü 1">' });
 const ccOffline = () => Promise.reject(new TypeError('Load failed'));
+// Never answers; rejects like the real fetch once its signal aborts.
+const ccHangs = (options) => new Promise((resolve, reject) => {
+  options.signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+});
 await testAsync('ccCampus without connection, at the login or at the plan: the German note, not the browser’s text', async () => {
   for (const [login, plan] of [[ccOffline, ccPlanOk], [ccLoginOk, ccOffline]]) {
     const { result, NO_CONNECTION } = await ccCampusLunchWith(login, plan);
@@ -3421,17 +3458,53 @@ await testAsync('ccCampus without connection, at the login or at the plan: the G
   const garbled = await ccCampusLunchWith(() => Promise.resolve({ text: async () => '<html>' }), ccPlanOk);
   assertEqual(garbled.result.lunchFehler, 'ccCampus-Login: unerwartete Antwort', 'counter-check: an answer that is no JSON keeps its own message');
 });
-await testAsync('a request that hangs in the network holds a new refresh for 15 s at most, its late answer is dropped', async () => {
+await testAsync('ccCampus hanging at the login or at the plan ends after 15 s with "ccCampus-Timeout", its request aborted', async () => {
+  for (const [where, login, plan] of [['login', ccHangs, ccPlanOk], ['plan', ccLoginOk, ccHangs]]) {
+    const { result, TIMEOUT, signals, limitsOpen } = await ccCampusLunchWith(login, plan, { limitRunsOut: true });
+    assertEqual(`${where}: ${limitsOpen.join()} ${result.lunch} ${result.lunchFehler}`, `${where}: 15000 null ${TIMEOUT}`);
+    assert(signals.length && signals.every((s) => s.aborted), `${where}: the hanging request was not aborted`);
+  }
+  const { result, signals, timersLeft } = await ccCampusLunchWith(ccLoginOk, ccPlanOk);
+  assertEqual(`${result.lunch} ${signals.length} ${signals.every((s) => !s.aborted)} ${timersLeft}`, 'Essen bestellt: Menü 1 2 true 0', 'counter-check: both requests under one limit, cleared once the answer is in');
+});
+await testAsync('a request that hangs in the network holds a new refresh for 15 s at most, then it is aborted and shows nothing', async () => {
   const d = dashboardUnderTest();
   await d.tap(0);
   await d.tap(1);
   assertEqual(d.pending.length, 1, 'counter-check: until the 15 s run out, the new refresh waits');
   await d.timeOut(15000);
-  assertEqual(d.pending.map((r) => `${r.child} ${r.date}`).join(), 'a day0,a day1');
-  await d.answer('ok');
-  assertEqual(d.renders.length, 0);
+  assert(d.signals[0].aborted, 'the hanging request was not aborted');
+  assertEqual(d.pending.map((r) => `${r.child} ${r.date}`).join(), 'a day1');
+  assertEqual(d.renders.length, 0, 'the refresh that is no longer the latest drew a card');
   for (let i = 0; i < 3; i++) await d.answer('ok');
   assertEqual(d.renders.map((r) => `${r.child} ${r.date}`).join(), 'a day1,b day1,c day1');
+});
+await testAsync('no answer within 15 s: the card says "Server-Timeout", the children after it say so at once, without a request of their own', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  assertEqual(`${d.page.REQUEST_LIMIT_MS} ${d.cards.a.loading}`, '15000 true', 'counter-check: the card loads until the limit');
+  await d.timeOut(15000);
+  assertEqual(d.renders.map((r) => `${r.child} ${r.date}`).join(' | '), ['a', 'b', 'c'].map((id) => `${id} ${d.page.PROXY_TIMEOUT}`).join(' | '));
+  assert(d.signals[0].aborted, 'the request was not aborted');
+  assertEqual(`${d.fetches()} ${d.pending.length} ${d.spinner.on} ${d.busy.value}`, '1 0 false false');
+  assert(d.page.PROXY_TIMEOUT.includes('Timeout') && d.page.PROXY_TIMEOUT.includes('⟳'), d.page.PROXY_TIMEOUT);
+  await d.tap(0);
+  assertEqual(d.pending.map((r) => `${r.child} ${r.date}`).join(), 'a day0', '⟳ after a timeout asks again');
+});
+await testAsync('counter-check: a request that fails without the limit running out does not stop the children after it', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  await d.answer('network');
+  await d.answer('http');
+  assertEqual(`${d.fetches()} ${d.pending.map((r) => r.child).join()}`, '3 c');
+});
+await testAsync('an answer in time leaves no limit running, and a late timer changes nothing', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  assertEqual(d.timers.size, 1, 'counter-check: the request runs under a limit');
+  for (let i = 0; i < 3; i++) await d.answer('ok');
+  assertEqual(`${d.timers.size} ${d.signals.some((s) => s.aborted)}`, '0 false');
+  assertEqual(Object.values(d.cards).map((c) => c.shows).join(), 'day0,day0,day0');
 });
 await testAsync('deleting all data (the button’s own handler) drops the answer still on its way, and stops the spinner', async () => {
   const d = dashboardUnderTest();

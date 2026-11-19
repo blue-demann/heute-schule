@@ -1,6 +1,6 @@
 # Offene Punkte
 
-HS-OFF · v16 · 2026-11-19 · af5403b8 · gültig
+HS-OFF · v17 · 2026-11-19 · 3b4449ce · gültig
 
 **Stand: 19.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
@@ -104,6 +104,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 Juristische Prüfung (bisher offener Punkt 1): Die Haushaltsausnahme (Art. 2 Abs. 2 lit. c DSGVO) griff nicht mehr, weil eine familienfremde Familie mitnutzte; offen waren eine juristische Einschätzung und die Speicherdauer der Cloudflare-Server-Logs | Entfällt (vom User entschieden, 19.11.2026): Die App nutzt nur noch der eigene Haushalt. Die anderen Familien haben aufgehört, weil ihnen die Pflege von Passwörtern und Zugängen mehr Aufwand machte, als die App ihnen brachte. Damit greift die Haushaltsausnahme. Die App bleibt bewusst für andere Familien nutzbar, Formular und Rechtstexte bleiben unverändert (vom User entschieden). Nutzt wieder eine Familie außerhalb des Haushalts die App, kommt die juristische Prüfung als offener Punkt zurück; Begründung und Bedingung in `PROJEKT.md` Abschnitt 7 |
 | 🟡 sams-on fertig prüfen (bisher offener Punkt 5): Offen waren Fragen, die erst echte Bestellungen beantworten (Menüname in `title`, Form von `dayId`, Stornos, Sitzung der Eltern, Guthabenformat, `hideCredit`) | Laut User läuft sams-on mit dem Konto der Familie im Alltag einwandfrei (19.11.2026). Einzeln nachgestellt sind die Fragen damit nicht, im Alltag wäre eine Abweichung aber auf der Karte aufgefallen. Den Betreiber auf die PHP-Version hinzuweisen, liegt beim User außerhalb dieser App (siehe neunte Runde, B-2). Alle Anbieter bleiben, auch die derzeit ungenutzten, damit andere Familien die App jederzeit wieder nutzen können (vom User entschieden, 19.11.2026); die frühere Absicht, Mensamax zu entfernen, entfällt damit |
 | 🟢 Bekannte Lücken in Entwicklungswerkzeugen (bisher offener Punkt 7, von Dependabot am 12.11.2026 gemeldet): `minimatch` 10.2.6 ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), Denial of Service) und `glob` 13.0.6 ([GHSA-3g3m-2fjr-6pw4](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4)), nur in `eslint` und `c8`, nicht ausgeliefert | `eslint` auf 10.15.0 angehoben, das `minimatch` 11 mitbringt; dazu `eslint-plugin-html` 8.2.1, weil 8.2.0 mit diesem `eslint` beim Prüfen der HTML-Dateien abstürzt. `c8` 12.0.0 hängt über `test-exclude` 8.0.0 noch an den alten Fassungen; deshalb hebt `overrides` in `package.json` nur unterhalb von `test-exclude` `glob` auf 14 und `minimatch` auf 11. `npm audit` meldet 0 Lücken. Gegenproben: 403 Tests grün; die Lint-Tests („lint flags innerHTML …“) waren mit 8.2.0 rot, sind also echte Läufe über die HTML-Dateien; die Coverage-Tabelle ist vor und nach der Änderung gleich, auch `tools/check-live-headers.mjs`, die nur über das Datei-Sammeln von `all: true` erscheint. Der `overrides`-Eintrag fällt weg, sobald eine `c8`-Version die behobenen Pakete selbst mitbringt (19.11.2026) |
+| 🟢 Kein Zeitlimit in der Web-App beim Abruf vom Proxy (bisher offener Punkt 4): Bei einem Netz, das nicht antwortet, stand die Karte unbegrenzt auf „Lädt …“, und weil die App Kinder nacheinander abfragt, kam das nächste Kind nie dran; ebenso beim ccCampus-Abruf im Browser | Jede Anfrage an den Proxy und der ccCampus-Ablauf im Browser enden nach 15 s, auch beim Lesen der Antwort, und werden per `AbortController` abgebrochen (`withRequestLimit`). Die Karte zeigt „Server-Timeout – Netz prüfen, ⟳ tippen.“ bzw. „ccCampus-Timeout – Netz prüfen, ⟳ tippen.“. Läuft das Limit beim Proxy ab, zeigen die folgenden Kinder die Meldung sofort, ohne eigene Anfrage; ein ccCampus-Limit betrifft nur das Schulessen dieses Kindes. Länge, Verhalten der folgenden Kinder, Text und ccCampus vom User entschieden. Die eigene Wartezeit von 15 s vor einem neuen Abruf entfällt, weil jede Anfrage nun selbst endet. Tests: Server-Timeout mit nur einer Anfrage, hängende Anfrage wird abgebrochen und zeigt nichts, Gegenprobe Netzfehler hält die folgenden Kinder nicht an, kein Limit bleibt offen, ccCampus hängt bei Anmeldung oder Speiseplan; Property-Test jetzt streng: nie eine Anfrage, solange eine andere offen ist. 11 von 12 Mutanten rot, der grüne („Abbruch vor der Ablehnung“) ist gleichwertig. Im Browser mit einem `fetch`, das nie antwortet, nachgestellt: Abbruch nach 15 007 ms, beide Karten mit der Meldung (19.11.2026, Version 0.4.8) |
 
 ## Noch offen
 
@@ -130,16 +131,6 @@ Zeitpunkt-Momentaufnahmen unverändert.
    Text), zeigt die Karte nur „HTTP 400“. Tritt mit der App selbst nicht
    auf, weil sie nur Text schickt; eine verständliche Meldung wäre trotzdem
    besser. Betrifft das Inline-Script, passt zu Punkt 2.
-4. **🟢 Kein Zeitlimit in der Web-App beim Abruf vom Proxy** (bei der
-   Planung von A-3 aufgefallen, 09.11.2026). `fetchChild()` in
-   `web/index.html` wartet ohne eigenes Limit auf den Proxy, ebenso der
-   ccCampus-Abruf im Browser. Der Proxy selbst antwortet seit 0.4.5
-   innerhalb von höchstens rund 13 s; offen bleibt ein hängendes Netz auf
-   dem Handy, dann zeigt die Karte unbegrenzt „Lädt …“. Ein neuer Abruf
-   wartet seit 0.4.6 höchstens 15 s auf eine solche Anfrage; eine Anfrage,
-   die der Browser abbricht, meldet seit 0.4.7 „Keine Verbindung …“.
-   Möglich: Limit etwas über dem des Proxys und eine Meldung auf der Karte. Vom User als
-   eigener Punkt gewünscht, nicht Teil von 0.4.4.
 Feature-Ideen (Custom-Termine u. Ä.) stehen weiterhin im „Neue Ideen"-Abschnitt
 von [web/README.md](https://github.com/blue-demann/heute-schule/blob/main/web/README.md), nicht hier — das sind Vorschläge, keine
 Befunde.
