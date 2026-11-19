@@ -1,8 +1,8 @@
 # Offene Punkte
 
-HS-OFF · v13 · 2026-11-12 · 0a3beaa4 · gültig
+HS-OFF · v14 · 2026-11-19 · 67cb4500 · gültig
 
-**Stand: 12.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
+**Stand: 19.11.2026.** Frühere Fassung dieser Datei entstand direkt nach der
 zweiten QA-Runde und dem Peer-Review (27.08.2026) und listete 8 Befunde als
 offen. Seither wurden alle bis auf die juristische Prüfung umgesetzt und
 live verifiziert — die Historie dazu steht in
@@ -100,6 +100,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
 | 🟡 (dieselbe Runde, A-1, K-2) „So überschneiden sich nie zwei Anmeldungen am selben Klassenkonto“ trug nicht: Hängt eine Anfrage auf dem Hinweg zum Proxy, beginnt ihre Anmeldung später, als die 15 s annehmen; Neuladen, ein zweites Gerät und andere Familien am selben Klassenkonto steuert die App gar nicht. Die Testtabelle widersprach dem eigenen 15-s-Test, die Mutanten waren nicht aufgezählt | Aussage in Code-Kommentar, `PROJEKT.md` und `proxy/README.md` auf das Haltbare zurückgenommen: Die App trennt ihre eigenen Anmeldungen, solange keine Anfrage auf dem Hinweg hängt. Bewusst keine Sperre je Konto im Proxy (vom User entschieden): neue Infrastruktur für ein Risiko, dessen Schaden nicht belegt ist. Testtabelle mit Mutanten (11.11.2026, Version 0.4.7) |
 | 🟢 (dieselbe Runde, A-2, B-1, C-2, D-1, D-2, K-1) Ganz-oder-gar-nicht-Cachen ungetestet, weil in jedem Zeitlimit-Fall der andere Anbieter unkonfiguriert war; dass „Alle Daten löschen“ einen laufenden Abruf verwirft, prüfte nur ein direkter Aufruf; nach einem gescheiterten Abruf holten 🚫/👁 die Daten des Vortags zurück; im Testgenerator fehlte „die 15 s laufen ab“, „anderer Tag“ traf manchmal denselben; Strg+C ließ den Temp-Ordner des Prüfwerkzeugs liegen; Versionszeile in `PROJEKT.md` veraltet | Fälle „WebUntis hängt, Mensamax liefert“ und umgekehrt, nichts wird gecacht (Mutant rot), Gegenprobe beide liefern; Löschen als eigene Funktion, der Test ruft den echten Handler (Mutant rot); ein gescheiterter Abruf vergisst die gemerkten Daten (Mutant rot); Generator um „15 s laufen ab“ und „🚫/👁“ ergänzt, „anderer Tag“ immer ein anderer; das Werkzeug räumt bei Strg+C und SIGTERM auf (nachgestellt, Gegenprobe am alten Stand: Ordner blieb liegen). Die Silbentrennung „Bartholomä-us“ (C-3) bleibt bewusst so: kein WCAG-2.2-Verstoß (11.11.2026, Version 0.4.7) |
 | Aus dem Alltag (09.11.2026): Über einen VPN-Standort, der `workers.dev` nicht erreichte, zeigten die Karten nur Safaris „Load failed“, ohne Hinweis, was zu tun ist | Ohne Verbindung steht „Keine Verbindung zum Server – Netz oder VPN prüfen, dann ⟳ tippen.“, bei ccCampus entsprechend; HTTP-Fehler behalten ihren Status. Bewusst kein automatischer zweiter Versuch: Ging nur die Antwort verloren, liefe eine zweite Anmeldung (11.11.2026, Version 0.4.7) |
+| Kontrolle Cloudflare-Cache nach 0.4.6 und 0.4.7: die aus `web/docs/` entfernten Berichte der neunten, zehnten und elften Runde könnten weiter ausgeliefert werden | Am 19.11.2026 ohne Cache-Buster geprüft: `/docs/PEER-REVIEW-2026-10-30.md`, `/docs/PEER-REVIEW-2026-11-09.md` und `/docs/PEER-REVIEW-2026-11-09b.md` liefern `404`, Gegenprobe `/docs/PEER-REVIEW-2026-11-09c.md` liefert `200` (19.11.2026) |
 
 ## Noch offen
 
@@ -187,14 +188,7 @@ Zeitpunkt-Momentaufnahmen unverändert.
    die der Browser abbricht, meldet seit 0.4.7 „Keine Verbindung …“.
    Möglich: Limit etwas über dem des Proxys und eine Meldung auf der Karte. Vom User als
    eigener Punkt gewünscht, nicht Teil von 0.4.4.
-7. **Kontrolle ab 16.11.2026:** Die aus `web/docs/` entfernten Berichte
-   der neunten, zehnten und elften Runde (`/docs/PEER-REVIEW-2026-10-30.md`,
-   `/docs/PEER-REVIEW-2026-11-09.md`, `/docs/PEER-REVIEW-2026-11-09b.md`)
-   liefern ohne Cache-Buster `404` (Cloudflare hält Dateien bis zu einer
-   Woche, siehe `PROJEKT.md` Abschnitt 10; für den zehnten gilt die Woche
-   ab dem Deploy von 0.4.6, für den elften ab dem Deploy von 0.4.7).
-   Danach diesen Punkt streichen.
-8. **🟢 Bekannte Lücken in Entwicklungswerkzeugen** (beim Push am
+7. **🟢 Bekannte Lücken in Entwicklungswerkzeugen** (beim Push am
    12.11.2026 von Dependabot gemeldet, `npm audit` zeigt sie bei jedem
    Deploy). `minimatch` 10.2.6
    ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
