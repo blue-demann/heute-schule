@@ -705,6 +705,10 @@
   var cfg = loadConfig();
   var activeOffset = 0;  // 0 = today, otherwise the day offset from today
   var windowIndex = 1;  // left date tile = the nth upcoming school day
+  // When the latest refresh finished, shown after the date as "Stand hh:mm":
+  // a screen left on all night was loaded just after midnight, and nothing
+  // else would tell that the cards are not from this morning.
+  var loadedAt = null;
 
   // ── Elements ──
   var dashboard = document.getElementById('dashboard');
@@ -725,7 +729,8 @@
     var d = new Date();
     d.setDate(d.getDate() + activeOffset);
     document.getElementById('datumAnzeige').textContent =
-      WEEKDAYS[d.getDay()] + ', ' + d.toLocaleDateString('de-DE');
+      WEEKDAYS[d.getDay()] + ', ' + d.toLocaleDateString('de-DE')
+      + (loadedAt ? ' · Stand ' + String(loadedAt.getHours()).padStart(2, '0') + ':' + String(loadedAt.getMinutes()).padStart(2, '0') : '');
   }
 
   function shortDate(offset){
@@ -784,16 +789,18 @@
     refreshAll();
   }
 
-  // The calendar day the tiles and the date line were drawn for. Every
-  // offset counts from it, so a page left open overnight, or brought back
-  // from the background the next morning, would keep showing yesterday
-  // while ⟳ already fetched today.
+  // The calendar day the tiles and the date line were drawn for; a new day
+  // is detected against it. The offsets themselves count from the clock, so
+  // a page left open overnight, or brought back from the background the next
+  // morning, would show yesterday while ⟳ fetched today, and a tile would
+  // count from a day it does not show. Every tap therefore checks first.
   var shownDay = dateStrFor(0);
 
   function selectToday(){
     windowIndex = 1;
     activeOffset = 0;
     shownDay = dateStrFor(0);
+    loadedAt = null;
     renderDayToggle();
     renderDateDisplay();
   }
@@ -803,19 +810,30 @@
     refreshAll();
   }
 
-  // On a new day the page starts over on "Heute" and loads it. With the
-  // settings open it only draws the tiles anew; going back to the overview
-  // loads anyway. On the same day nothing happens: every refresh logs in
-  // at the providers, so a fresh one stays the user's choice (⟳).
+  // On a new day the page starts over on "Heute" and loads it, and returns
+  // true. With the settings open it only draws the tiles anew; going back to
+  // the overview loads anyway. On the same day nothing happens: every
+  // refresh logs in at the providers, so a fresh one stays the user's
+  // choice (⟳).
   function checkNewDay(){
-    if (dateStrFor(0) === shownDay) return;
+    if (dateStrFor(0) === shownDay) return false;
     selectToday();
     if (!dashboard.classList.contains('hidden')) refreshAll();
+    return true;
+  }
+
+  // A tap in the first minute after midnight, before the minute check ran,
+  // starts over on the new day instead of counting from the old tiles.
+  function onTileTap(index){
+    if (!checkNewDay()) selectDayIndex(index);
+  }
+  function onRefreshTap(){
+    if (!checkNewDay()) refreshAll();
   }
 
   btnDayToday.addEventListener('click', showToday);
-  btnDayA.addEventListener('click', function(){ selectDayIndex(windowIndex); });
-  btnDayB.addEventListener('click', function(){ selectDayIndex(windowIndex + 1); });
+  btnDayA.addEventListener('click', function(){ onTileTap(windowIndex); });
+  btnDayB.addEventListener('click', function(){ onTileTap(windowIndex + 1); });
 
   // Coming back to the foreground (also from the back-forward cache), and
   // once a minute for a screen left on overnight.
@@ -1352,17 +1370,23 @@
   // would leave the card on "Lädt …" for good. Every proxy request, and the
   // ccCampus run in the browser as a whole, therefore ends after 15 s, the
   // answer's body included. The proxy itself answers within about 13 s
-  // whatever the provider does, so a proxy request still open by then hangs
-  // in the network.
+  // whatever the provider does, counted from its first call to a provider,
+  // so a proxy request still open by then almost always hangs in the
+  // network: the margin is about 2 s, less the time on the network.
   var REQUEST_LIMIT_MS = 15000;
   var PROXY_TIMEOUT = 'Server-Timeout – Netz prüfen, ⟳ tippen.';
   var CCCAMPUS_TIMEOUT = 'ccCampus-Timeout – Netz prüfen, ⟳ tippen.';
+  // The controllers of the requests still open, so that deleting all data
+  // can end them at once.
+  var openRequests = [];
   // Runs work(signal) under the limit: when it runs out, the result rejects
   // with an error named "RequestTimeout" carrying the message, and the
   // signal aborts the requests still open. The limit rejects first, so the
-  // abort's own "no connection" error never reaches the card.
+  // abort's own "no connection" error never reaches the card. work() runs
+  // inside the chain, so an error it throws at once still ends the limit.
   function withRequestLimit(work, timeoutMessage){
     var controller = new AbortController();
+    openRequests.push(controller);
     var timer;
     var limit = new Promise(function(resolve, reject){
       timer = setTimeout(function(){
@@ -1372,8 +1396,12 @@
         controller.abort();
       }, REQUEST_LIMIT_MS);
     });
-    return Promise.race([work(controller.signal), limit])
-      .finally(function(){ clearTimeout(timer); });
+    var running = Promise.resolve().then(function(){ return work(controller.signal); });
+    return Promise.race([running, limit])
+      .finally(function(){
+        clearTimeout(timer);
+        openRequests.splice(openRequests.indexOf(controller), 1);
+      });
   }
 
   function fetchCcCampusLunch(providerCfg, datumStr){
@@ -1450,13 +1478,12 @@
       });
   }
 
-  function fetchChild(child, run){
+  function fetchChild(child, run, date){
     var card = cardsById[child.id];
     if (!cfg.proxyUrl){
       renderChildResult(card, child, null, 'Keine Proxy-URL eingetragen — unter ⚙️ Einstellungen nachtragen.');
       return Promise.resolve();
     }
-    var date = dateStrFor(activeOffset);
     var lunchIsCcCampus = child.lunch && child.lunch.provider === 'cccampus';
     var lunchCfg = child.lunch || {};
 
@@ -1532,6 +1559,11 @@
   function refreshAll(){
     if (!cfg.children.length) return;
     var run = ++refreshRun;
+    // One date for every child: a refresh at 23:59:55 must not fetch the
+    // first child for today and the next one for tomorrow.
+    var date = dateStrFor(activeOffset);
+    loadedAt = null;
+    renderDateDisplay();
     btnRefresh.classList.add('spin');
     childCards.setAttribute('aria-busy', 'true');
     // Every card shows at once that it is loading: until its turn comes it
@@ -1543,8 +1575,8 @@
     // WebUntis. Fetching one after the other keeps this page's own logins
     // apart, at the cost of a bit of time on refresh. A refresh that is no
     // longer the latest starts no further child. A proxy request that ran
-    // into its limit means the network or the proxy does not answer, which
-    // holds for every child: the ones still to come show that at once
+    // into its limit almost always means the network or the proxy does not
+    // answer, which holds for every child: the ones still to come show that at once
     // instead of waiting out the limit one after the other.
     var timedOut = false;
     cfg.children
@@ -1555,7 +1587,7 @@
             showChildError(child, PROXY_TIMEOUT);
             return;
           }
-          requestInFlight = fetchChild(child, run);
+          requestInFlight = fetchChild(child, run, date);
           return requestInFlight.then(function(limitRanOut){ if (limitRanOut) timedOut = true; });
         });
       }, requestInFlight.then(function(){}, function(){}))
@@ -1563,18 +1595,24 @@
         if (run !== refreshRun) return;
         btnRefresh.classList.remove('spin');
         childCards.setAttribute('aria-busy', 'false');
+        loadedAt = new Date();
+        renderDateDisplay();
       });
   }
 
   // Drops every running refresh: answers still on their way are not shown
-  // and not kept.
+  // and not kept, and the requests end, so nothing carrying the deleted
+  // credentials stays on its way.
   function abandonRefreshes(){
     refreshRun++;
+    openRequests.slice().forEach(function(controller){ controller.abort(); });
     btnRefresh.classList.remove('spin');
     childCards.setAttribute('aria-busy', 'false');
+    loadedAt = null;
+    renderDateDisplay();
   }
 
-  btnRefresh.addEventListener('click', refreshAll);
+  btnRefresh.addEventListener('click', onRefreshTap);
 
   // ── Navigation ──
   // showDashboard() deliberately ALWAYS reloads the data too. Every call

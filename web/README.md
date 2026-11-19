@@ -140,7 +140,10 @@ technischen und organisatorischen Maßnahmen (Art. 32).
 Stand 19.11.2026 nutzt nur noch der eigene Haushalt die App; damit greift die
 Ausnahme, und die geplante juristische Prüfung entfällt. Die App bleibt
 bewusst für andere Familien nutzbar. Nutzt wieder eine Familie außerhalb des
-Haushalts die App, kommt die juristische Prüfung als offener Punkt zurück.
+Haushalts die App, kommt die juristische Prüfung als offener Punkt zurück. Der
+Betreiber sieht das nicht von selbst (keine Konten, kein Protokoll); Auslöser
+ist, dass jemand Bescheid sagt, den Link bekommt oder eine
+ccCampus-Freischaltung erbittet.
 Bereits erledigt und weiter gültig:
 
 - [x] AVV mit Cloudflare verifiziert (28.08.2026, im Konto bestätigt, nicht

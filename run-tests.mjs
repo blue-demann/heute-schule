@@ -3216,6 +3216,7 @@ function dashboardUnderTest() {
   let answering = null;
   let fetches = 0;
   const signals = [];
+  const dateLine = { stand: 'none' };
   // Open timers by id, each with the tap that set it.
   const timers = new Map();
   let nextTimer = 1;
@@ -3235,7 +3236,12 @@ function dashboardUnderTest() {
     cardsById: { ...cards },
     lastDataById: {},
     activeOffset: 0,
-    dateStrFor: (offset) => `day${offset}`,
+    // Days passed since the page was loaded (midnight while a refresh runs).
+    clock: 0,
+    dateStrFor: (offset) => `day${offset + sandbox.clock}`,
+    loadedAt: null,
+    // The date line: what it says about when the cards were loaded.
+    renderDateDisplay: () => { dateLine.stand = sandbox.loadedAt ? 'stand' : 'none'; },
     lunchRequestFields: () => ({}),
     setCardLoading: (card) => { card.loading = true; },
     renderHiddenHint: (el, child, card) => { card.panelDrawn++; },
@@ -3251,7 +3257,7 @@ function dashboardUnderTest() {
       fetches++;
       signals.push(options.signal);
       if (pending.length) overlaps.push(`${body.webuntis.id} ${body.datum} while ${pending.map((r) => `${r.child} ${r.date}`).join()} is open`);
-      const request = { child: body.webuntis.id, date: body.datum, tap: taps, resolve, reject };
+      const request = { child: body.webuntis.id, date: body.datum, tap: taps, signal: options.signal, resolve, reject };
       pending.push(request);
       options.signal.addEventListener('abort', () => {
         pending.splice(pending.indexOf(request), 1);
@@ -3271,10 +3277,10 @@ function dashboardUnderTest() {
     toast() {},
   };
   for (const child of sandbox.cfg.children) child.webuntis.id = child.id;
-  const page = inlineScriptDefinitions(['refreshRun', 'requestInFlight', 'REQUEST_LIMIT_MS', 'PROXY_TIMEOUT', 'withRequestLimit', 'NO_CONNECTION_PROXY', 'refreshAll', 'fetchChild', 'showChildError', 'abandonRefreshes', 'redrawCard', 'deleteAllData'], sandbox);
+  const page = inlineScriptDefinitions(['refreshRun', 'requestInFlight', 'REQUEST_LIMIT_MS', 'PROXY_TIMEOUT', 'openRequests', 'withRequestLimit', 'NO_CONNECTION_PROXY', 'refreshAll', 'fetchChild', 'showChildError', 'abandonRefreshes', 'redrawCard', 'deleteAllData'], sandbox);
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   return {
-    sandbox, pending, renders, overlaps, spinner, busy, cards, page, signals, timers,
+    sandbox, pending, renders, overlaps, spinner, busy, cards, page, signals, timers, dateLine,
     fetches: () => fetches,
     async tap(offset) { sandbox.activeOffset = offset; taps++; page.refreshAll(); await settle(); },
     async deleteAll() { page.deleteAllData(); await settle(); },
@@ -3296,6 +3302,7 @@ function dashboardUnderTest() {
       const request = pending.shift();
       answering = request.tap;
       if (how === 'ok') request.resolve({ ok: true, json: async () => ({ datum: request.date, stunden: [] }) });
+      else if (how === 'bodyHangs') request.resolve({ ok: true, json: () => hangsUntilAborted(request.signal) });
       else if (how === 'http') request.resolve({ ok: false, status: 502 });
       else request.reject(new TypeError('Load failed'));
       for (let i = 0; i < 5; i++) await settle();
@@ -3330,6 +3337,7 @@ const OVERLAP_STEPS = [
   ['a subject is hidden or shown again (🚫/👁)', (random) => ({ act: 'hideOrShow', card: 'abc'[Math.floor(random() * 3)] })],
   ['the 15 s limit of the open request runs out', () => ({ act: 'timeOut' })],
   ['the proxy answers', () => ({ act: 'answer', how: 'ok' })],
+  ['the proxy sends its headers, then its answer hangs', () => ({ act: 'answer', how: 'bodyHangs' })],
   ['the proxy answers with an HTTP error', () => ({ act: 'answer', how: 'http' })],
   ['the network fails', () => ({ act: 'answer', how: 'network' })],
 ];
@@ -3353,9 +3361,11 @@ await testAsync(`a late answer never overwrites a newer refresh, a card not show
         checkDashboardInvariants(d, before);
       }
       const lastTap = d.taps();
-      while (d.pending.length) {
+      // Answer what is open; an answer whose body hangs ends with its limit.
+      while (d.pending.length || d.timers.size) {
         const before = d.renders.length;
-        await d.answer('ok');
+        if (d.pending.length) await d.answer('ok');
+        else await d.timeOut(15000);
         checkDashboardInvariants(d, before);
       }
       // The latest refresh fills every card exactly once.
@@ -3432,7 +3442,7 @@ async function ccCampusLunchWith(login, plan, { limitRunsOut = false } = {}) {
     clearTimeout: (id) => { timers.delete(id); },
     fetch: (url, options) => { signals.push(options.signal); return url.endsWith('/Login/Login') ? login(options) : plan(options); },
   };
-  const page = inlineScriptDefinitions(['CCCAMPUS_ALLOWED_DOMAINS', 'ccCampusDomainAllowed', 'decodeHtmlEntitiesClient', 'NO_CONNECTION_CCCAMPUS', 'noConnectionToCcCampus', 'REQUEST_LIMIT_MS', 'CCCAMPUS_TIMEOUT', 'withRequestLimit', 'ccCampusLunchRun', 'fetchCcCampusLunch'], sandbox);
+  const page = inlineScriptDefinitions(['CCCAMPUS_ALLOWED_DOMAINS', 'ccCampusDomainAllowed', 'decodeHtmlEntitiesClient', 'NO_CONNECTION_CCCAMPUS', 'noConnectionToCcCampus', 'REQUEST_LIMIT_MS', 'CCCAMPUS_TIMEOUT', 'openRequests', 'withRequestLimit', 'ccCampusLunchRun', 'fetchCcCampusLunch'], sandbox);
   const running = page.fetchCcCampusLunch({ base: 'https://cccampus.mbs5online.de/ordering', kundennummer: '1', pin: '2' }, '20261110');
   for (let i = 0; i < 8; i++) await new Promise((resolve) => setImmediate(resolve));
   const limitsOpen = [...timers.values()].map((t) => t.ms);
@@ -3443,10 +3453,15 @@ async function ccCampusLunchWith(login, plan, { limitRunsOut = false } = {}) {
 const ccLoginOk = () => Promise.resolve({ text: async () => JSON.stringify({ token: 't' }) });
 const ccPlanOk = () => Promise.resolve({ ok: true, text: async () => '<div class="status-node" data-date="2026-11-10" title="Menü 1">' });
 const ccOffline = () => Promise.reject(new TypeError('Load failed'));
-// Never answers; rejects like the real fetch once its signal aborts.
-const ccHangs = (options) => new Promise((resolve, reject) => {
-  options.signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
-});
+// Never settles; rejects like the real fetch once its signal aborts.
+function hangsUntilAborted(signal) {
+  return new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+  });
+}
+const ccHangs = (options) => hangsUntilAborted(options.signal);
+// The plan's headers arrive, its body never does.
+const ccPlanBodyHangs = (options) => Promise.resolve({ ok: true, text: () => hangsUntilAborted(options.signal) });
 await testAsync('ccCampus without connection, at the login or at the plan: the German note, not the browser’s text', async () => {
   for (const [login, plan] of [[ccOffline, ccPlanOk], [ccLoginOk, ccOffline]]) {
     const { result, NO_CONNECTION } = await ccCampusLunchWith(login, plan);
@@ -3459,7 +3474,7 @@ await testAsync('ccCampus without connection, at the login or at the plan: the G
   assertEqual(garbled.result.lunchFehler, 'ccCampus-Login: unerwartete Antwort', 'counter-check: an answer that is no JSON keeps its own message');
 });
 await testAsync('ccCampus hanging at the login or at the plan ends after 15 s with "ccCampus-Timeout", its request aborted', async () => {
-  for (const [where, login, plan] of [['login', ccHangs, ccPlanOk], ['plan', ccLoginOk, ccHangs]]) {
+  for (const [where, login, plan] of [['login', ccHangs, ccPlanOk], ['plan', ccLoginOk, ccHangs], ['plan body', ccLoginOk, ccPlanBodyHangs]]) {
     const { result, TIMEOUT, signals, limitsOpen } = await ccCampusLunchWith(login, plan, { limitRunsOut: true });
     assertEqual(`${where}: ${limitsOpen.join()} ${result.lunch} ${result.lunchFehler}`, `${where}: 15000 null ${TIMEOUT}`);
     assert(signals.length && signals.every((s) => s.aborted), `${where}: the hanging request was not aborted`);
@@ -3506,13 +3521,74 @@ await testAsync('an answer in time leaves no limit running, and a late timer cha
   assertEqual(`${d.timers.size} ${d.signals.some((s) => s.aborted)}`, '0 false');
   assertEqual(Object.values(d.cards).map((c) => c.shows).join(), 'day0,day0,day0');
 });
-await testAsync('deleting all data (the button’s own handler) drops the answer still on its way, and stops the spinner', async () => {
+await testAsync('deleting all data (the button’s own handler) ends the request still on its way, shows and keeps nothing, and stops the spinner', async () => {
   const d = dashboardUnderTest();
   await d.tap(0);
+  assertEqual(`${d.pending.length} ${d.signals[0].aborted}`, '1 false', 'counter-check: a request is on its way');
   await d.deleteAll();
+  for (let i = 0; i < 8; i++) await new Promise((resolve) => setImmediate(resolve));
   assert(!d.spinner.on && d.busy.value === 'false', 'spinner still on');
+  assert(d.signals[0].aborted, 'the request with the deleted credentials is still on its way');
+  assertEqual(`${d.renders.length} ${d.pending.length} ${d.timers.size} ${JSON.stringify(d.sandbox.lastDataById)} ${d.page.openRequests.length}`, '0 0 0 {} 0');
+});
+await testAsync('the answer of a refresh hangs after its headers: the limit ends it too, with "Server-Timeout"', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  await d.answer('bodyHangs');
+  assertEqual(`${d.cards.a.loading} ${d.timers.size}`, 'true 1', 'counter-check: the body is still awaited under the limit');
+  await d.timeOut(15000);
+  assertEqual(Object.values(d.cards).map((c) => c.shows).join(' | '), Array(3).fill(d.page.PROXY_TIMEOUT).join(' | '));
+  assert(d.signals[0].aborted, 'the hanging answer was not aborted');
+});
+await testAsync('the timeout notes say exactly what the user chose', async () => {
+  const d = dashboardUnderTest();
+  assertEqual(d.page.PROXY_TIMEOUT, 'Server-Timeout – Netz prüfen, ⟳ tippen.');
+  const { TIMEOUT } = await ccCampusLunchWith(ccLoginOk, ccPlanOk);
+  assertEqual(TIMEOUT, 'ccCampus-Timeout – Netz prüfen, ⟳ tippen.');
+});
+await testAsync('one date for every child: midnight during a refresh does not split it across two days', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
   await d.answer('ok');
-  assertEqual(`${d.renders.length} ${d.pending.length} ${JSON.stringify(d.sandbox.lastDataById)}`, '0 0 {}');
+  d.sandbox.clock = 1;
+  await d.answer('ok');
+  await d.answer('ok');
+  assertEqual(d.renders.map((r) => `${r.child} ${r.date}`).join(), 'a day0,b day0,c day0');
+});
+await testAsync('the date line says when the cards were loaded: not while loading, after the refresh, not after deleting', async () => {
+  const d = dashboardUnderTest();
+  await d.tap(0);
+  assertEqual(d.dateLine.stand, 'none', 'a loading page claims a time of loading');
+  for (let i = 0; i < 3; i++) await d.answer('ok');
+  assertEqual(`${d.dateLine.stand} ${Object.prototype.toString.call(d.sandbox.loadedAt)}`, 'stand [object Date]');
+  await d.tap(1);
+  assertEqual(d.dateLine.stand, 'none', 'another day loads, but the line keeps the time of the day before');
+  for (let i = 0; i < 3; i++) await d.answer('ok');
+  await d.deleteAll();
+  assertEqual(`${d.dateLine.stand} ${d.sandbox.loadedAt}`, 'none null');
+});
+test('the date line reads "Stand hh:mm" with two digits each, and nothing without a load', () => {
+  const line = { textContent: '' };
+  const sandbox = { activeOffset: 0, loadedAt: new Date(2026, 10, 19, 7, 5), document: { getElementById: () => line } };
+  const page = inlineScriptDefinitions(['WEEKDAYS', 'renderDateDisplay'], sandbox);
+  page.renderDateDisplay();
+  assert(line.textContent.endsWith(', ' + new Date().toLocaleDateString('de-DE') + ' · Stand 07:05'), line.textContent);
+  sandbox.loadedAt = null;
+  page.renderDateDisplay();
+  assert(!line.textContent.includes('Stand') && line.textContent.endsWith(new Date().toLocaleDateString('de-DE')), line.textContent);
+});
+await testAsync('work that throws at once: the limit rejects with that error, leaves no timer and no open request', async () => {
+  const timers = new Map();
+  let nextTimer = 1;
+  const sandbox = {
+    AbortController,
+    setTimeout: (fn, ms) => { const id = nextTimer++; timers.set(id, { fn, ms }); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+  };
+  const page = inlineScriptDefinitions(['REQUEST_LIMIT_MS', 'openRequests', 'withRequestLimit'], sandbox);
+  let caught = null;
+  await page.withRequestLimit(() => { throw new URIError('URI malformed'); }, 'T').catch((e) => { caught = e; });
+  assertEqual(`${caught && caught.name} ${timers.size} ${page.openRequests.length}`, 'URIError 0 0');
 });
 await testAsync('counter-check: without overlap, all three cards show the day', async () => {
   const d = dashboardUnderTest();
@@ -3540,10 +3616,12 @@ function dayWatchUnderTest() {
     renderDayToggle: () => calls.push(`tiles ${sandbox.activeOffset}/${sandbox.windowIndex}`),
     renderDateDisplay: () => calls.push('date'),
     refreshAll: () => calls.push(`refresh ${sandbox.activeOffset}`),
+    selectDayIndex: (index) => calls.push(`tile ${index}`),
+    loadedAt: 'yesterday',
   };
   sandbox.dateStrFor = (offset) => { assertEqual(offset, 0, 'only today is compared'); return sandbox.today; };
   sandbox.dashboard = { classList: { contains: (cls) => cls === 'hidden' && sandbox.dashboardHidden } };
-  const page = inlineScriptDefinitions(['shownDay', 'selectToday', 'showToday', 'checkNewDay'], sandbox);
+  const page = inlineScriptDefinitions(['shownDay', 'selectToday', 'showToday', 'checkNewDay', 'onTileTap', 'onRefreshTap'], sandbox);
   return { sandbox, page, calls };
 }
 
@@ -3551,7 +3629,22 @@ test('a new day with another day selected: back on "Heute", tiles and date drawn
   const { sandbox, page, calls } = dayWatchUnderTest();
   Object.assign(sandbox, { activeOffset: 1, windowIndex: 2, today: '20261120' });
   page.checkNewDay();
-  assertEqual(`${calls.join()} | ${sandbox.activeOffset}/${sandbox.windowIndex}`, 'tiles 0/1,date,refresh 0 | 0/1');
+  assertEqual(`${calls.join()} | ${sandbox.activeOffset}/${sandbox.windowIndex} | ${sandbox.loadedAt}`, 'tiles 0/1,date,refresh 0 | 0/1 | null');
+});
+test('⟳ or a tile tapped after midnight, before the minute check: back on "Heute" with the new day, nothing under the old tiles', () => {
+  for (const tap of ['refresh', 'tile']) {
+    const { sandbox, page, calls } = dayWatchUnderTest();
+    Object.assign(sandbox, { activeOffset: 3, windowIndex: 2, today: '20261120' });
+    if (tap === 'refresh') page.onRefreshTap(); else page.onTileTap(3);
+    assertEqual(`${tap}: ${calls.join()}`, `${tap}: tiles 0/1,date,refresh 0`);
+  }
+});
+test('counter-check: on the same day ⟳ just refreshes and a tile just selects', () => {
+  const { sandbox, page, calls } = dayWatchUnderTest();
+  sandbox.activeOffset = 1;
+  page.onRefreshTap();
+  page.onTileTap(2);
+  assertEqual(calls.join(), 'refresh 1,tile 2');
 });
 test('counter-check: on the same day nothing happens, and a new day starts over only once', () => {
   const { sandbox, page, calls } = dayWatchUnderTest();
