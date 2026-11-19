@@ -1,6 +1,6 @@
 # Heute Schule — Projekt- und Design-Dokumentation
 
-HS-PRJ · v13 · 2026-11-19 · 660f0adf · gültig
+HS-PRJ · v14 · 2026-11-19 · 9bda40a5 · gültig
 
 **Stand: 19.11.2026 · Version 0.4.7**
 
@@ -303,9 +303,12 @@ offen benannt statt verschwiegen.
   daran, *wessen* Daten verarbeitet werden, nicht daran, wie gut Cache-Fix,
   Rate-Limit oder Security-Header sind. Die Seite bleibt öffentlich
   erreichbar; die Ausnahme hängt deshalb auch daran, dass der Link nicht
-  weitergegeben wird. Nutzt wieder eine Familie außerhalb des Haushalts die
-  App, gelten die vollen Pflichten, und die Prüfung lebt wieder auf. TOMs,
-  Datenschutzerklärung und Verarbeitungsverzeichnis bleiben bestehen.
+  weitergegeben wird. Die App bleibt trotzdem bewusst für andere Familien
+  nutzbar: Alle Anbieter, das Formular und die Rechtstexte bleiben, wie sie
+  sind (vom User entschieden). Nutzt wieder eine Familie außerhalb des
+  Haushalts die App, gelten die vollen Pflichten, und die juristische
+  Prüfung kommt als offener Punkt zurück. TOMs, Datenschutzerklärung und
+  Verarbeitungsverzeichnis bleiben bestehen.
 - **`Verarbeitungsverzeichnis-INTERN.md`** — Entwurf nach Art. 30, bewusst
   *nicht* Teil von `web/` (wird nicht deployed, nicht öffentlich).
 - **Kein Rechtsrat.** Alle rechtlichen Einordnungen in diesem Projekt

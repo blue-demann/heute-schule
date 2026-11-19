@@ -138,9 +138,10 @@ Verzeichnis von Verarbeitungstätigkeiten (Art. 30) und dokumentierten
 technischen und organisatorischen Maßnahmen (Art. 32).
 
 Stand 19.11.2026 nutzt nur noch der eigene Haushalt die App; damit greift die
-Ausnahme, und die geplante juristische Prüfung entfällt. Nutzt wieder eine
-Familie außerhalb des Haushalts die App, lebt die Frage wieder auf. Bereits
-erledigt und weiter gültig:
+Ausnahme, und die geplante juristische Prüfung entfällt. Die App bleibt
+bewusst für andere Familien nutzbar. Nutzt wieder eine Familie außerhalb des
+Haushalts die App, kommt die juristische Prüfung als offener Punkt zurück.
+Bereits erledigt und weiter gültig:
 
 - [x] AVV mit Cloudflare verifiziert (28.08.2026, im Konto bestätigt, nicht
       nur angenommen) — Details in `Verarbeitungsverzeichnis-INTERN.md`
