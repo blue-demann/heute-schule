@@ -1,27 +1,27 @@
 # Übergabe: Heute Schule
 
-IDNCVVS · v6 · 2026-11-21 · 87070d6f · gültig
+IDNCVVS · v7 · 2026-11-21 · be78a9e5 · gültig
 
 Zweck: Stand für eine neue Sitzung und den Orchestrator. Für den Stand genügt Abschnitt 1.
 Inhalt: 1 Stand auf einen Blick · 2 Als Nächstes · 3 Wartet auf User · 4 Zuerst lesen ·
 5 Fallen · 6 Für andere Projekte
 
 ## 1. Stand auf einen Blick
-- Phase: Wartung – **alles erledigt, die Arbeit ruht bis zum nächsten Ereignis** (Fehlerbild aus dem Alltag, Dependabot-Meldung, neuer Wunsch). Live 0.4.8 aus `d3efec5`; 0.4.9 ist gepusht, der Deploy durch User steht aus.
+- Phase: Wartung – **alles erledigt, die Arbeit ruht bis zum nächsten Ereignis** (Fehlerbild aus dem Alltag, Dependabot-Meldung, neuer Wunsch). Live 0.4.9 aus `d5712c3`, deployt 2026-11-21 und live geprüft.
 - Ampel: grün – die dreizehnte Prüfrunde fand kein 🔴 und kein 🟡, ihre 16 🟢 sind in 0.4.9 behoben oder festgehalten; `npm audit` meldet keine Lücken.
-- Zuletzt: 2026-11-19 – 0.4.8 (Zeitlimit von 15 s, Sprung auf „Heute“ am neuen Tag) deployt; Prüfrunde 13 (IDQZZKD) dazu; Folge-Fix 0.4.9 („Stand hh:mm“, Tipp nach Mitternacht, Löschen bricht Anfragen ab, Testlücken, Doku). Offene Punkte v20, Projekt-Doku v17.
-- Repo: `main` · zwei Commits auf `d3efec5` (Bericht, 0.4.9) und diese Übergabe, gepusht · uncommittet: nein · ungepusht: nein
+- Zuletzt: 2026-11-19 – 0.4.8 (Zeitlimit von 15 s, Sprung auf „Heute“ am neuen Tag) deployt; Prüfrunde 13 (IDQZZKD) dazu; Folge-Fix 0.4.9 („Stand hh:mm“, Tipp nach Mitternacht, Löschen bricht Anfragen ab, Testlücken, Doku), am 21.11. deployt. Offene Punkte v20, Projekt-Doku v17.
+- Repo: `main` · Übergabe-Commit auf `d5712c3`, gepusht · uncommittet: nein · ungepusht: nein
 - Sitzung: „Heute Schule“ · Startordner: `~/dev/claude`
-- Termine: ab 2026-11-26 – Cache-Kontrolle: `/docs/PEER-REVIEW-2026-11-09c.md` liefert `404` (nach dem Deploy von 0.4.9)
+- Termine: ab 2026-11-28 – Cache-Kontrolle: `/docs/PEER-REVIEW-2026-11-09c.md` liefert `404` (eine Woche nach dem Deploy von 0.4.9)
 
 ## 2. Als Nächstes
 Keine geplanten Schritte. Bei einem neuen Ereignis zuerst diese Übergabe und die offenen Punkte lesen, dann mit User planen.
-1. Ab 26.11. ohne Cache-Buster prüfen, dass der aus `web/docs/` entfernte Bericht der zwölften Runde `404` liefert, Gegenprobe `/docs/PEER-REVIEW-2026-11-19.md` `200`; Ergebnis als Erledigt-Zeile in OFFEN.
+1. Ab 28.11. ohne Cache-Buster prüfen, dass der aus `web/docs/` entfernte Bericht der zwölften Runde `404` liefert, Gegenprobe `/docs/PEER-REVIEW-2026-11-19.md` `200`; Ergebnis als Erledigt-Zeile in OFFEN.
 2. Geparkt, nur auf Wunsch: Inline-Script nach `web/app.js` auslagern (OFFEN 2, zusammen mit OFFEN 3), erst mit dem `grilling`-Skill planen; Deploy-Token je Worker (OFFEN 1), sobald Cloudflare es unterstützt.
 3. Nach jeder größeren Änderung eine frische, unabhängige Prüfrunde anbieten (Vorlage in `prompts/`, Muster in `PROJEKT.md` Abschnitt 9). 0.4.9 behebt nur 🟢-Befunde der dreizehnten Runde und bekommt bewusst keine eigene Runde.
 
 ## 3. Wartet auf User
-- Deploy von 0.4.9 mit `./deploy.sh`; auf dem Handy braucht der Service Worker meist zwei Neuladen.
+Nichts.
 
 ## 4. Zuerst lesen
 1. [Projekt-Kontext](CLAUDE.md) (`CLAUDE.md`, wird automatisch geladen)
@@ -42,5 +42,5 @@ Keine geplanten Schritte. Bei einem neuen Ereignis zuerst diese Übergabe und di
 - Prüfsitzungen lesen nie `Verarbeitungsverzeichnis-INTERN.md`, `web/impressum.html` oder `web/datenschutz.html` (gitignored, echte Personendaten).
 
 ## 6. Für andere Projekte
-- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v17, HS-OFF v20, IDNCVVS v6 und neu der Prüfbericht der dreizehnten Runde (IDQZZKD v1).
+- Prozessentwicklung: Verzeichnis `records/VERZEICHNIS.md` neu erzeugen; neue Stände HS-PRJ v17, HS-OFF v20, IDNCVVS v7 und neu der Prüfbericht der dreizehnten Runde (IDQZZKD v1).
 - Prozessentwicklung, Vorschlag für den Entwicklungsprozess (IDU6829): Regel „Commits nur mit ausdrücklich genannten Pfaden“ präzisieren auf `git commit -- <pfade>`, weil ein vorgemerktes Löschen sonst unbemerkt mitgeht (am 11.11.2026 hier passiert, vor dem Push korrigiert).
